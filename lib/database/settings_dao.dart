@@ -1,0 +1,61 @@
+import 'package:sqflite/sqflite.dart';
+import 'database_helper.dart';
+
+class SettingsDao {
+  final DatabaseHelper _dbHelper = DatabaseHelper();
+
+  Future<String?> getValue(String key) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (maps.isEmpty) return null;
+    return maps.first['value'] as String;
+  }
+
+  Future<void> setValue(String key, String value) async {
+    final db = await _dbHelper.database;
+    await db.insert(
+      'settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, String>> getAll() async {
+    final db = await _dbHelper.database;
+    final maps = await db.query('settings');
+    final result = <String, String>{};
+    for (final map in maps) {
+      result[map['key'] as String] = map['value'] as String;
+    }
+    return result;
+  }
+
+  Future<int> getCycleLength() async {
+    final value = await getValue('avg_cycle_length');
+    return int.tryParse(value ?? '28') ?? 28;
+  }
+
+  Future<int> getPeriodLength() async {
+    final value = await getValue('avg_period_length');
+    return int.tryParse(value ?? '5') ?? 5;
+  }
+
+  Future<int> getReminderDays() async {
+    final value = await getValue('reminder_days');
+    return int.tryParse(value ?? '2') ?? 2;
+  }
+
+  Future<int> getReminderHour() async {
+    final value = await getValue('reminder_hour');
+    return int.tryParse(value ?? '9') ?? 9;
+  }
+
+  Future<String> getPredictionAlgorithm() async {
+    final value = await getValue('prediction_algorithm');
+    return value ?? 'simple';
+  }
+}
