@@ -5,6 +5,7 @@ import '../models/cycle_data.dart';
 import '../database/period_dao.dart';
 import '../database/settings_dao.dart';
 import '../services/prediction_service.dart';
+import '../utils/date_utils.dart';
 
 class PeriodProvider with ChangeNotifier {
   final PeriodDao _dao = PeriodDao();
@@ -34,6 +35,7 @@ class PeriodProvider with ChangeNotifier {
         _records,
         algorithm: _algorithm,
       );
+      await _autoEndExpiredPeriods();
     } catch (e) {
       debugPrint('Error loading records: $e');
     }
@@ -41,6 +43,37 @@ class PeriodProvider with ChangeNotifier {
     _isLoading = false;
     _clearDayTypeCache();
     notifyListeners();
+  }
+
+  Future<void> _autoEndExpiredPeriods() async {
+    final settingsPeriodLength = await _settingsDao.getPeriodLength();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 优先使用计算出的平均经期天数，如果没有历史数据则使用设置值
+    int periodLength = settingsPeriodLength;
+    if (_cycleData != null && _cycleData!.totalCycles > 0) {
+      periodLength = _cycleData!.averagePeriodLength.round();
+    }
+
+    final ongoing = _records.where((r) => r.isOngoing).toList();
+    for (final record in ongoing) {
+      final daysPassed = today.difference(record.startDateTime).inDays;
+      // 超过经期天数+1天自动结束（给用户一天缓冲）
+      if (daysPassed >= periodLength + 1) {
+        final updated = record.copyWith(
+          endDate: today.toIso8601String().split('T')[0],
+          periodLength: daysPassed,
+        );
+        await _dao.update(updated);
+      }
+    }
+
+    _records = await _dao.getAll();
+    _cycleData = PredictionService.calculateCycleData(
+      _records,
+      algorithm: _algorithm,
+    );
   }
 
   Future<void> setAlgorithm(String algorithm) async {
@@ -148,6 +181,17 @@ class PeriodProvider with ChangeNotifier {
     return false;
   }
 
+  Future<bool> updateRecord(PeriodRecord record) async {
+    try {
+      await _dao.update(record);
+      await loadRecords();
+      return true;
+    } catch (e) {
+      debugPrint('Error updating record: $e');
+      return false;
+    }
+  }
+
   Future<void> deleteRecord(int id) async {
     try {
       await _dao.delete(id);
@@ -244,17 +288,22 @@ class PeriodProvider with ChangeNotifier {
       return _dayTypeCache[cacheKey]!;
     }
     
-    // 计算日类型
+    // 单次计算所有条件，避免 isSafeDay 重复检查 period/predicted/ovulation/fertile
+    final bool period = isPeriodDay(date);
+    final bool predicted = !period && isPredictedDay(date);
+    final bool ovulation = !period && !predicted && isOvulationDay(date);
+    final bool fertile = !period && !predicted && !ovulation && isFertileDay(date);
+
     String dayType;
-    if (isPeriodDay(date)) {
+    if (period) {
       dayType = 'period';
-    } else if (isPredictedDay(date)) {
+    } else if (predicted) {
       dayType = 'predicted';
-    } else if (isOvulationDay(date)) {
+    } else if (ovulation) {
       dayType = 'ovulation';
-    } else if (isFertileDay(date)) {
+    } else if (fertile) {
       dayType = 'fertile';
-    } else if (isSafeDay(date)) {
+    } else if (_isSafeDayDirect(date)) {
       dayType = 'safe';
     } else {
       dayType = 'normal';
@@ -264,6 +313,19 @@ class PeriodProvider with ChangeNotifier {
     _dayTypeCache[cacheKey] = dayType;
     
     return dayType;
+  }
+
+  /// 直接判断安全期，不再重复调用 isPeriodDay/isPredictedDay/isOvulationDay/isFertileDay
+  /// 调用方必须已确认该日期不是 period/predicted/ovulation/fertile
+  bool _isSafeDayDirect(DateTime date) {
+    if (_cycleData == null) return false;
+    final lastStart = _cycleData!.lastPeriodStart;
+    final predicted = _cycleData!.predictedNextPeriod;
+    if (lastStart == null) return false;
+    final windowEnd = predicted != null
+        ? predicted.add(const Duration(days: 10))
+        : lastStart.add(Duration(days: _cycleData!.averageCycleLength.round() + 10));
+    return !date.isBefore(lastStart) && !date.isAfter(windowEnd);
   }
   
   // 清除缓存
@@ -288,30 +350,5 @@ class PeriodProvider with ChangeNotifier {
       }
     }
     return null;
-  }
-}
-
-class AppDateUtils {
-  static bool isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  static bool isInRange(DateTime date, DateTime start, DateTime? end) {
-    if (end == null) {
-      return isSameDay(date, start) || date.isAfter(start);
-    }
-    return (date.isAfter(start) || isSameDay(date, start)) &&
-        (date.isBefore(end) || isSameDay(date, end));
-  }
-
-  static List<DateTime> getDaysInRange(DateTime start, DateTime end) {
-    final days = <DateTime>[];
-    var current = DateTime(start.year, start.month, start.day);
-    final last = DateTime(end.year, end.month, end.day);
-    while (current.isBefore(last) || isSameDay(current, last)) {
-      days.add(current);
-      current = current.add(const Duration(days: 1));
-    }
-    return days;
   }
 }
