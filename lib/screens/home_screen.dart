@@ -254,18 +254,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Offset _swipeStart = Offset.zero;
-
   void _onSwipe(DragEndDetails details) {
-    const threshold = 30.0;
     final velocity = details.primaryVelocity ?? 0;
-    if (velocity.abs() < threshold && _swipeStart.dx == 0) return;
 
-    final dx = details.localPosition.dx - _swipeStart.dx;
-    if (dx > threshold || velocity > 300) {
-      _changeMonth(-1);
-    } else if (dx < -threshold || velocity < -300) {
-      _changeMonth(1);
+    // Use velocity for swipe detection
+    if (velocity > 300) {
+      _changeMonth(-1); // Swipe right = previous month
+    } else if (velocity < -300) {
+      _changeMonth(1); // Swipe left = next month
     }
   }
 
@@ -297,9 +293,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       child: GestureDetector(
-        onHorizontalDragStart: (details) {
-          _swipeStart = details.localPosition;
-        },
         onHorizontalDragEnd: _onSwipe,
         behavior: HitTestBehavior.opaque,
         child: Column(
