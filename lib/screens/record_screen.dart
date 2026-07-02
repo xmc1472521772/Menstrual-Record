@@ -347,25 +347,6 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     super.dispose();
   }
 
-  void _ensureCurrentMonthVisible() {
-    final ctx = _currentMonthKey.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: Duration.zero,
-        alignment: 0.0,
-      );
-    } else if (_scrollController.hasClients && _exactInitialOffset != null) {
-      _scrollController.jumpTo(
-        _exactInitialOffset!.clamp(
-          0.0,
-          _scrollController.position.maxScrollExtent,
-        ),
-      );
-      _retryEnsureVisible();
-    }
-  }
-
   void _retryEnsureVisible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _currentMonthKey.currentContext;
