@@ -109,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withOpacity(0.3),
+            color: AppColors.primaryPink.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -127,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               AppStrings.periodOngoing,
               style: AppTheme.bodyMedium.copyWith(
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
               ),
             ),
             const SizedBox(height: AppColors.spacingXs),
@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               AppStrings.daysUntilPeriod,
               style: AppTheme.bodyMedium.copyWith(
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
               ),
             ),
             const SizedBox(height: AppColors.spacingXs),
@@ -163,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               '记录经期以开始预测',
               style: AppTheme.bodyLarge.copyWith(
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
               ),
             ),
           ],
@@ -174,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
               vertical: AppColors.spacingMd,
             ),
             decoration: BoxDecoration(
-              color: AppColors.white.withOpacity(0.15),
+              color: AppColors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(AppColors.radiusMd),
             ),
             child: Row(
@@ -187,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   width: 1,
                   height: 32,
-                  color: AppColors.white.withOpacity(0.2),
+                  color: AppColors.white.withValues(alpha: 0.2),
                 ),
                 _buildStatItem(
                   AppStrings.averagePeriod,
@@ -242,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(
           label,
           style: AppTheme.bodySmall.copyWith(
-            color: AppColors.white.withOpacity(0.7),
+            color: AppColors.white.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: AppColors.spacingXs),
@@ -286,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(AppColors.radiusMd),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -473,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
           border: Border.all(color: AppColors.info, width: 2.0),
           boxShadow: [
             BoxShadow(
-              color: AppColors.info.withOpacity(0.3),
+              color: AppColors.info.withValues(alpha: 0.3),
               blurRadius: 6,
               spreadRadius: 1,
             ),
@@ -574,7 +574,7 @@ class _HomeScreenState extends State<HomeScreen> {
           dayWidget = Container(
             margin: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: AppColors.safeDay.withOpacity(0.35),
+              color: AppColors.safeDay.withValues(alpha: 0.35),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -631,7 +631,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(AppColors.radiusMd),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -728,9 +728,9 @@ class _HomeScreenState extends State<HomeScreen> {
         color: AppColors.surfaceCard,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
-            offset: const Offset(0, -2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -754,7 +754,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppColors.radiusMd),
                   ),
-                  disabledBackgroundColor: AppColors.grey.withOpacity(0.2),
+                  disabledBackgroundColor: AppColors.grey.withValues(alpha: 0.2),
                   disabledForegroundColor: AppColors.grey,
                 ),
               ),
@@ -778,7 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppColors.radiusMd),
                   ),
-                  disabledBackgroundColor: AppColors.grey.withOpacity(0.2),
+                  disabledBackgroundColor: AppColors.grey.withValues(alpha: 0.2),
                   disabledForegroundColor: AppColors.grey,
                 ),
               ),
