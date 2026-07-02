@@ -110,7 +110,7 @@ class _RecordScreenState extends State<RecordScreen> {
             ),
             child: Column(
               children: [
-                Icon(
+                const Icon(
                   Icons.history,
                   size: 48,
                   color: AppColors.onSurfaceTertiary,
@@ -204,7 +204,7 @@ class _RecordScreenState extends State<RecordScreen> {
           ],
         ),
         trailing: PopupMenuButton<String>(
-          icon: Icon(
+          icon: const Icon(
             Icons.more_vert,
             color: AppColors.onSurfaceTertiary,
           ),
@@ -218,7 +218,7 @@ class _RecordScreenState extends State<RecordScreen> {
               value: 'delete',
               child: Row(
                 children: [
-                  Icon(Icons.delete, color: AppColors.error, size: 20),
+                  const Icon(Icons.delete, color: AppColors.error, size: 20),
                   const SizedBox(width: AppColors.spacingSm),
                   Text(
                     '删除记录',
@@ -332,7 +332,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
 
   double _computeExactOffset() {
     const monthTitleHeight = 35.0;
-    final monthBottomGap = AppColors.spacingSm;
+    const monthBottomGap = AppColors.spacingSm;
     double offset = 0;
     for (int i = 0; i < _monthsBefore; i++) {
       final info = _monthCache[i]!;
@@ -628,7 +628,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     borderRadius: BorderRadius.circular(6),
   );
   static const EdgeInsets _cellMargin = EdgeInsets.all(3);
-  static final TextStyle _existingTodayStyle = TextStyle(
+  static const TextStyle _existingTodayStyle = TextStyle(
     color: AppColors.info,
     fontSize: 13,
   );
@@ -646,12 +646,12 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
-  static final TextStyle _selectedFutureStyle = TextStyle(
+  static const TextStyle _selectedFutureStyle = TextStyle(
     color: AppColors.primaryPink,
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
-  static final TextStyle _selectedFutureTodayStyle = TextStyle(
+  static const TextStyle _selectedFutureTodayStyle = TextStyle(
     color: AppColors.info,
     fontWeight: FontWeight.w600,
     fontSize: 13,
@@ -661,7 +661,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
-  static final TextStyle _pastStyle = TextStyle(
+  static const TextStyle _pastStyle = TextStyle(
     color: AppColors.onSurface,
     fontSize: 13,
   );
