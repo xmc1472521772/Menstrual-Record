@@ -1,13 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yimaflutter/providers/period_provider.dart';
 import 'package:yimaflutter/models/period_record.dart';
 
 void main() {
   group('PeriodProvider', () {
-    late PeriodProvider provider;
-
     setUp(() {
-      provider = PeriodProvider();
+      // Setup for each test
     });
 
     group('isPeriodDay', () {
@@ -32,12 +29,12 @@ void main() {
     group('getDayType', () {
       test('returns period for period day', () {
         // Test the day type classification logic
-        final dayType = 'period';
+        const dayType = 'period';
         expect(dayType, 'period');
       });
 
       test('returns normal for non-special day', () {
-        final dayType = 'normal';
+        const dayType = 'normal';
         expect(dayType, 'normal');
       });
     });
@@ -45,20 +42,16 @@ void main() {
     group('isDateInAnyRecord', () {
       test('returns true for date in record', () {
         // Test the date range check logic
-        final startDate = DateTime(2026, 7, 1);
-        final endDate = DateTime(2026, 7, 5);
         final testDate = DateTime(2026, 7, 3);
 
-        expect(testDate.isAfter(startDate) || testDate.isAtSameMomentAs(startDate), isTrue);
-        expect(testDate.isBefore(endDate) || testDate.isAtSameMomentAs(endDate), isTrue);
+        expect(testDate.isAfter(DateTime(2026, 7, 1)) || testDate.isAtSameMomentAs(DateTime(2026, 7, 1)), isTrue);
+        expect(testDate.isBefore(DateTime(2026, 7, 5)) || testDate.isAtSameMomentAs(DateTime(2026, 7, 5)), isTrue);
       });
 
       test('returns false for date not in any record', () {
-        final startDate = DateTime(2026, 7, 1);
-        final endDate = DateTime(2026, 7, 5);
         final testDate = DateTime(2026, 7, 6);
 
-        expect(testDate.isAfter(endDate), isTrue);
+        expect(testDate.isAfter(DateTime(2026, 7, 5)), isTrue);
       });
     });
   });
