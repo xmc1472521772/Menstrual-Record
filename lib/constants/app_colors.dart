@@ -42,6 +42,7 @@ class AppColors {
 
   // ─── Commonly Used ───────────────────────────────────────────────
   static const Color white = Colors.white;
+  static final Color white90 = Colors.white.withValues(alpha: 0.9);
   static const Color black87 = Colors.black87;
   static const Color black54 = Colors.black54;
   static const Color black38 = Colors.black38;
@@ -75,7 +76,7 @@ class AppColors {
   static Color getPeriodColor(DateTime date) => periodDay;
 
   static Color getPredictedColor(DateTime date) {
-    return predictedDay.withOpacity(0.6);
+    return predictedDay.withValues(alpha: 0.6);
   }
 
   static Color getOvulationColor(DateTime date) => ovulationDay;
@@ -83,6 +84,6 @@ class AppColors {
   static Color getFertileColor(DateTime date) => fertileDay;
 
   static Color getSafeColor(DateTime date) {
-    return safeDay.withOpacity(0.4);
+    return safeDay.withValues(alpha: 0.4);
   }
 }

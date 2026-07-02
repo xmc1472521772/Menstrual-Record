@@ -64,7 +64,7 @@ class AppTheme {
       ),
 
       // Card
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surfaceCard,
         elevation: AppColors.elevationLow,
         shape: RoundedRectangleBorder(
@@ -133,9 +133,9 @@ class AppTheme {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primaryPink.withOpacity(0.3);
+            return AppColors.primaryPink.withValues(alpha: 0.3);
           }
-          return AppColors.grey.withOpacity(0.2);
+          return AppColors.grey.withValues(alpha: 0.2);
         }),
       ),
 
@@ -179,7 +179,7 @@ class AppTheme {
       ),
 
       // Dialog
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppColors.radiusLg),
         ),
@@ -232,7 +232,7 @@ class AppTheme {
         elevation: AppColors.elevationNone,
         height: 64,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: AppColors.primaryPink.withOpacity(0.2),
+        indicatorColor: AppColors.primaryPink.withValues(alpha: 0.2),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.mediumPink, size: 24);
@@ -256,7 +256,7 @@ class AppTheme {
       ),
 
       // Card
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.darkSurfaceCard,
         elevation: AppColors.elevationNone,
         shape: RoundedRectangleBorder(
@@ -326,7 +326,7 @@ class AppTheme {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primaryPink.withOpacity(0.3);
+            return AppColors.primaryPink.withValues(alpha: 0.3);
           }
           return AppColors.darkDivider;
         }),
@@ -374,7 +374,7 @@ class AppTheme {
       ),
 
       // Dialog
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: AppColors.darkSurfaceCard,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppColors.radiusLg),

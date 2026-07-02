@@ -4,6 +4,6 @@ import 'package:yimaflutter/app.dart';
 void main() {
   testWidgets('App should build without errors', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-    expect(find.text('经期记录'), findsOneWidget);
+    expect(find.text('月事记'), findsOneWidget);
   });
 }
