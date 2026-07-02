@@ -158,7 +158,7 @@ class _RecordScreenState extends State<RecordScreen> {
           height: 44,
           decoration: BoxDecoration(
             color: isOngoing
-                ? AppColors.warning.withOpacity(0.15)
+                ? AppColors.warning.withValues(alpha: 0.15)
                 : AppColors.lightPink,
             borderRadius: BorderRadius.circular(AppColors.radiusSm),
           ),
@@ -190,7 +190,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   vertical: 2,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.warning.withOpacity(0.15),
+                  color: AppColors.warning.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(AppColors.radiusFull),
                 ),
                 child: Text(
@@ -600,7 +600,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   static const Widget _weekdayHeader = _WeekdayHeaderWidget();
 
   static final BoxDecoration _existingDecoration = BoxDecoration(
-    color: AppColors.primaryPink.withOpacity(0.15),
+    color: AppColors.primaryPink.withValues(alpha: 0.15),
     borderRadius: BorderRadius.circular(6),
   );
   static final BoxDecoration _selectedDecoration = BoxDecoration(
@@ -608,15 +608,15 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     borderRadius: BorderRadius.circular(6),
   );
   static final BoxDecoration _selectedFutureDecoration = BoxDecoration(
-    color: AppColors.primaryPink.withOpacity(0.25),
+    color: AppColors.primaryPink.withValues(alpha: 0.25),
     border: Border.all(
-      color: AppColors.primaryPink.withOpacity(0.5),
+      color: AppColors.primaryPink.withValues(alpha: 0.5),
       width: 1.2,
     ),
     borderRadius: BorderRadius.circular(6),
   );
   static final BoxDecoration _selectedFutureTodayDecoration = BoxDecoration(
-    color: AppColors.primaryPink.withOpacity(0.25),
+    color: AppColors.primaryPink.withValues(alpha: 0.25),
     border: Border.all(
       color: AppColors.info,
       width: 1.5,
@@ -633,7 +633,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontSize: 13,
   );
   static final TextStyle _existingStyle = TextStyle(
-    color: AppColors.primaryPink.withOpacity(0.4),
+    color: AppColors.primaryPink.withValues(alpha: 0.4),
     fontSize: 13,
   );
   static const TextStyle _selectedTodayStyle = TextStyle(
@@ -666,7 +666,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontSize: 13,
   );
   static final TextStyle _futureStyle = TextStyle(
-    color: AppColors.onSurfaceTertiary.withOpacity(0.4),
+    color: AppColors.onSurfaceTertiary.withValues(alpha: 0.4),
     fontSize: 13,
   );
   static const TextStyle _monthTitleStyle = TextStyle(
@@ -872,7 +872,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                 horizontal: AppColors.spacingLg,
                 vertical: AppColors.spacingXs,
               ),
-              color: AppColors.lightPink.withOpacity(0.4),
+              color: AppColors.lightPink.withValues(alpha: 0.4),
               child: Builder(
                 builder: (context) {
                   final ranges = _buildRanges();
@@ -901,7 +901,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                 horizontal: AppColors.spacingLg,
                 vertical: AppColors.spacingXs,
               ),
-              color: AppColors.error.withOpacity(0.1),
+              color: AppColors.error.withValues(alpha: 0.1),
               child: Text(
                 _conflictMsg!,
                 style: AppTheme.bodySmall.copyWith(color: AppColors.error),
