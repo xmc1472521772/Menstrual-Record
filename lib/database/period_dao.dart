@@ -5,27 +5,39 @@ class PeriodDao {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   Future<int> insert(PeriodRecord record) async {
-    final db = await _dbHelper.database;
-    return await db.insert('period_records', record.toMap());
+    try {
+      final db = await _dbHelper.database;
+      return await db.insert('period_records', record.toMap());
+    } catch (e) {
+      throw Exception('Failed to insert period record: $e');
+    }
   }
 
   Future<int> update(PeriodRecord record) async {
-    final db = await _dbHelper.database;
-    return await db.update(
-      'period_records',
-      record.toMap(),
-      where: 'id = ?',
-      whereArgs: [record.id],
-    );
+    try {
+      final db = await _dbHelper.database;
+      return await db.update(
+        'period_records',
+        record.toMap(),
+        where: 'id = ?',
+        whereArgs: [record.id],
+      );
+    } catch (e) {
+      throw Exception('Failed to update period record: $e');
+    }
   }
 
   Future<int> delete(int id) async {
-    final db = await _dbHelper.database;
-    return await db.delete(
-      'period_records',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    try {
+      final db = await _dbHelper.database;
+      return await db.delete(
+        'period_records',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (e) {
+      throw Exception('Failed to delete period record: $e');
+    }
   }
 
   Future<PeriodRecord?> getById(int id) async {
