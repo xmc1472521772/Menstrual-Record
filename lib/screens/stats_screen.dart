@@ -93,7 +93,7 @@ class StatsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withOpacity(0.3),
+            color: AppColors.primaryPink.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -139,7 +139,7 @@ class StatsScreen extends StatelessWidget {
           height: 76,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.white.withOpacity(0.2),
+            color: AppColors.white.withValues(alpha: 0.2),
           ),
           child: Center(
             child: Column(
@@ -154,7 +154,7 @@ class StatsScreen extends StatelessWidget {
                 Text(
                   unit,
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.white.withOpacity(0.7),
+                    color: AppColors.white.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -165,7 +165,7 @@ class StatsScreen extends StatelessWidget {
         Text(
           label,
           style: AppTheme.bodyMedium.copyWith(
-            color: AppColors.white.withOpacity(0.9),
+            color: AppColors.white.withValues(alpha: 0.9),
           ),
         ),
       ],
@@ -327,7 +327,7 @@ class StatsScreen extends StatelessWidget {
                           color: (daysUntil > 0
                                   ? AppColors.success
                                   : AppColors.error)
-                              .withOpacity(0.1),
+                              .withValues(alpha: 0.1),
                           borderRadius:
                               BorderRadius.circular(AppColors.radiusFull),
                         ),
@@ -397,7 +397,7 @@ class StatsScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(AppColors.spacingXl),
                 child: Column(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.history,
                       size: 36,
                       color: AppColors.onSurfaceTertiary,
@@ -434,7 +434,7 @@ class StatsScreen extends StatelessWidget {
       padding: const EdgeInsets.all(AppColors.spacingMd),
       decoration: BoxDecoration(
         color: index % 2 == 0
-            ? AppColors.lightPink.withOpacity(0.3)
+            ? AppColors.lightPink.withValues(alpha: 0.3)
             : AppColors.transparent,
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
       ),

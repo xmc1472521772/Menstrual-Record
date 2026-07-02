@@ -66,10 +66,10 @@ class SettingsScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppColors.spacingMd),
       decoration: BoxDecoration(
-        color: AppColors.lightPink.withOpacity(0.5),
+        color: AppColors.lightPink.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
         border: Border.all(
-          color: AppColors.primaryPink.withOpacity(0.2),
+          color: AppColors.primaryPink.withValues(alpha: 0.2),
         ),
       ),
       child: Row(
@@ -78,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
           Icon(
             Icons.info_outline,
             size: 18,
-            color: AppColors.primaryPink.withOpacity(0.7),
+            color: AppColors.primaryPink.withValues(alpha: 0.7),
           ),
           const SizedBox(width: AppColors.spacingSm),
           Expanded(
@@ -144,7 +144,7 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          trailing: Icon(
+          trailing: const Icon(
             Icons.chevron_right,
             color: AppColors.onSurfaceTertiary,
           ),
@@ -210,7 +210,7 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          trailing: Icon(
+          trailing: const Icon(
             Icons.chevron_right,
             color: AppColors.onSurfaceTertiary,
           ),
@@ -260,7 +260,7 @@ class SettingsScreen extends StatelessWidget {
             color: AppColors.onSurfaceSecondary,
           ),
         ),
-        trailing: Icon(
+        trailing: const Icon(
           Icons.chevron_right,
           color: AppColors.onSurfaceTertiary,
         ),
@@ -309,7 +309,7 @@ class SettingsScreen extends StatelessWidget {
             color: AppColors.onSurfaceSecondary,
           ),
         ),
-        trailing: Icon(
+        trailing: const Icon(
           Icons.chevron_right,
           color: AppColors.onSurfaceTertiary,
         ),
