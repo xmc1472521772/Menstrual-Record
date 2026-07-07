@@ -12,20 +12,21 @@ class AppTheme {
       primary: AppColors.primaryPink,
       secondary: AppColors.accentPink,
       error: AppColors.error,
-      surface: AppColors.surface,
+      surface: AppThemeColors.light.surface,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: AppThemeColors.light.background,
+      extensions: const [AppThemeColors.light],
 
       // AppBar
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.primaryPink,
         foregroundColor: AppColors.white,
-        elevation: AppColors.elevationNone,
+        elevation: AppDimens.elevationNone,
         centerTitle: true,
         titleTextStyle: TextStyle(
           fontSize: 18,
@@ -36,8 +37,8 @@ class AppTheme {
 
       // NavigationBar
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.surfaceCard,
-        elevation: AppColors.elevationMedium,
+        backgroundColor: AppThemeColors.light.surfaceCard,
+        elevation: AppDimens.elevationMedium,
         height: 64,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         indicatorColor: AppColors.lightPink,
@@ -45,7 +46,7 @@ class AppTheme {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.primaryPink, size: 24);
           }
-          return const IconThemeData(color: AppColors.onSurfaceTertiary, size: 24);
+          return const IconThemeData(color: Color(0xFF999999), size: 24);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -58,17 +59,17 @@ class AppTheme {
           return const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w400,
-            color: AppColors.onSurfaceTertiary,
+            color: Color(0xFF999999),
           );
         }),
       ),
 
       // Card
       cardTheme: CardThemeData(
-        color: AppColors.surfaceCard,
-        elevation: AppColors.elevationLow,
+        color: AppThemeColors.light.surfaceCard,
+        elevation: AppDimens.elevationLow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -78,13 +79,13 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryPink,
           foregroundColor: AppColors.white,
-          elevation: AppColors.elevationNone,
+          elevation: AppDimens.elevationNone,
           padding: const EdgeInsets.symmetric(
-            horizontal: AppColors.spacingXl,
-            vertical: AppColors.spacingLg,
+            horizontal: AppDimens.spacingXl,
+            vertical: AppDimens.spacingLg,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppColors.radiusMd),
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -99,11 +100,11 @@ class AppTheme {
           foregroundColor: AppColors.primaryPink,
           side: const BorderSide(color: AppColors.primaryPink, width: 1.5),
           padding: const EdgeInsets.symmetric(
-            horizontal: AppColors.spacingXl,
-            vertical: AppColors.spacingLg,
+            horizontal: AppDimens.spacingXl,
+            vertical: AppDimens.spacingLg,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppColors.radiusMd),
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -142,26 +143,26 @@ class AppTheme {
       // InputDecoration
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
-          borderSide: const BorderSide(color: AppColors.divider),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
-          borderSide: const BorderSide(color: AppColors.divider),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           borderSide: const BorderSide(color: AppColors.primaryPink, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppColors.spacingLg,
-          vertical: AppColors.spacingMd,
+          horizontal: AppDimens.spacingLg,
+          vertical: AppDimens.spacingMd,
         ),
       ),
 
       // Divider
       dividerTheme: const DividerThemeData(
-        color: AppColors.divider,
+        color: Color(0xFFE0E0E0),
         thickness: 1,
         space: 1,
       ),
@@ -170,7 +171,7 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
         ),
         contentTextStyle: const TextStyle(
           fontSize: 14,
@@ -181,17 +182,17 @@ class AppTheme {
       // Dialog
       dialogTheme: DialogThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusLg),
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
         ),
-        elevation: AppColors.elevationHigh,
+        elevation: AppDimens.elevationHigh,
       ),
 
       // PopupMenu
       popupMenuTheme: PopupMenuThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
         ),
-        elevation: AppColors.elevationMedium,
+        elevation: AppDimens.elevationMedium,
       ),
     );
   }
@@ -204,32 +205,33 @@ class AppTheme {
       primary: AppColors.mediumPink,
       secondary: AppColors.accentPink,
       error: const Color(0xFFEF5350),
-      surface: AppColors.darkSurface,
+      surface: AppThemeColors.dark.surface,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.darkBackground,
+      scaffoldBackgroundColor: AppThemeColors.dark.background,
+      extensions: const [AppThemeColors.dark],
 
       // AppBar
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.darkSurfaceCard,
-        foregroundColor: AppColors.darkOnSurface,
-        elevation: AppColors.elevationNone,
+        backgroundColor: Color(0xFF1E1E1E),
+        foregroundColor: Color(0xFFE0E0E0),
+        elevation: AppDimens.elevationNone,
         centerTitle: true,
         titleTextStyle: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: AppColors.darkOnSurface,
+          color: Color(0xFFE0E0E0),
         ),
       ),
 
       // NavigationBar
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.darkSurfaceCard,
-        elevation: AppColors.elevationNone,
+        backgroundColor: const Color(0xFF1E1E1E),
+        elevation: AppDimens.elevationNone,
         height: 64,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         indicatorColor: AppColors.primaryPink.withValues(alpha: 0.2),
@@ -237,7 +239,7 @@ class AppTheme {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.mediumPink, size: 24);
           }
-          return const IconThemeData(color: AppColors.darkOnSurfaceTertiary, size: 24);
+          return const IconThemeData(color: Color(0xFF777777), size: 24);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -250,18 +252,18 @@ class AppTheme {
           return const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w400,
-            color: AppColors.darkOnSurfaceTertiary,
+            color: Color(0xFF777777),
           );
         }),
       ),
 
       // Card
       cardTheme: CardThemeData(
-        color: AppColors.darkSurfaceCard,
-        elevation: AppColors.elevationNone,
+        color: const Color(0xFF1E1E1E),
+        elevation: AppDimens.elevationNone,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
-          side: const BorderSide(color: AppColors.darkDivider, width: 1),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          side: const BorderSide(color: Color(0xFF2A2A2A), width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -271,13 +273,13 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryPink,
           foregroundColor: AppColors.white,
-          elevation: AppColors.elevationNone,
+          elevation: AppDimens.elevationNone,
           padding: const EdgeInsets.symmetric(
-            horizontal: AppColors.spacingXl,
-            vertical: AppColors.spacingLg,
+            horizontal: AppDimens.spacingXl,
+            vertical: AppDimens.spacingLg,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppColors.radiusMd),
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -292,11 +294,11 @@ class AppTheme {
           foregroundColor: AppColors.mediumPink,
           side: const BorderSide(color: AppColors.mediumPink, width: 1.5),
           padding: const EdgeInsets.symmetric(
-            horizontal: AppColors.spacingXl,
-            vertical: AppColors.spacingLg,
+            horizontal: AppDimens.spacingXl,
+            vertical: AppDimens.spacingLg,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppColors.radiusMd),
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -322,73 +324,73 @@ class AppTheme {
           if (states.contains(WidgetState.selected)) {
             return AppColors.mediumPink;
           }
-          return AppColors.darkOnSurfaceTertiary;
+          return const Color(0xFF777777);
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return AppColors.primaryPink.withValues(alpha: 0.3);
           }
-          return AppColors.darkDivider;
+          return const Color(0xFF2A2A2A);
         }),
       ),
 
       // InputDecoration
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
-          borderSide: const BorderSide(color: AppColors.darkDivider),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
-          borderSide: const BorderSide(color: AppColors.darkDivider),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           borderSide: const BorderSide(color: AppColors.mediumPink, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppColors.spacingLg,
-          vertical: AppColors.spacingMd,
+          horizontal: AppDimens.spacingLg,
+          vertical: AppDimens.spacingMd,
         ),
       ),
 
       // Divider
       dividerTheme: const DividerThemeData(
-        color: AppColors.darkDivider,
+        color: Color(0xFF2A2A2A),
         thickness: 1,
         space: 1,
       ),
 
       // SnackBar
       snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF1E1E1E),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.darkSurfaceCard,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
         ),
         contentTextStyle: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          color: AppColors.darkOnSurface,
+          color: Color(0xFFE0E0E0),
         ),
       ),
 
       // Dialog
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.darkSurfaceCard,
+        backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusLg),
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
         ),
-        elevation: AppColors.elevationHigh,
+        elevation: AppDimens.elevationHigh,
       ),
 
       // PopupMenu
       popupMenuTheme: PopupMenuThemeData(
-        color: AppColors.darkSurfaceCard,
+        color: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppColors.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
         ),
-        elevation: AppColors.elevationMedium,
+        elevation: AppDimens.elevationMedium,
       ),
     );
   }

@@ -2,7 +2,11 @@ import 'database_helper.dart';
 import '../models/period_record.dart';
 
 class PeriodDao {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DatabaseProvider _dbHelper;
+
+  /// Allows injecting a [DatabaseProvider] for testing; defaults to the singleton.
+  PeriodDao({DatabaseProvider? dbHelper})
+      : _dbHelper = dbHelper ?? DatabaseHelper();
 
   Future<int> insert(PeriodRecord record) async {
     try {
@@ -60,15 +64,28 @@ class PeriodDao {
     return maps.map((map) => PeriodRecord.fromMap(map)).toList();
   }
 
+  /// Queries records whose start_date falls within [start, end].
+  ///
+  /// Dates are stored as 'yyyy-MM-dd' strings (no time component), so we
+  /// format the query parameters the same way to ensure correct string
+  /// comparison.
   Future<List<PeriodRecord>> getByDateRange(DateTime start, DateTime end) async {
     final db = await _dbHelper.database;
+    final startStr = _formatDate(start);
+    final endStr = _formatDate(end);
     final maps = await db.query(
       'period_records',
       where: 'start_date >= ? AND start_date <= ?',
-      whereArgs: [start.toIso8601String(), end.toIso8601String()],
+      whereArgs: [startStr, endStr],
       orderBy: 'start_date DESC',
     );
     return maps.map((map) => PeriodRecord.fromMap(map)).toList();
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}'
+        '-${date.month.toString().padLeft(2, '0')}'
+        '-${date.day.toString().padLeft(2, '0')}';
   }
 
   Future<PeriodRecord?> getLatest() async {
@@ -94,5 +111,18 @@ class PeriodDao {
       batch.insert('period_records', record.toMap());
     }
     await batch.commit(noResult: true);
+  }
+
+  /// Atomically replaces all records with [records] in a single transaction.
+  ///
+  /// If insertion fails, the original data is preserved.
+  Future<void> replaceAll(List<PeriodRecord> records) async {
+    final db = await _dbHelper.database;
+    await db.transaction((txn) async {
+      await txn.delete('period_records');
+      for (final record in records) {
+        await txn.insert('period_records', record.toMap());
+      }
+    });
   }
 }

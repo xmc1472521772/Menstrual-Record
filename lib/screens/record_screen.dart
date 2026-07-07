@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
+import '../models/period_record.dart';
 import 'package:intl/intl.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
@@ -24,12 +26,12 @@ class _RecordScreenState extends State<RecordScreen> {
       body: Consumer<PeriodProvider>(
         builder: (context, provider, child) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppColors.spacingLg),
+            padding: const EdgeInsets.all(AppDimens.spacingLg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildAddButton(context, provider),
-                const SizedBox(height: AppColors.spacing2xl),
+                const SizedBox(height: AppDimens.spacing2xl),
                 _buildHistorySection(provider),
               ],
             ),
@@ -48,7 +50,7 @@ class _RecordScreenState extends State<RecordScreen> {
         label: const Text('添加经期记录'),
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(
-            vertical: AppColors.spacingLg,
+            vertical: AppDimens.spacingLg,
           ),
         ),
       ),
@@ -87,39 +89,39 @@ class _RecordScreenState extends State<RecordScreen> {
             Text(
               AppStrings.historyRecords,
               style: AppTheme.headingSmall.copyWith(
-                color: AppColors.onSurface,
+                color: context.themeColors.onSurface,
               ),
             ),
             if (records.isNotEmpty)
               Text(
                 '共 ${records.length} 条记录',
                 style: AppTheme.bodySmall.copyWith(
-                  color: AppColors.onSurfaceTertiary,
+                  color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
           ],
         ),
-        const SizedBox(height: AppColors.spacingMd),
+        const SizedBox(height: AppDimens.spacingMd),
         if (records.isEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(AppColors.spacing3xl),
+            padding: const EdgeInsets.all(AppDimens.spacing3xl),
             decoration: BoxDecoration(
-              color: AppColors.surfaceCard,
-              borderRadius: BorderRadius.circular(AppColors.radiusMd),
+              color: context.themeColors.surfaceCard,
+              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
             ),
             child: Column(
               children: [
-                const Icon(
+                Icon(
                   Icons.history,
                   size: 48,
-                  color: AppColors.onSurfaceTertiary,
+                  color: context.themeColors.onSurfaceTertiary,
                 ),
-                const SizedBox(height: AppColors.spacingMd),
+                const SizedBox(height: AppDimens.spacingMd),
                 Text(
                   AppStrings.noRecords,
                   style: AppTheme.bodyMedium.copyWith(
-                    color: AppColors.onSurfaceTertiary,
+                    color: context.themeColors.onSurfaceTertiary,
                   ),
                 ),
               ],
@@ -139,7 +141,7 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  Widget _buildRecordCard(record, PeriodProvider provider) {
+  Widget _buildRecordCard(PeriodRecord record, PeriodProvider provider) {
     final startDate = DateFormat('yyyy-MM-dd').parse(record.startDate);
     final endDate = record.endDate != null
         ? DateFormat('yyyy-MM-dd').parse(record.endDate!)
@@ -147,11 +149,11 @@ class _RecordScreenState extends State<RecordScreen> {
     final isOngoing = record.isOngoing;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: AppColors.spacingSm),
+      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppColors.spacingLg,
-          vertical: AppColors.spacingSm,
+          horizontal: AppDimens.spacingLg,
+          vertical: AppDimens.spacingSm,
         ),
         leading: Container(
           width: 44,
@@ -160,7 +162,7 @@ class _RecordScreenState extends State<RecordScreen> {
             color: isOngoing
                 ? AppColors.warning.withValues(alpha: 0.15)
                 : AppColors.lightPink,
-            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
           ),
           child: Icon(
             isOngoing ? Icons.play_circle_filled : Icons.favorite,
@@ -170,28 +172,28 @@ class _RecordScreenState extends State<RecordScreen> {
         ),
         title: Text(
           '${DateFormat('yyyy年MM月dd日').format(startDate)} - ${endDate != null ? DateFormat('yyyy年MM月dd日').format(endDate) : '进行中'}',
-          style: AppTheme.titleMedium.copyWith(color: AppColors.onSurface),
+          style: AppTheme.titleMedium.copyWith(color: context.themeColors.onSurface),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: AppColors.spacingXs),
+            const SizedBox(height: AppDimens.spacingXs),
             Text(
               '持续 ${record.periodDays} 天',
               style: AppTheme.bodySmall.copyWith(
-                color: AppColors.onSurfaceSecondary,
+                color: context.themeColors.onSurfaceSecondary,
               ),
             ),
             if (isOngoing) ...[
-              const SizedBox(height: AppColors.spacingXs),
+              const SizedBox(height: AppDimens.spacingXs),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: AppColors.spacingSm,
+                  horizontal: AppDimens.spacingSm,
                   vertical: 2,
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.warning.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(AppColors.radiusFull),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusFull),
                 ),
                 child: Text(
                   '进行中',
@@ -204,9 +206,9 @@ class _RecordScreenState extends State<RecordScreen> {
           ],
         ),
         trailing: PopupMenuButton<String>(
-          icon: const Icon(
+          icon: Icon(
             Icons.more_vert,
-            color: AppColors.onSurfaceTertiary,
+            color: context.themeColors.onSurfaceTertiary,
           ),
           onSelected: (value) {
             if (value == 'delete') {
@@ -219,7 +221,7 @@ class _RecordScreenState extends State<RecordScreen> {
               child: Row(
                 children: [
                   const Icon(Icons.delete, color: AppColors.error, size: 20),
-                  const SizedBox(width: AppColors.spacingSm),
+                  const SizedBox(width: AppDimens.spacingSm),
                   Text(
                     '删除记录',
                     style: AppTheme.bodyMedium.copyWith(
@@ -235,7 +237,7 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  void _showDeleteConfirmDialog(record, PeriodProvider provider) {
+  void _showDeleteConfirmDialog(PeriodRecord record, PeriodProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -313,7 +315,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _cellWidth = (MediaQuery.of(context).size.width - AppColors.spacingSm * 2) / 7;
+    _cellWidth = (MediaQuery.of(context).size.width - AppDimens.spacingSm * 2) / 7;
     if (!_didInitialScroll) {
       _didInitialScroll = true;
       _exactInitialOffset = _computeExactOffset();
@@ -332,7 +334,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
 
   double _computeExactOffset() {
     const monthTitleHeight = 35.0;
-    const monthBottomGap = AppColors.spacingSm;
+    const monthBottomGap = AppDimens.spacingSm;
     double offset = 0;
     for (int i = 0; i < _monthsBefore; i++) {
       final info = _monthCache[i]!;
@@ -532,10 +534,10 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
               foregroundColor: AppColors.white,
               minimumSize: const Size(40, 36),
               padding: const EdgeInsets.symmetric(
-                horizontal: AppColors.spacingMd,
+                horizontal: AppDimens.spacingMd,
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
               ),
             ),
             child: const Text(
@@ -546,7 +548,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
               ),
             ),
           ),
-          const SizedBox(width: AppColors.spacingSm),
+          const SizedBox(width: AppDimens.spacingSm),
         ],
       ),
       body: Column(
@@ -564,15 +566,15 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   Widget _buildHint() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppColors.spacingLg,
-        AppColors.spacingSm,
-        AppColors.spacingLg,
-        AppColors.spacingSm,
+        AppDimens.spacingLg,
+        AppDimens.spacingSm,
+        AppDimens.spacingLg,
+        AppDimens.spacingSm,
       ),
       child: Text(
         '首次点击自动选中 ${widget.defaultDays} 天，之后点击可逐天添加/移除',
         style: AppTheme.bodySmall.copyWith(
-          color: AppColors.onSurfaceTertiary,
+          color: context.themeColors.onSurfaceTertiary,
         ),
       ),
     );
@@ -642,16 +644,16 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
-  static const TextStyle _pastStyle = TextStyle(
-    color: AppColors.onSurface,
+  TextStyle _pastStyle(BuildContext context) => TextStyle(
+    color: context.themeColors.onSurface,
     fontSize: 13,
   );
-  static final TextStyle _futureStyle = TextStyle(
-    color: AppColors.onSurfaceTertiary.withValues(alpha: 0.4),
+  TextStyle _futureStyle(BuildContext context) => TextStyle(
+    color: context.themeColors.onSurfaceTertiary.withValues(alpha: 0.4),
     fontSize: 13,
   );
-  static const TextStyle _monthTitleStyle = TextStyle(
-    color: AppColors.onSurface,
+  TextStyle _monthTitleStyle(BuildContext context) => TextStyle(
+    color: context.themeColors.onSurface,
     fontWeight: FontWeight.w600,
     fontSize: 16,
   );
@@ -665,7 +667,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
       // Keep built items alive to avoid gesture recognizer re-registration
       addAutomaticKeepAlives: true,
       // Pre-render nearby months for smoother scrolling
-      cacheExtent: 800,
+      scrollCacheExtent: const ScrollCacheExtent.pixels(800),
       itemBuilder: (context, index) {
         final info = _monthCache[index]!;
         final isCurrentMonth = info.year == widget.today.year &&
@@ -705,14 +707,14 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
 
     final monthTitle = Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppColors.spacingMd,
-        AppColors.spacingMd,
-        AppColors.spacingMd,
+        AppDimens.spacingMd,
+        AppDimens.spacingMd,
+        AppDimens.spacingMd,
         4,
       ),
       child: Text(
         '$year年$month月',
-        style: _monthTitleStyle,
+        style: _monthTitleStyle(context),
       ),
     );
 
@@ -767,7 +769,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
       children: [
         monthTitle,
         ...rowWidgets,
-        const SizedBox(height: AppColors.spacingSm),
+        const SizedBox(height: AppDimens.spacingSm),
       ],
     );
   }
@@ -834,7 +836,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
       alignment: Alignment.center,
       child: Text(
         label,
-        style: isPast ? _pastStyle : _futureStyle,
+        style: isPast ? _pastStyle(context) : _futureStyle(context),
       ),
     );
   }
@@ -850,8 +852,8 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
-                horizontal: AppColors.spacingLg,
-                vertical: AppColors.spacingXs,
+                horizontal: AppDimens.spacingLg,
+                vertical: AppDimens.spacingXs,
               ),
               color: AppColors.lightPink.withValues(alpha: 0.4),
               child: Builder(
@@ -879,8 +881,8 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
-                horizontal: AppColors.spacingLg,
-                vertical: AppColors.spacingXs,
+                horizontal: AppDimens.spacingLg,
+                vertical: AppDimens.spacingXs,
               ),
               color: AppColors.error.withValues(alpha: 0.1),
               child: Text(
@@ -891,7 +893,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.all(AppColors.spacingLg),
+            padding: const EdgeInsets.all(AppDimens.spacingLg),
             child: Row(
               children: [
                 Expanded(
@@ -900,7 +902,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                     child: const Text(AppStrings.cancel),
                   ),
                 ),
-                const SizedBox(width: AppColors.spacingMd),
+                const SizedBox(width: AppDimens.spacingMd),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: canSave
@@ -965,19 +967,19 @@ class _WeekdayHeaderWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppColors.spacingMd,
-        vertical: AppColors.spacingSm,
+        horizontal: AppDimens.spacingMd,
+        vertical: AppDimens.spacingSm,
       ),
-      color: AppColors.surfaceCard,
-      child: const Row(
+      color: context.themeColors.surfaceCard,
+      child: Row(
         children: [
-          Expanded(child: Center(child: Text('一', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('二', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('三', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('四', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('五', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('六', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('日', style: TextStyle(color: AppColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('一', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('二', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('三', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('四', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('五', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('六', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
+          Expanded(child: Center(child: Text('日', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
         ],
       ),
     );

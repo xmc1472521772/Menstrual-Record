@@ -2,7 +2,11 @@ import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 
 class SettingsDao {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DatabaseProvider _dbHelper;
+
+  /// Allows injecting a [DatabaseProvider] for testing; defaults to the singleton.
+  SettingsDao({DatabaseProvider? dbHelper})
+      : _dbHelper = dbHelper ?? DatabaseHelper();
 
   Future<String?> getValue(String key) async {
     final db = await _dbHelper.database;

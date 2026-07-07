@@ -56,9 +56,9 @@ class PeriodRecord {
       'endDate': endDate,
       'cycleLength': cycleLength,
       'periodLength': periodLength,
-      'mood': mood ?? '',
-      'notes': notes ?? '',
-      'symptoms': symptoms ?? '',
+      'mood': mood,
+      'notes': notes,
+      'symptoms': symptoms,
       'createdAt': createdAt,
     };
   }
@@ -69,13 +69,23 @@ class PeriodRecord {
       endDate: json['endDate'] as String?,
       cycleLength: json['cycleLength'] as int?,
       periodLength: json['periodLength'] as int?,
-      mood: json['mood'] as String?,
-      notes: json['notes'] as String?,
-      symptoms: json['symptoms'] as String?,
+      mood: (json['mood'] as String?)?.isNotEmpty == true
+          ? json['mood'] as String
+          : null,
+      notes: (json['notes'] as String?)?.isNotEmpty == true
+          ? json['notes'] as String
+          : null,
+      symptoms: (json['symptoms'] as String?)?.isNotEmpty == true
+          ? json['symptoms'] as String
+          : null,
       createdAt: json['createdAt'] as int?,
     );
   }
 
+  /// Creates a copy of this record with the given fields replaced.
+  ///
+  /// To set a nullable field to null, use the corresponding `clear*` parameter
+  /// (e.g. [clearEndDate]).
   PeriodRecord copyWith({
     int? id,
     String? startDate,
@@ -86,16 +96,24 @@ class PeriodRecord {
     String? notes,
     String? symptoms,
     int? createdAt,
+    bool clearEndDate = false,
+    bool clearMood = false,
+    bool clearNotes = false,
+    bool clearSymptoms = false,
+    bool clearCycleLength = false,
+    bool clearPeriodLength = false,
   }) {
     return PeriodRecord(
       id: id ?? this.id,
       startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
-      cycleLength: cycleLength ?? this.cycleLength,
-      periodLength: periodLength ?? this.periodLength,
-      mood: mood ?? this.mood,
-      notes: notes ?? this.notes,
-      symptoms: symptoms ?? this.symptoms,
+      endDate: clearEndDate ? null : (endDate ?? this.endDate),
+      cycleLength:
+          clearCycleLength ? null : (cycleLength ?? this.cycleLength),
+      periodLength:
+          clearPeriodLength ? null : (periodLength ?? this.periodLength),
+      mood: clearMood ? null : (mood ?? this.mood),
+      notes: clearNotes ? null : (notes ?? this.notes),
+      symptoms: clearSymptoms ? null : (symptoms ?? this.symptoms),
       createdAt: createdAt ?? this.createdAt,
     );
   }

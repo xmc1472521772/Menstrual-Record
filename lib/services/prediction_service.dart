@@ -29,7 +29,13 @@ class PredictionService {
     for (int i = 0; i < sortedRecords.length; i++) {
       final record = sortedRecords[i];
       final periodDays = record.periodDays;
-      periodLengths.add(periodDays);
+
+      // Only include completed records in the period length average.
+      // Ongoing records use DateTime.now() for periodDays which would skew
+      // the average — but we still add them to recentPeriods for display.
+      if (!record.isOngoing) {
+        periodLengths.add(periodDays);
+      }
 
       int? cycleLength;
       if (i > 0) {
@@ -64,24 +70,13 @@ class PredictionService {
         : defaultPeriodLength.toDouble();
 
     final lastRecord = sortedRecords.last;
-    DateTime? predictedNext;
-    
-    // 如果最后一条记录是正在进行中的经期，则不计算预测
-    // 或者使用前一条记录来计算预测
-    if (lastRecord.isOngoing) {
-      if (sortedRecords.length > 1) {
-        final previousRecord = sortedRecords[sortedRecords.length - 2];
-        predictedNext = previousRecord.startDateTime.add(
-          Duration(days: avgCycle.round()),
-        );
-      } else {
-        predictedNext = null;
-      }
-    } else {
-      predictedNext = lastRecord.startDateTime.add(
-        Duration(days: avgCycle.round()),
-      );
-    }
+
+    // 无论最后一条记录是否结束，都基于其开始日期 + 平均周期来预测下一次经期。
+    // - 已结束：预测下一次经期 ✓
+    // - 进行中：预测下一次经期（而非本次）✓
+    final predictedNext = lastRecord.startDateTime.add(
+      Duration(days: avgCycle.round()),
+    );
 
     return CycleData(
       averageCycleLength: avgCycle,

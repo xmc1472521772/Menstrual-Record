@@ -22,25 +22,25 @@ class SettingsScreen extends StatelessWidget {
       body: Consumer2<PeriodProvider, SettingsProvider>(
         builder: (context, periodProvider, settingsProvider, child) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppColors.spacingLg),
+            padding: const EdgeInsets.all(AppDimens.spacingLg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildSectionTitle('周期设置'),
-                _buildPredictionHint(),
-                const SizedBox(height: AppColors.spacingMd),
+                _buildSectionTitle(context, '周期设置'),
+                _buildPredictionHint(context),
+                const SizedBox(height: AppDimens.spacingMd),
                 _buildCycleLengthSetting(context, settingsProvider),
-                const SizedBox(height: AppColors.spacingSm),
+                const SizedBox(height: AppDimens.spacingSm),
                 _buildPeriodLengthSetting(context, settingsProvider),
-                const SizedBox(height: AppColors.spacing2xl),
-                _buildSectionTitle('提醒设置'),
+                const SizedBox(height: AppDimens.spacing2xl),
+                _buildSectionTitle(context, '提醒设置'),
                 _buildReminderDaysSetting(context, settingsProvider),
-                const SizedBox(height: AppColors.spacingSm),
+                const SizedBox(height: AppDimens.spacingSm),
                 _buildReminderHourSetting(context, settingsProvider),
-                const SizedBox(height: AppColors.spacing2xl),
-                _buildSectionTitle(AppStrings.dataManagement),
+                const SizedBox(height: AppDimens.spacing2xl),
+                _buildSectionTitle(context, AppStrings.dataManagement),
                 _buildExportButton(context, periodProvider),
-                const SizedBox(height: AppColors.spacingMd),
+                const SizedBox(height: AppDimens.spacingMd),
                 _buildImportButton(context, periodProvider),
               ],
             ),
@@ -50,9 +50,9 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppColors.spacingMd),
+      padding: const EdgeInsets.only(bottom: AppDimens.spacingMd),
       child: Text(
         title,
         style: AppTheme.headingSmall.copyWith(
@@ -62,12 +62,12 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPredictionHint() {
+  Widget _buildPredictionHint(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppColors.spacingMd),
+      padding: const EdgeInsets.all(AppDimens.spacingMd),
       decoration: BoxDecoration(
         color: AppColors.lightPink.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
         border: Border.all(
           color: AppColors.primaryPink.withValues(alpha: 0.2),
         ),
@@ -80,12 +80,12 @@ class SettingsScreen extends StatelessWidget {
             size: 18,
             color: AppColors.primaryPink.withValues(alpha: 0.7),
           ),
-          const SizedBox(width: AppColors.spacingSm),
+          const SizedBox(width: AppDimens.spacingSm),
           Expanded(
             child: Text(
               '当有足够的历史记录时，系统会根据实际记录计算平均值；当记录不足时，会使用以下默认值进行预测。',
               style: AppTheme.bodySmall.copyWith(
-                color: AppColors.onSurfaceSecondary,
+                color: context.themeColors.onSurfaceSecondary,
                 height: 1.4,
               ),
             ),
@@ -99,18 +99,18 @@ class SettingsScreen extends StatelessWidget {
       BuildContext context, SettingsProvider provider) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppColors.spacingXs),
+        padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingXs),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppColors.spacingLg,
-            vertical: AppColors.spacingSm,
+            horizontal: AppDimens.spacingLg,
+            vertical: AppDimens.spacingSm,
           ),
           leading: Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
               color: AppColors.lightPink,
-              borderRadius: BorderRadius.circular(AppColors.radiusSm),
+              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
             ),
             child: const Icon(
               Icons.calendar_month,
@@ -121,13 +121,13 @@ class SettingsScreen extends StatelessWidget {
           title: Text(
             AppStrings.cycleLength,
             style: AppTheme.titleMedium.copyWith(
-              color: AppColors.onSurface,
+              color: context.themeColors.onSurface,
             ),
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: AppColors.spacingXs),
+              const SizedBox(height: AppDimens.spacingXs),
               Text(
                 '${provider.cycleLength} 天',
                 style: AppTheme.bodyLarge.copyWith(
@@ -135,18 +135,18 @@ class SettingsScreen extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: AppColors.spacingXs),
+              const SizedBox(height: AppDimens.spacingXs),
               Text(
                 '两次经期开始之间的间隔天数，用于预测下次经期开始日期',
                 style: AppTheme.bodySmall.copyWith(
-                  color: AppColors.onSurfaceTertiary,
+                  color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
             ],
           ),
-          trailing: const Icon(
+          trailing: Icon(
             Icons.chevron_right,
-            color: AppColors.onSurfaceTertiary,
+            color: context.themeColors.onSurfaceTertiary,
           ),
           onTap: () => _showNumberPicker(
             context: context,
@@ -165,18 +165,18 @@ class SettingsScreen extends StatelessWidget {
       BuildContext context, SettingsProvider provider) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppColors.spacingXs),
+        padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingXs),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppColors.spacingLg,
-            vertical: AppColors.spacingSm,
+            horizontal: AppDimens.spacingLg,
+            vertical: AppDimens.spacingSm,
           ),
           leading: Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
               color: AppColors.lightPink,
-              borderRadius: BorderRadius.circular(AppColors.radiusSm),
+              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
             ),
             child: const Icon(
               Icons.water_drop,
@@ -187,13 +187,13 @@ class SettingsScreen extends StatelessWidget {
           title: Text(
             AppStrings.periodDuration,
             style: AppTheme.titleMedium.copyWith(
-              color: AppColors.onSurface,
+              color: context.themeColors.onSurface,
             ),
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: AppColors.spacingXs),
+              const SizedBox(height: AppDimens.spacingXs),
               Text(
                 '${provider.periodLength} 天',
                 style: AppTheme.bodyLarge.copyWith(
@@ -201,18 +201,18 @@ class SettingsScreen extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: AppColors.spacingXs),
+              const SizedBox(height: AppDimens.spacingXs),
               Text(
                 '每次经期持续的天数，用于预测经期结束日期',
                 style: AppTheme.bodySmall.copyWith(
-                  color: AppColors.onSurfaceTertiary,
+                  color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
             ],
           ),
-          trailing: const Icon(
+          trailing: Icon(
             Icons.chevron_right,
-            color: AppColors.onSurfaceTertiary,
+            color: context.themeColors.onSurfaceTertiary,
           ),
           onTap: () => _showNumberPicker(
             context: context,
@@ -232,15 +232,15 @@ class SettingsScreen extends StatelessWidget {
     return Card(
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppColors.spacingLg,
-          vertical: AppColors.spacingSm,
+          horizontal: AppDimens.spacingLg,
+          vertical: AppDimens.spacingSm,
         ),
         leading: Container(
           width: 44,
           height: 44,
           decoration: BoxDecoration(
             color: AppColors.lightPink,
-            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
           ),
           child: const Icon(
             Icons.notifications,
@@ -251,18 +251,18 @@ class SettingsScreen extends StatelessWidget {
         title: Text(
           AppStrings.reminderDays,
           style: AppTheme.titleMedium.copyWith(
-            color: AppColors.onSurface,
+            color: context.themeColors.onSurface,
           ),
         ),
         subtitle: Text(
           '提前 ${provider.reminderDays} 天提醒',
           style: AppTheme.bodyMedium.copyWith(
-            color: AppColors.onSurfaceSecondary,
+            color: context.themeColors.onSurfaceSecondary,
           ),
         ),
-        trailing: const Icon(
+        trailing: Icon(
           Icons.chevron_right,
-          color: AppColors.onSurfaceTertiary,
+          color: context.themeColors.onSurfaceTertiary,
         ),
         onTap: () => _showNumberPicker(
           context: context,
@@ -281,15 +281,15 @@ class SettingsScreen extends StatelessWidget {
     return Card(
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppColors.spacingLg,
-          vertical: AppColors.spacingSm,
+          horizontal: AppDimens.spacingLg,
+          vertical: AppDimens.spacingSm,
         ),
         leading: Container(
           width: 44,
           height: 44,
           decoration: BoxDecoration(
             color: AppColors.lightPink,
-            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
           ),
           child: const Icon(
             Icons.access_time,
@@ -300,18 +300,18 @@ class SettingsScreen extends StatelessWidget {
         title: Text(
           '提醒时间',
           style: AppTheme.titleMedium.copyWith(
-            color: AppColors.onSurface,
+            color: context.themeColors.onSurface,
           ),
         ),
         subtitle: Text(
           '${provider.reminderHour}:00',
           style: AppTheme.bodyMedium.copyWith(
-            color: AppColors.onSurfaceSecondary,
+            color: context.themeColors.onSurfaceSecondary,
           ),
         ),
-        trailing: const Icon(
+        trailing: Icon(
           Icons.chevron_right,
-          color: AppColors.onSurfaceTertiary,
+          color: context.themeColors.onSurfaceTertiary,
         ),
         onTap: () => _showNumberPicker(
           context: context,
@@ -334,7 +334,7 @@ class SettingsScreen extends StatelessWidget {
         label: const Text(AppStrings.exportData),
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(
-            vertical: AppColors.spacingLg,
+            vertical: AppDimens.spacingLg,
           ),
         ),
       ),
@@ -350,7 +350,7 @@ class SettingsScreen extends StatelessWidget {
         label: const Text(AppStrings.importData),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(
-            vertical: AppColors.spacingLg,
+            vertical: AppDimens.spacingLg,
           ),
         ),
       ),
@@ -408,7 +408,7 @@ class SettingsScreen extends StatelessWidget {
             content: Text(
               '选择导入模式：',
               style: AppTheme.bodyMedium.copyWith(
-                color: AppColors.onSurfaceSecondary,
+                color: context.themeColors.onSurfaceSecondary,
               ),
             ),
             actions: [
@@ -471,7 +471,7 @@ class SettingsScreen extends StatelessWidget {
               title: Text(
                 title,
                 style: AppTheme.headingSmall.copyWith(
-                  color: AppColors.onSurface,
+                  color: context.themeColors.onSurface,
                 ),
               ),
               content: SizedBox(
@@ -490,8 +490,8 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         decoration: InputDecoration(
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: AppColors.spacingSm,
-                            vertical: AppColors.spacingSm,
+                            horizontal: AppDimens.spacingSm,
+                            vertical: AppDimens.spacingSm,
                           ),
                           errorText: errorText,
                           errorStyle: AppTheme.bodySmall.copyWith(
@@ -524,7 +524,7 @@ class SettingsScreen extends StatelessWidget {
                         },
                       ),
                     ),
-                    const SizedBox(height: AppColors.spacingMd),
+                    const SizedBox(height: AppDimens.spacingMd),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -543,7 +543,7 @@ class SettingsScreen extends StatelessWidget {
                           iconSize: 40,
                           color: AppColors.primaryPink,
                         ),
-                        const SizedBox(width: AppColors.spacing2xl),
+                        const SizedBox(width: AppDimens.spacing2xl),
                         IconButton(
                           onPressed: selectedValue < max
                               ? () {
@@ -564,7 +564,7 @@ class SettingsScreen extends StatelessWidget {
                     Text(
                       '范围: $min - $max',
                       style: AppTheme.bodySmall.copyWith(
-                        color: AppColors.onSurfaceTertiary,
+                        color: context.themeColors.onSurfaceTertiary,
                       ),
                     ),
                   ],

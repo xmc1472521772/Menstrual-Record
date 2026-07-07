@@ -7,6 +7,7 @@ import 'screens/home_screen.dart';
 import 'screens/record_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/splash_screen.dart';
 import 'constants/app_strings.dart';
 import 'constants/app_theme.dart';
 
@@ -36,7 +37,7 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
-        home: const MainScreen(),
+        home: const SplashScreen(),
       ),
     );
   }

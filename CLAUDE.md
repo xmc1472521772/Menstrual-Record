@@ -9,19 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Run the app (standard)
+# Run the app
 flutter run
 
-# Run with China mirrors (use run_app.bat or run_app.ps1)
-export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
-export PUB_HOSTED_URL=https://pub.flutter-io.cn
-flutter run
-
-# Run tests
+# Run tests (uses sqflite_common_ffi with in-memory database)
 flutter test
-
-# Run a single test file
-flutter test test/widget_test.dart
+flutter test test/providers/period_provider_test.dart  # single file
 
 # Analyze code
 flutter analyze
@@ -34,31 +27,35 @@ python generate_icon.py
 
 **Provider-based, flat structure.** No BLoC, no Clean Architecture layers, no code generation.
 
-- **`main.dart`** → entry point, runs `MyApp`
-- **`app.dart`** → `MaterialApp` + `MultiProvider` (registers `PeriodProvider` and `SettingsProvider`) + `MainScreen` bottom nav with 4 tabs
-- **`models/`** → plain Dart classes with manual `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith`
-- **`database/`** → `DatabaseHelper` (SQLite singleton), `PeriodDao` and `SettingsDao` for direct DB access
-- **`providers/`** → `ChangeNotifier` subclasses that hold state and call DAOs directly
+- **`main.dart`** → entry point, runs `MyApp`, initializes `NotificationService`
+- **`app.dart`** → `MaterialApp` + `MultiProvider` (registers `PeriodProvider` and `SettingsProvider`) + `SplashScreen` → `MainScreen` bottom nav with 4 tabs
+- **`models/`** → plain Dart classes with manual `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith` (with `clear*` flags for nullable fields)
+- **`database/`** → `DatabaseProvider` (abstract interface), `DatabaseHelper` (SQLite singleton with `onUpgrade` migration), `PeriodDao` and `SettingsDao` (accept `DatabaseProvider?` for DI)
+- **`providers/`** → `ChangeNotifier` subclasses with constructor injection support
 - **`screens/`** → widget trees consuming providers via `Consumer`/`Consumer2`
-- **`services/`** → stateless utilities: `PredictionService` (static methods), `NotificationService` (singleton)
-- **`constants/`** → design tokens (`AppColors`), UI strings (`AppStrings`), theme data (`AppTheme`)
+- **`widgets/`** → reusable components (`SectionCard`, `StatCircle`, `EmptyState`, `LegendItem`)
+- **`services/`** → `PredictionService` (static), `NotificationService` (singleton, timezone-aware)
+- **`constants/`** → `AppColors` (brand/functional/calendar), `AppDimens` (spacing/radius/elevation), `AppThemeColors` (ThemeExtension), `AppStrings`, `AppTheme`
 
 **State management:** Two `ChangeNotifier` providers registered in `app.dart`:
-- `PeriodProvider` — records, cycle data, day-type classification cache, import/export
+- `PeriodProvider` — records, cycle data, day-type classification cache, import/export, notification scheduling
 - `SettingsProvider` — user preferences (cycle length, period length, reminders, algorithm)
 
-**Navigation:** No routing library. `NavigationBar` (Material 3) switches between 4 screens by index. Sub-screens use `Navigator.push` with `MaterialPageRoute`.
+**Navigation:** No routing library. `SplashScreen` (1.2s) → `MainScreen` with `NavigationBar` (Material 3). Sub-screens use `Navigator.push` with `MaterialPageRoute`.
 
 ## Key Patterns
 
+- **Theme system:** `AppThemeColors` is a `ThemeExtension` registered in both light and dark themes. Access theme-aware colors via `context.themeColors.onSurface` (extension on `BuildContext`). Theme-independent colors (brand, functional, calendar) remain in `AppColors` as constants. Spacing/radius/elevation tokens are in `AppDimens`.
 - **Day-type classification:** `PeriodProvider` classifies each date as period, predicted period, ovulation, fertile, safe, or normal using a `Map<String, String>` cache (`_dayTypeCache`) that is cleared on data changes.
 - **Prediction algorithms:** `PredictionService` offers two algorithms — simple average and weighted moving average. The active algorithm is stored in `SettingsProvider`.
-- **Custom calendar:** The home screen calendar is built from scratch with `GridView.builder` and swipe gestures (not using `table_calendar`, which is listed in pubspec.yaml but unused).
-- **Serialization:** All manual — no `freezed`, `json_serializable`, or `build_runner`.
-- **Dark mode:** Full support via `ThemeMode.system` with complete dark color tokens in `AppColors`.
+- **Notification scheduling:** `NotificationService` uses `timezone` package for `zonedSchedule`. `PeriodProvider` auto-schedules reminders on data load and algorithm change.
+- **Dependency injection:** `DatabaseProvider` interface allows injecting in-memory databases for testing. DAOs and Providers accept optional constructor parameters.
+- **Database migration:** `DatabaseHelper` supports `onUpgrade` callback. Increment `_dbVersion` and add migration logic as needed.
+- **Serialization:** All manual — no `freezed`, `json_serializable`, or `build_runner`. `toJson` preserves `null` values; `fromJson` converts empty strings to `null` for nullable fields.
+- **Dark mode:** Full support via `ThemeMode.system` with complete dark color tokens in `AppThemeColors.dark`.
 
 ## Known Issues
 
 - `AppDateUtils` is defined in both `lib/utils/date_utils.dart` and `lib/providers/period_provider.dart` with identical methods. The local definition shadows the import.
-- `lib/widgets/` directory is empty — no reusable widgets have been extracted.
-- `table_calendar` is a declared dependency but never imported.
+- `generate_icon.py` hardcodes `E:\yimaflutter\assets\icon\app_icon.png`. Edit the path before running.
+- Static text styles in `record_screen.dart` are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors.

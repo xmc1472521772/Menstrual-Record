@@ -5,17 +5,34 @@ import '../models/cycle_data.dart';
 import '../database/period_dao.dart';
 import '../database/settings_dao.dart';
 import '../services/prediction_service.dart';
+import '../services/notification_service.dart';
 import '../utils/date_utils.dart';
 
 class PeriodProvider with ChangeNotifier {
-  final PeriodDao _dao = PeriodDao();
-  final SettingsDao _settingsDao = SettingsDao();
+  final PeriodDao _dao;
+  final SettingsDao _settingsDao;
+  final bool _scheduleReminders;
+  final bool _autoEndEnabled;
+
+  /// Allows injecting DAOs for testing.
+  /// Set [scheduleReminders] to false in tests to avoid NotificationService calls.
+  /// Set [autoEndExpiredPeriods] to false in tests to prevent the provider from
+  /// auto-ending ongoing periods based on the real current date.
+  PeriodProvider({
+    PeriodDao? periodDao,
+    SettingsDao? settingsDao,
+    bool scheduleReminders = true,
+    bool autoEndExpiredPeriods = true,
+  })  : _dao = periodDao ?? PeriodDao(),
+        _settingsDao = settingsDao ?? SettingsDao(),
+        _scheduleReminders = scheduleReminders,
+        _autoEndEnabled = autoEndExpiredPeriods;
 
   List<PeriodRecord> _records = [];
   CycleData? _cycleData;
   bool _isLoading = false;
   String _algorithm = 'simple';
-  
+
   // 日类型缓存
   final Map<String, String> _dayTypeCache = {};
 
@@ -35,7 +52,10 @@ class PeriodProvider with ChangeNotifier {
         _records,
         algorithm: _algorithm,
       );
-      await _autoEndExpiredPeriods();
+      if (_autoEndEnabled) {
+        await _autoEndExpiredPeriods();
+      }
+      await _scheduleReminderIfNeeded();
     } catch (e) {
       debugPrint('Error loading records: $e');
     }
@@ -45,6 +65,8 @@ class PeriodProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ends any ongoing period that exceeds the user's configured period length.
+  /// Does NOT reload records — the caller ([loadRecords]) handles that.
   Future<void> _autoEndExpiredPeriods() async {
     final settingsPeriodLength = await _settingsDao.getPeriodLength();
     final now = DateTime.now();
@@ -57,6 +79,7 @@ class PeriodProvider with ChangeNotifier {
     }
 
     final ongoing = _records.where((r) => r.isOngoing).toList();
+    bool changed = false;
     for (final record in ongoing) {
       final daysPassed = today.difference(record.startDateTime).inDays;
       // 超过经期天数+1天自动结束（给用户一天缓冲）
@@ -66,16 +89,48 @@ class PeriodProvider with ChangeNotifier {
           periodLength: daysPassed,
         );
         await _dao.update(updated);
+        changed = true;
       }
     }
 
-    _records = await _dao.getAll();
-    _cycleData = PredictionService.calculateCycleData(
-      _records,
-      algorithm: _algorithm,
-    );
+    // Only reload if we actually changed something
+    if (changed) {
+      _records = await _dao.getAll();
+      _cycleData = PredictionService.calculateCycleData(
+        _records,
+        algorithm: _algorithm,
+      );
+    }
   }
 
+  /// Schedules a notification reminder if a prediction is available.
+  Future<void> _scheduleReminderIfNeeded() async {
+    if (!_scheduleReminders) return;
+    if (_cycleData?.predictedNextPeriod == null) return;
+
+    try {
+      final reminderDays = await _settingsDao.getReminderDays();
+      final reminderHour = await _settingsDao.getReminderHour();
+
+      await NotificationService().schedulePeriodReminder(
+        predictedDate: _cycleData!.predictedNextPeriod!,
+        reminderDays: reminderDays,
+        reminderHour: reminderHour,
+      );
+    } catch (e) {
+      debugPrint('Error scheduling reminder: $e');
+    }
+  }
+
+  /// Recalculates cycle data using the given algorithm.
+  ///
+  /// Note: persisting the algorithm to the database is handled by
+  /// [SettingsProvider.setAlgorithm]. The UI should call both:
+  ///
+  /// ```dart
+  /// settingsProvider.setAlgorithm(value);  // persists to DB
+  /// periodProvider.setAlgorithm(value);   // recalculates predictions
+  /// ```
   Future<void> setAlgorithm(String algorithm) async {
     _algorithm = algorithm;
     _cycleData = PredictionService.calculateCycleData(
@@ -83,6 +138,7 @@ class PeriodProvider with ChangeNotifier {
       algorithm: _algorithm,
     );
     _clearDayTypeCache();
+    await _scheduleReminderIfNeeded();
     notifyListeners();
   }
 
@@ -91,9 +147,24 @@ class PeriodProvider with ChangeNotifier {
       final existing = _records.where((r) => r.isOngoing).toList();
       if (existing.isNotEmpty) return false;
 
-      final record = PeriodRecord(
-        startDate: startDate.toIso8601String().split('T')[0],
-      );
+      // Check for date conflicts with existing records
+      final startStr = startDate.toIso8601String().split('T')[0];
+      for (final record in _records) {
+        if (record.isOngoing) {
+          final startDay = DateTime(
+            record.startDateTime.year,
+            record.startDateTime.month,
+            record.startDateTime.day,
+          );
+          if (!startDate.isBefore(startDay)) return false;
+        } else if (record.endDate != null) {
+          final rStart = record.startDateTime;
+          final rEnd = record.endDateTime!;
+          if (AppDateUtils.isInRange(startDate, rStart, rEnd)) return false;
+        }
+      }
+
+      final record = PeriodRecord(startDate: startStr);
 
       await _dao.insert(record);
       await loadRecords();
@@ -110,9 +181,13 @@ class PeriodProvider with ChangeNotifier {
       if (ongoing.isEmpty) return false;
 
       final record = ongoing.first;
+      final endStr = endDate.toIso8601String().split('T')[0];
+      // Calculate periodLength from the actual dates, not record.periodDays
+      // (which uses DateTime.now() for ongoing records).
+      final periodLength = endDate.difference(record.startDateTime).inDays + 1;
       final updated = record.copyWith(
-        endDate: endDate.toIso8601String().split('T')[0],
-        periodLength: record.periodDays,
+        endDate: endStr,
+        periodLength: periodLength,
       );
 
       await _dao.update(updated);
@@ -142,14 +217,17 @@ class PeriodProvider with ChangeNotifier {
 
   Future<bool> saveMultipleRecords(List<(DateTime, DateTime)> ranges) async {
     try {
-      for (final (start, end) in ranges) {
-        final record = PeriodRecord(
+      final records = ranges.map((range) {
+        final (start, end) = range;
+        return PeriodRecord(
           startDate: start.toIso8601String().split('T')[0],
           endDate: end.toIso8601String().split('T')[0],
           periodLength: end.difference(start).inDays + 1,
         );
-        await _dao.insert(record);
-      }
+      }).toList();
+
+      // Use batch insert for efficiency
+      await _dao.insertAll(records);
       await loadRecords();
       return true;
     } catch (e) {
@@ -158,27 +236,31 @@ class PeriodProvider with ChangeNotifier {
     }
   }
 
+  /// Checks if [date] falls within any existing period record.
+  /// Handles both completed records and ongoing ones.
   bool isDateInAnyRecord(DateTime date) {
     for (final record in _records) {
-      if (record.isOngoing) {
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final startDay = DateTime(
-          record.startDateTime.year,
-          record.startDateTime.month,
-          record.startDateTime.day,
-        );
-        if ((date.isAfter(startDay) || AppDateUtils.isSameDay(date, startDay)) &&
-            (date.isBefore(today) || AppDateUtils.isSameDay(date, today))) {
-          return true;
-        }
-      } else {
-        if (AppDateUtils.isInRange(date, record.startDateTime, record.endDateTime!)) {
-          return true;
-        }
-      }
+      if (_isDateInRecord(date, record)) return true;
     }
     return false;
+  }
+
+  /// Internal helper used by both [isDateInAnyRecord] and [isPeriodDay].
+  bool _isDateInRecord(DateTime date, PeriodRecord record) {
+    if (record.isOngoing) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final startDay = DateTime(
+        record.startDateTime.year,
+        record.startDateTime.month,
+        record.startDateTime.day,
+      );
+      return (date.isAfter(startDay) || AppDateUtils.isSameDay(date, startDay)) &&
+          (date.isBefore(today) || AppDateUtils.isSameDay(date, today));
+    } else {
+      return AppDateUtils.isInRange(
+          date, record.startDateTime, record.endDateTime!);
+    }
   }
 
   Future<bool> updateRecord(PeriodRecord record) async {
@@ -214,10 +296,12 @@ class PeriodProvider with ChangeNotifier {
           .toList();
 
       if (overwrite) {
-        await _dao.deleteAll();
+        // Use atomic replaceAll to avoid data loss on failure
+        await _dao.replaceAll(records);
+      } else {
+        await _dao.insertAll(records);
       }
 
-      await _dao.insertAll(records);
       await loadRecords();
       return true;
     } catch (e) {
@@ -228,21 +312,7 @@ class PeriodProvider with ChangeNotifier {
 
   bool isPeriodDay(DateTime date) {
     for (final record in _records) {
-      if (record.isOngoing) {
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final startDate = record.startDateTime;
-        final startDay = DateTime(startDate.year, startDate.month, startDate.day);
-        
-        if ((date.isAfter(startDay) || AppDateUtils.isSameDay(date, startDay)) &&
-            (date.isBefore(today) || AppDateUtils.isSameDay(date, today))) {
-          return true;
-        }
-      } else {
-        if (AppDateUtils.isInRange(date, record.startDateTime, record.endDateTime!)) {
-          return true;
-        }
-      }
+      if (_isDateInRecord(date, record)) return true;
     }
     return false;
   }
@@ -269,7 +339,6 @@ class PeriodProvider with ChangeNotifier {
     if (_cycleData == null) return false;
     if (isPeriodDay(date) || isPredictedDay(date)) return false;
     if (isOvulationDay(date) || isFertileDay(date)) return false;
-    // 只在周期窗口内标记安全期（当前周期~下一预测周期+10天）
     final lastStart = _cycleData!.lastPeriodStart;
     final predicted = _cycleData!.predictedNextPeriod;
     if (lastStart == null) return false;
@@ -280,19 +349,17 @@ class PeriodProvider with ChangeNotifier {
   }
 
   String getDayType(DateTime date) {
-    // 生成缓存键
     final cacheKey = '${date.year}-${date.month}-${date.day}';
-    
-    // 检查缓存
+
     if (_dayTypeCache.containsKey(cacheKey)) {
       return _dayTypeCache[cacheKey]!;
     }
-    
-    // 单次计算所有条件，避免 isSafeDay 重复检查 period/predicted/ovulation/fertile
+
     final bool period = isPeriodDay(date);
     final bool predicted = !period && isPredictedDay(date);
     final bool ovulation = !period && !predicted && isOvulationDay(date);
-    final bool fertile = !period && !predicted && !ovulation && isFertileDay(date);
+    final bool fertile =
+        !period && !predicted && !ovulation && isFertileDay(date);
 
     String dayType;
     if (period) {
@@ -308,15 +375,13 @@ class PeriodProvider with ChangeNotifier {
     } else {
       dayType = 'normal';
     }
-    
-    // 缓存结果
+
     _dayTypeCache[cacheKey] = dayType;
-    
     return dayType;
   }
 
-  /// 直接判断安全期，不再重复调用 isPeriodDay/isPredictedDay/isOvulationDay/isFertileDay
-  /// 调用方必须已确认该日期不是 period/predicted/ovulation/fertile
+  /// Directly checks if a date is a safe day.
+  /// Caller must have already confirmed the date is not period/predicted/ovulation/fertile.
   bool _isSafeDayDirect(DateTime date) {
     if (_cycleData == null) return false;
     final lastStart = _cycleData!.lastPeriodStart;
@@ -327,26 +392,15 @@ class PeriodProvider with ChangeNotifier {
         : lastStart.add(Duration(days: _cycleData!.averageCycleLength.round() + 10));
     return !date.isBefore(lastStart) && !date.isAfter(windowEnd);
   }
-  
-  // 清除缓存
+
   void _clearDayTypeCache() {
     _dayTypeCache.clear();
   }
 
   PeriodRecord? getRecordForDate(DateTime date) {
     for (final record in _records) {
-      if (record.isOngoing) {
-        if (AppDateUtils.isSameDay(record.startDateTime, date)) {
-          return record;
-        }
-      } else {
-        if (AppDateUtils.isInRange(
-          date,
-          record.startDateTime,
-          record.endDateTime,
-        )) {
-          return record;
-        }
+      if (_isDateInRecord(date, record)) {
+        return record;
       }
     }
     return null;

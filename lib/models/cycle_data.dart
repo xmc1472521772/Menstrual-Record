@@ -15,8 +15,11 @@ class CycleData {
     required this.recentPeriods,
   });
 
-  int get daysUntilPredicted {
-    if (predictedNextPeriod == null) return 0;
+  /// Returns the number of days until the predicted next period.
+  /// Returns `null` when [predictedNextPeriod] is null (no prediction available).
+  /// Returns a negative integer when the predicted date has already passed.
+  int? get daysUntilPredicted {
+    if (predictedNextPeriod == null) return null;
     return predictedNextPeriod!.difference(DateTime.now()).inDays;
   }
 
@@ -56,13 +59,6 @@ class CycleData {
             date.isAtSameMomentAs(fertileWindowStart!)) &&
         (date.isBefore(fertileWindowEnd!) ||
             date.isAtSameMomentAs(fertileWindowEnd!));
-  }
-
-  bool isSafeDay(DateTime date) {
-    if (lastPeriodStart == null) return false;
-    // 安全期：除了经期、易孕期之外的日子
-    // 这里简化处理：如果不在经期、排卵期、易孕期，则为安全期
-    return !isOvulationDay(date) && !isFertileDay(date);
   }
 }
 

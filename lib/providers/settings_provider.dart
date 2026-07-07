@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../database/settings_dao.dart';
 
 class SettingsProvider with ChangeNotifier {
-  final SettingsDao _dao = SettingsDao();
+  final SettingsDao _dao;
+
+  /// Allows injecting a [SettingsDao] for testing; defaults to the singleton.
+  SettingsProvider({SettingsDao? settingsDao}) : _dao = settingsDao ?? SettingsDao();
 
   int _cycleLength = 28;
   int _periodLength = 5;

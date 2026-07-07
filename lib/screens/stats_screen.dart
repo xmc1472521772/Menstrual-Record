@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../models/cycle_data.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
 import '../constants/app_colors.dart';
@@ -21,21 +22,21 @@ class StatsScreen extends StatelessWidget {
           final cycleData = periodProvider.cycleData;
 
           if (cycleData == null || cycleData.totalCycles == 0) {
-            return _buildEmptyState();
+            return _buildEmptyState(context);
           }
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppColors.spacingLg),
+            padding: const EdgeInsets.all(AppDimens.spacingLg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildOverviewCard(cycleData),
-                const SizedBox(height: AppColors.spacingLg),
-                _buildAlgorithmSelector(settingsProvider, periodProvider),
-                const SizedBox(height: AppColors.spacingLg),
-                _buildPredictionCard(cycleData),
-                const SizedBox(height: AppColors.spacingLg),
-                _buildHistoryList(cycleData),
+                _buildOverviewCard(context, cycleData),
+                const SizedBox(height: AppDimens.spacingLg),
+                _buildAlgorithmSelector(context, settingsProvider, periodProvider),
+                const SizedBox(height: AppDimens.spacingLg),
+                _buildPredictionCard(context, cycleData),
+                const SizedBox(height: AppDimens.spacingLg),
+                _buildHistoryList(context, cycleData),
               ],
             ),
           );
@@ -44,7 +45,7 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -54,7 +55,7 @@ class StatsScreen extends StatelessWidget {
             height: 80,
             decoration: BoxDecoration(
               color: AppColors.lightPink,
-              borderRadius: BorderRadius.circular(AppColors.radiusLg),
+              borderRadius: BorderRadius.circular(AppDimens.radiusLg),
             ),
             child: const Icon(
               Icons.bar_chart,
@@ -62,18 +63,18 @@ class StatsScreen extends StatelessWidget {
               color: AppColors.primaryPink,
             ),
           ),
-          const SizedBox(height: AppColors.spacingXl),
+          const SizedBox(height: AppDimens.spacingXl),
           Text(
             '暂无统计数据',
             style: AppTheme.headingSmall.copyWith(
-              color: AppColors.onSurface,
+              color: context.themeColors.onSurface,
             ),
           ),
-          const SizedBox(height: AppColors.spacingSm),
+          const SizedBox(height: AppDimens.spacingSm),
           Text(
             '记录经期后即可查看统计',
             style: AppTheme.bodyMedium.copyWith(
-              color: AppColors.onSurfaceTertiary,
+              color: context.themeColors.onSurfaceTertiary,
             ),
           ),
         ],
@@ -81,16 +82,16 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOverviewCard(cycleData) {
+  Widget _buildOverviewCard(BuildContext context, CycleData cycleData) {
     return Container(
-      padding: const EdgeInsets.all(AppColors.spacingXl),
+      padding: const EdgeInsets.all(AppDimens.spacingXl),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [AppColors.primaryPink, AppColors.accentPink],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
         boxShadow: [
           BoxShadow(
             color: AppColors.primaryPink.withValues(alpha: 0.3),
@@ -105,7 +106,7 @@ class StatsScreen extends StatelessWidget {
             '周期概览',
             style: AppTheme.headingMedium.copyWith(color: AppColors.white),
           ),
-          const SizedBox(height: AppColors.spacingXl),
+          const SizedBox(height: AppDimens.spacingXl),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -161,7 +162,7 @@ class StatsScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: AppColors.spacingSm),
+        const SizedBox(height: AppDimens.spacingSm),
         Text(
           label,
           style: AppTheme.bodyMedium.copyWith(
@@ -172,24 +173,29 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAlgorithmSelector(SettingsProvider settingsProvider, PeriodProvider periodProvider) {
+  Widget _buildAlgorithmSelector(
+    BuildContext context,
+    SettingsProvider settingsProvider,
+    PeriodProvider periodProvider,
+  ) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppColors.spacingLg),
+        padding: const EdgeInsets.all(AppDimens.spacingLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               AppStrings.predictionAlgorithm,
               style: AppTheme.titleLarge.copyWith(
-                color: AppColors.onSurface,
+                color: context.themeColors.onSurface,
               ),
             ),
-            const SizedBox(height: AppColors.spacingMd),
+            const SizedBox(height: AppDimens.spacingMd),
             Row(
               children: [
                 Expanded(
                   child: _buildAlgorithmOption(
+                    context,
                     'simple',
                     AppStrings.simpleAverage,
                     '基于所有历史数据的平均值',
@@ -197,9 +203,10 @@ class StatsScreen extends StatelessWidget {
                     periodProvider,
                   ),
                 ),
-                const SizedBox(width: AppColors.spacingMd),
+                const SizedBox(width: AppDimens.spacingMd),
                 Expanded(
                   child: _buildAlgorithmOption(
+                    context,
                     'weighted',
                     AppStrings.weightedAverage,
                     '近期周期数据权重更高，更准确',
@@ -209,11 +216,11 @@ class StatsScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
             Text(
               '加权移动平均法：基于最近 4 个周期的数据，越近的周期权重越高（40%/30%/20%/10%），不足 4 个周期时按实际数量加权计算。',
               style: AppTheme.bodySmall.copyWith(
-                color: AppColors.onSurfaceTertiary,
+                color: context.themeColors.onSurfaceTertiary,
                 height: 1.4,
               ),
             ),
@@ -224,6 +231,7 @@ class StatsScreen extends StatelessWidget {
   }
 
   Widget _buildAlgorithmOption(
+    BuildContext context,
     String value,
     String title,
     String description,
@@ -237,16 +245,16 @@ class StatsScreen extends StatelessWidget {
         settingsProvider.setAlgorithm(value);
         periodProvider.setAlgorithm(value);
       },
-      borderRadius: BorderRadius.circular(AppColors.radiusMd),
+      borderRadius: BorderRadius.circular(AppDimens.radiusMd),
       child: Container(
-        padding: const EdgeInsets.all(AppColors.spacingMd),
+        padding: const EdgeInsets.all(AppDimens.spacingMd),
         decoration: BoxDecoration(
           border: Border.all(
-            color: isSelected ? AppColors.primaryPink : AppColors.divider,
+            color: isSelected ? AppColors.primaryPink : context.themeColors.divider,
             width: isSelected ? 2 : 1,
           ),
-          borderRadius: BorderRadius.circular(AppColors.radiusMd),
-          color: isSelected ? AppColors.lightPink : AppColors.surfaceCard,
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          color: isSelected ? AppColors.lightPink : context.themeColors.surfaceCard,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,24 +269,24 @@ class StatsScreen extends StatelessWidget {
                       isSelected ? AppColors.primaryPink : AppColors.grey,
                   size: 20,
                 ),
-                const SizedBox(width: AppColors.spacingSm),
+                const SizedBox(width: AppDimens.spacingSm),
                 Expanded(
                   child: Text(
                     title,
                     style: AppTheme.titleMedium.copyWith(
                       color: isSelected
                           ? AppColors.darkPink
-                          : AppColors.onSurface,
+                          : context.themeColors.onSurface,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
             Text(
               description,
               style: AppTheme.bodySmall.copyWith(
-                color: AppColors.onSurfaceSecondary,
+                color: context.themeColors.onSurfaceSecondary,
               ),
             ),
           ],
@@ -287,24 +295,24 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPredictionCard(cycleData) {
+  Widget _buildPredictionCard(BuildContext context, CycleData cycleData) {
     final predictedDate = cycleData.predictedNextPeriod;
     final daysUntil = cycleData.daysUntilPredicted;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppColors.spacingLg),
+        padding: const EdgeInsets.all(AppDimens.spacingLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               AppStrings.predictedNextPeriod,
               style: AppTheme.titleLarge.copyWith(
-                color: AppColors.onSurface,
+                color: context.themeColors.onSurface,
               ),
             ),
-            const SizedBox(height: AppColors.spacingMd),
-            if (predictedDate != null) ...[
+            const SizedBox(height: AppDimens.spacingMd),
+            if (predictedDate != null && daysUntil != null) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -317,19 +325,19 @@ class StatsScreen extends StatelessWidget {
                           color: AppColors.primaryPink,
                         ),
                       ),
-                      const SizedBox(height: AppColors.spacingXs),
+                      const SizedBox(height: AppDimens.spacingXs),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: AppColors.spacingSm,
-                          vertical: AppColors.spacingXs,
+                          horizontal: AppDimens.spacingSm,
+                          vertical: AppDimens.spacingXs,
                         ),
                         decoration: BoxDecoration(
-                          color: (daysUntil > 0
+                          color: (daysUntil >= 0
                                   ? AppColors.success
                                   : AppColors.error)
                               .withValues(alpha: 0.1),
                           borderRadius:
-                              BorderRadius.circular(AppColors.radiusFull),
+                              BorderRadius.circular(AppDimens.radiusFull),
                         ),
                         child: Text(
                           daysUntil > 0
@@ -338,7 +346,7 @@ class StatsScreen extends StatelessWidget {
                                   ? '今天'
                                   : '已过 ${-daysUntil} 天',
                           style: AppTheme.labelMedium.copyWith(
-                            color: daysUntil > 0
+                            color: daysUntil >= 0
                                 ? AppColors.success
                                 : AppColors.error,
                           ),
@@ -347,11 +355,11 @@ class StatsScreen extends StatelessWidget {
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.all(AppColors.spacingMd),
+                    padding: const EdgeInsets.all(AppDimens.spacingMd),
                     decoration: BoxDecoration(
                       color: AppColors.lightPink,
                       borderRadius:
-                          BorderRadius.circular(AppColors.radiusSm),
+                          BorderRadius.circular(AppDimens.radiusSm),
                     ),
                     child: const Icon(
                       Icons.calendar_today,
@@ -365,7 +373,7 @@ class StatsScreen extends StatelessWidget {
               Text(
                 '需要更多数据来预测',
                 style: AppTheme.bodyMedium.copyWith(
-                  color: AppColors.onSurfaceTertiary,
+                  color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
             ],
@@ -375,38 +383,38 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHistoryList(cycleData) {
+  Widget _buildHistoryList(BuildContext context, CycleData cycleData) {
     final periods = cycleData.recentPeriods;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppColors.spacingLg),
+        padding: const EdgeInsets.all(AppDimens.spacingLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               AppStrings.historyRecords,
               style: AppTheme.titleLarge.copyWith(
-                color: AppColors.onSurface,
+                color: context.themeColors.onSurface,
               ),
             ),
-            const SizedBox(height: AppColors.spacingMd),
+            const SizedBox(height: AppDimens.spacingMd),
             if (periods.isEmpty)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppColors.spacingXl),
+                padding: const EdgeInsets.all(AppDimens.spacingXl),
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.history,
                       size: 36,
-                      color: AppColors.onSurfaceTertiary,
+                      color: context.themeColors.onSurfaceTertiary,
                     ),
-                    const SizedBox(height: AppColors.spacingSm),
+                    const SizedBox(height: AppDimens.spacingSm),
                     Text(
                       AppStrings.noRecords,
                       style: AppTheme.bodyMedium.copyWith(
-                        color: AppColors.onSurfaceTertiary,
+                        color: context.themeColors.onSurfaceTertiary,
                       ),
                     ),
                   ],
@@ -419,7 +427,7 @@ class StatsScreen extends StatelessWidget {
                 itemCount: periods.length,
                 itemBuilder: (context, index) {
                   final period = periods[index];
-                  return _buildPeriodItem(period, index);
+                  return _buildPeriodItem(context, period, index);
                 },
               ),
           ],
@@ -428,15 +436,19 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPeriodItem(period, int index) {
+  Widget _buildPeriodItem(
+    BuildContext context,
+    PeriodSummary period,
+    int index,
+  ) {
     return Container(
-      margin: const EdgeInsets.only(bottom: AppColors.spacingSm),
-      padding: const EdgeInsets.all(AppColors.spacingMd),
+      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
+      padding: const EdgeInsets.all(AppDimens.spacingMd),
       decoration: BoxDecoration(
         color: index % 2 == 0
             ? AppColors.lightPink.withValues(alpha: 0.3)
             : AppColors.transparent,
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -447,14 +459,14 @@ class StatsScreen extends StatelessWidget {
               Text(
                 DateFormat('yyyy年MM月dd日').format(period.startDate),
                 style: AppTheme.titleMedium.copyWith(
-                  color: AppColors.onSurface,
+                  color: context.themeColors.onSurface,
                 ),
               ),
               if (period.endDate != null)
                 Text(
                   '至 ${DateFormat('yyyy年MM月dd日').format(period.endDate!)}',
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.onSurfaceSecondary,
+                    color: context.themeColors.onSurfaceSecondary,
                   ),
                 ),
             ],
@@ -472,7 +484,7 @@ class StatsScreen extends StatelessWidget {
                 Text(
                   '周期 ${period.cycleLength} 天',
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.onSurfaceSecondary,
+                    color: context.themeColors.onSurfaceSecondary,
                   ),
                 ),
             ],

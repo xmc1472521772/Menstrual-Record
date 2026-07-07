@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/period_provider.dart';
+import '../models/cycle_data.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
@@ -66,11 +67,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 _buildStatusCard(cycleData),
-                const SizedBox(height: AppColors.spacingLg),
+                const SizedBox(height: AppDimens.spacingLg),
                 _buildCalendar(provider),
-                const SizedBox(height: AppColors.spacingSm),
+                const SizedBox(height: AppDimens.spacingSm),
                 _buildLegend(),
-                const SizedBox(height: AppColors.spacingLg),
+                const SizedBox(height: AppDimens.spacingLg),
               ],
             ),
           );
@@ -82,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatusCard(cycleData) {
+  Widget _buildStatusCard(CycleData? cycleData) {
     if (cycleData == null) {
       return _buildEmptyCard();
     }
@@ -94,19 +95,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(
-        AppColors.spacingLg,
-        AppColors.spacingLg,
-        AppColors.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
         0,
       ),
-      padding: const EdgeInsets.all(AppColors.spacingXl),
+      padding: const EdgeInsets.all(AppDimens.spacingXl),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [AppColors.primaryPink, AppColors.accentPink],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
         boxShadow: [
           BoxShadow(
             color: AppColors.primaryPink.withValues(alpha: 0.3),
@@ -123,34 +124,63 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.white,
               size: 28,
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
             Text(
               AppStrings.periodOngoing,
               style: AppTheme.bodyMedium.copyWith(
                 color: AppColors.white.withValues(alpha: 0.9),
               ),
             ),
-            const SizedBox(height: AppColors.spacingXs),
+            const SizedBox(height: AppDimens.spacingXs),
             Text(
               '${AppStrings.currentDay} $currentDay ${AppStrings.days}',
               style: AppTheme.headingLarge.copyWith(color: AppColors.white),
             ),
-          ] else if (daysUntil > 0) ...[
+          ] else if (daysUntil != null && daysUntil > 0) ...[
             const Icon(
               Icons.calendar_today,
               color: AppColors.white,
               size: 28,
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
             Text(
               AppStrings.daysUntilPeriod,
               style: AppTheme.bodyMedium.copyWith(
                 color: AppColors.white.withValues(alpha: 0.9),
               ),
             ),
-            const SizedBox(height: AppColors.spacingXs),
+            const SizedBox(height: AppDimens.spacingXs),
             Text(
               '$daysUntil ${AppStrings.days}',
+              style: AppTheme.statValue.copyWith(color: AppColors.white),
+            ),
+          ] else if (daysUntil == 0) ...[
+            const Icon(
+              Icons.notifications_active,
+              color: AppColors.white,
+              size: 28,
+            ),
+            const SizedBox(height: AppDimens.spacingSm),
+            Text(
+              '预计今天来临',
+              style: AppTheme.headingLarge.copyWith(color: AppColors.white),
+            ),
+          ] else if (daysUntil != null && daysUntil < 0) ...[
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.white,
+              size: 28,
+            ),
+            const SizedBox(height: AppDimens.spacingSm),
+            Text(
+              '已逾期',
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppColors.white.withValues(alpha: 0.9),
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingXs),
+            Text(
+              '${-daysUntil} ${AppStrings.days}',
               style: AppTheme.statValue.copyWith(color: AppColors.white),
             ),
           ] else ...[
@@ -159,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.white,
               size: 28,
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
             Text(
               '记录经期以开始预测',
               style: AppTheme.bodyLarge.copyWith(
@@ -167,15 +197,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
-          const SizedBox(height: AppColors.spacingXl),
+          const SizedBox(height: AppDimens.spacingXl),
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppColors.spacingLg,
-              vertical: AppColors.spacingMd,
+              horizontal: AppDimens.spacingLg,
+              vertical: AppDimens.spacingMd,
             ),
             decoration: BoxDecoration(
               color: AppColors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppColors.radiusMd),
+              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -204,18 +234,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildEmptyCard() {
     return Container(
       margin: const EdgeInsets.fromLTRB(
-        AppColors.spacingLg,
-        AppColors.spacingLg,
-        AppColors.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
         0,
       ),
       padding: const EdgeInsets.symmetric(
-        horizontal: AppColors.spacingXl,
-        vertical: AppColors.spacing3xl,
+        horizontal: AppDimens.spacingXl,
+        vertical: AppDimens.spacing3xl,
       ),
       decoration: BoxDecoration(
         color: AppColors.lightPink,
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
       ),
       child: const Center(
         child: Column(
@@ -225,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.primaryPink,
               size: 48,
             ),
-            SizedBox(height: AppColors.spacingMd),
+            SizedBox(height: AppDimens.spacingMd),
             Text(
               '开始记录您的经期',
               style: AppTheme.titleLarge,
@@ -245,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
             color: AppColors.white.withValues(alpha: 0.7),
           ),
         ),
-        const SizedBox(height: AppColors.spacingXs),
+        const SizedBox(height: AppDimens.spacingXs),
         Text(
           value,
           style: AppTheme.titleLarge.copyWith(color: AppColors.white),
@@ -257,11 +287,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onSwipe(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
 
-    // Use velocity for swipe detection
     if (velocity > 300) {
-      _changeMonth(-1); // Swipe right = previous month
+      _changeMonth(-1);
     } else if (velocity < -300) {
-      _changeMonth(1); // Swipe left = next month
+      _changeMonth(1);
     }
   }
 
@@ -280,10 +309,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCalendar(PeriodProvider provider) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppColors.spacingLg),
+      margin: const EdgeInsets.symmetric(horizontal: AppDimens.spacingLg),
       decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppColors.radiusMd),
+        color: context.themeColors.surfaceCard,
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -299,8 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: AppColors.spacingSm,
-                vertical: AppColors.spacingSm,
+                horizontal: AppDimens.spacingSm,
+                vertical: AppDimens.spacingSm,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -336,7 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       key: ValueKey(
                           '${_focusedDay.year}-${_focusedDay.month}'),
                       style: AppTheme.titleLarge.copyWith(
-                        color: AppColors.onSurface,
+                        color: context.themeColors.onSurface,
                       ),
                     ),
                   ),
@@ -353,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: AppColors.spacingLg,
+                horizontal: AppDimens.spacingLg,
               ),
               child: Row(
                 children: ['一', '二', '三', '四', '五', '六', '日']
@@ -362,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Text(
                               day,
                               style: AppTheme.labelMedium.copyWith(
-                                color: AppColors.onSurfaceTertiary,
+                                color: context.themeColors.onSurfaceTertiary,
                               ),
                             ),
                           ),
@@ -370,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     .toList(),
               ),
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               transitionBuilder: (child, animation) {
@@ -395,7 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _buildCalendarGrid(provider),
               ),
             ),
-            const SizedBox(height: AppColors.spacingSm),
+            const SizedBox(height: AppDimens.spacingSm),
           ],
         ),
       ),
@@ -415,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final todayStart = DateTime(now.year, now.month, now.day);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppColors.spacingLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingLg),
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -463,9 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     Widget dayWidget;
 
-    // 构建基础样式（不影响今天文字颜色，今天文字始终蓝色）
     if (isSelected && !(isToday && dayType != 'normal')) {
-      // 选中 + 非特殊状态的今天 → 蓝色选中
       dayWidget = Container(
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
@@ -581,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Text(
                 '${day.day}',
                 style: TextStyle(
-                  color: isToday ? AppColors.info : AppColors.onSurfaceSecondary,
+                  color: isToday ? AppColors.info : context.themeColors.onSurfaceSecondary,
                   fontSize: 13,
                 ),
               ),
@@ -598,8 +625,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: isToday
                     ? AppColors.info
                     : (isPast
-                        ? AppColors.onSurface
-                        : AppColors.onSurfaceTertiary),
+                        ? context.themeColors.onSurface
+                        : context.themeColors.onSurfaceTertiary),
                 fontWeight: isToday ? FontWeight.bold : null,
               ),
             ),
@@ -607,7 +634,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    // 今天 + 选中 + 特殊状态 → 在状态样式上加蓝色外圈
     if (isToday && isSelected && dayType != 'normal') {
       return Container(
         margin: const EdgeInsets.all(2),
@@ -624,11 +650,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildLegend() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppColors.spacingLg),
-      padding: const EdgeInsets.all(AppColors.spacingLg),
+      margin: const EdgeInsets.symmetric(horizontal: AppDimens.spacingLg),
+      padding: const EdgeInsets.all(AppDimens.spacingLg),
       decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppColors.radiusMd),
+        color: context.themeColors.surfaceCard,
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -642,9 +668,9 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Text(
             '颜色说明',
-            style: AppTheme.titleLarge.copyWith(color: AppColors.onSurface),
+            style: AppTheme.titleLarge.copyWith(color: context.themeColors.onSurface),
           ),
-          const SizedBox(height: AppColors.spacingMd),
+          const SizedBox(height: AppDimens.spacingMd),
           _buildLegendItem(
             color: AppColors.primaryPink,
             label: '经期中',
@@ -683,7 +709,7 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDashed = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppColors.spacingXs),
+      padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingXs),
       child: Row(
         children: [
           Container(
@@ -700,17 +726,17 @@ class _HomeScreenState extends State<HomeScreen> {
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: AppColors.spacingMd),
+          const SizedBox(width: AppDimens.spacingMd),
           Text(
             label,
-            style: AppTheme.labelLarge.copyWith(color: AppColors.onSurface),
+            style: AppTheme.labelLarge.copyWith(color: context.themeColors.onSurface),
           ),
-          const SizedBox(width: AppColors.spacingSm),
+          const SizedBox(width: AppDimens.spacingSm),
           Expanded(
             child: Text(
               description,
               style: AppTheme.bodySmall.copyWith(
-                color: AppColors.onSurfaceSecondary,
+                color: context.themeColors.onSurfaceSecondary,
               ),
             ),
           ),
@@ -723,9 +749,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final hasOngoing = provider.records.any((r) => r.isOngoing);
 
     return Container(
-      padding: const EdgeInsets.all(AppColors.spacingLg),
+      padding: const EdgeInsets.all(AppDimens.spacingLg),
       decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
+        color: context.themeColors.surfaceCard,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -749,17 +775,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   backgroundColor: AppColors.primaryPink,
                   foregroundColor: AppColors.white,
                   padding: const EdgeInsets.symmetric(
-                    vertical: AppColors.spacingLg,
+                    vertical: AppDimens.spacingLg,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppColors.radiusMd),
+                    borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                   ),
                   disabledBackgroundColor: AppColors.grey.withValues(alpha: 0.2),
                   disabledForegroundColor: AppColors.grey,
                 ),
               ),
             ),
-            const SizedBox(width: AppColors.spacingLg),
+            const SizedBox(width: AppDimens.spacingLg),
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: hasOngoing
@@ -773,10 +799,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   backgroundColor: AppColors.primaryPink,
                   foregroundColor: AppColors.white,
                   padding: const EdgeInsets.symmetric(
-                    vertical: AppColors.spacingLg,
+                    vertical: AppDimens.spacingLg,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppColors.radiusMd),
+                    borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                   ),
                   disabledBackgroundColor: AppColors.grey.withValues(alpha: 0.2),
                   disabledForegroundColor: AppColors.grey,

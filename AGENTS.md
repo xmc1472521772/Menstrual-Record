@@ -7,7 +7,7 @@
 ```bash
 flutter run
 flutter test
-flutter test test/<file>.dart   # single test
+flutter test test/providers/period_provider_test.dart   # single test
 flutter analyze
 flutter pub run flutter_launcher_icons  # regenerate launcher icon
 ```
@@ -23,24 +23,32 @@ flutter pub run flutter_launcher_icons  # regenerate launcher icon
 - `patch`：Bug 修复
 - `build`：构建号，每次发布递增
 
-修改位置：`pubspec.yaml` 中的 `version` 字段，例如 `1.1.0+2`。
+修改位置：`pubspec.yaml` 中的 `version` 字段，例如 `1.1.0+3`。
 
 ## Architecture
 
 Flat Provider-based structure. No BLoC, no Clean Architecture layers, **no code generation** (`build_runner`, `freezed`, `json_serializable` are not used).
 
-- `main.dart` → `MyApp`
+- `main.dart` → `MyApp` (initializes `NotificationService`)
 - `app.dart` → `MaterialApp` + `MultiProvider` (`PeriodProvider`, `SettingsProvider`) + `SplashScreen` → `MainScreen` bottom nav (4 tabs)
 - `models/` → plain Dart classes with **manual** `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith`
-- `database/` → `DatabaseHelper` (SQLite singleton), `PeriodDao`, `SettingsDao`
-- `providers/` → `ChangeNotifier` subclasses that call DAOs directly
+- `database/` → `DatabaseProvider` (abstract interface), `DatabaseHelper` (SQLite singleton, `onUpgrade` migration), `PeriodDao`, `SettingsDao`
+- `providers/` → `ChangeNotifier` subclasses with **constructor injection** support for testing
 - `screens/` → widget trees consuming providers via `Consumer`/`Consumer2`
-- `services/` → `PredictionService` (static methods), `NotificationService` (singleton)
-- `constants/` → `AppColors`, `AppStrings`, `AppTheme`
+- `widgets/` → reusable components (`SectionCard`, `StatCircle`, `EmptyState`, `LegendItem`)
+- `services/` → `PredictionService` (static methods), `NotificationService` (singleton, timezone-aware scheduling)
+- `constants/` → `AppColors` (brand/functional/calendar colors), `AppDimens` (spacing/radius/elevation tokens), `AppThemeColors` (ThemeExtension for theme-aware semantic colors), `AppStrings`, `AppTheme`
 
 ### Navigation
 
-App starts with `SplashScreen` (2s animation), then navigates to `MainScreen`. `NavigationBar` switches 4 screens by index. Sub-screens use `Navigator.push` with `MaterialPageRoute`.
+App starts with `SplashScreen` (1.2s animation), then navigates to `MainScreen`. `NavigationBar` switches 4 screens by index. Sub-screens use `Navigator.push` with `MaterialPageRoute`.
+
+### Theme System
+
+- `AppColors` — brand, functional, and calendar day-type colors (theme-independent constants)
+- `AppDimens` — spacing, radius, and elevation tokens (theme-independent constants)
+- `AppThemeColors` — `ThemeExtension<AppThemeColors>` registered in `AppTheme.lightTheme` / `AppTheme.darkTheme`; provides `surface`, `surfaceCard`, `onSurface`, `onSurfaceSecondary`, `onSurfaceTertiary`, `divider`, `background`
+- Access via `context.themeColors.onSurface` (convenience extension on `BuildContext`)
 
 ### Prediction & Caching
 
@@ -48,20 +56,36 @@ App starts with `SplashScreen` (2s animation), then navigates to `MainScreen`. `
 - `PeriodProvider` classifies each date (period / predicted / ovulation / fertile / safe / normal) using a `Map<String, String>` `_dayTypeCache` that is **cleared on every data mutation**.
 - `PeriodProvider` auto-ends ongoing periods that exceed the user's configured period length.
 
+### Notification Scheduling
+
+- `NotificationService` is initialized in `main.dart`.
+- `PeriodProvider._scheduleReminderIfNeeded()` automatically schedules a reminder when records are loaded or the algorithm changes.
+- Uses `timezone` package for cross-timezone `zonedSchedule` support.
+
+### Dependency Injection
+
+- `DatabaseProvider` is an abstract interface; `DatabaseHelper` implements it.
+- `PeriodDao` and `SettingsDao` accept `DatabaseProvider?` for testing.
+- `PeriodProvider` and `SettingsProvider` accept `PeriodDao?` and `SettingsDao?` for testing.
+- Tests use `sqflite_common_ffi` with `inMemoryDatabasePath`.
+
 ### Calendar
 
-Built from scratch with `GridView.builder` and swipe gestures. `table_calendar` is declared in `pubspec.yaml` but **never imported or used**. Both home screen and add-record calendar support swipe-to-change-month with animated transitions.
+Built from scratch with `GridView.builder` and swipe gestures. Both home screen and add-record calendar support swipe-to-change-month with animated transitions.
+
+### Database Migration
+
+`DatabaseHelper` supports `onUpgrade` callback. To add a new schema version:
+1. Increment `_dbVersion`
+2. Add migration logic in `_onUpgrade` (e.g., `if (oldVersion < 2) { ... }`)
 
 ## Lint & Style
 
 Standard `package:flutter_lints/flutter.yaml` via `analysis_options.yaml`. No custom rules. Prefer following the existing manual serialization style.
 
-- `flutter analyze` — No issues found.
-- `flutter test` — All tests passed. Test uses `sqflite_common_ffi` for database initialization.
-
 ## Known Traps
 
 - **`AppDateUtils` is duplicated.** It exists in both `lib/utils/date_utils.dart` and `lib/providers/period_provider.dart` (local class at the bottom of the file). The local definition shadows the import. If you change date logic, you may need to change both or deduplicate them.
-- **`lib/widgets/` is empty.** All widgets are inline in `screens/`.
-- **`table_calendar`** is a dead dependency; do not introduce it unless you intend to replace the custom calendar.
+- **`table_calendar`** has been removed from dependencies. The custom calendar is the only calendar implementation.
 - **`generate_icon.py` hardcodes `E:\yimaflutter\assets\icon\app_icon.png`.** Won't work outside the original dev machine. Edit the path before running.
+- **Static text styles in `record_screen.dart`** are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors. They cannot be `const`.

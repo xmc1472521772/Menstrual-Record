@@ -1,30 +1,14 @@
 import 'package:flutter/material.dart';
 
+// ─── Brand Palette (theme-independent) ──────────────────────────
 class AppColors {
-  // ─── Brand Palette ───────────────────────────────────────────────
+  AppColors._();
+
   static const Color primaryPink = Color(0xFFE91E63);
   static const Color lightPink = Color(0xFFFCE4EC);
   static const Color mediumPink = Color(0xFFF48FB1);
   static const Color darkPink = Color(0xFFC2185B);
   static const Color accentPink = Color(0xFFEC407A);
-
-  // ─── Semantic Colors (Light Mode) ────────────────────────────────
-  static const Color surface = Color(0xFFFAFAFA);
-  static const Color surfaceCard = Colors.white;
-  static const Color onSurface = Color(0xFF1A1A1A);
-  static const Color onSurfaceSecondary = Color(0xFF666666);
-  static const Color onSurfaceTertiary = Color(0xFF999999);
-  static const Color divider = Color(0xFFE0E0E0);
-  static const Color background = Color(0xFFF5F5F5);
-
-  // ─── Semantic Colors (Dark Mode) ─────────────────────────────────
-  static const Color darkSurface = Color(0xFF121212);
-  static const Color darkSurfaceCard = Color(0xFF1E1E1E);
-  static const Color darkOnSurface = Color(0xFFE0E0E0);
-  static const Color darkOnSurfaceSecondary = Color(0xFFAAAAAA);
-  static const Color darkOnSurfaceTertiary = Color(0xFF777777);
-  static const Color darkDivider = Color(0xFF2A2A2A);
-  static const Color darkBackground = Color(0xFF0A0A0A);
 
   // ─── Functional Colors ───────────────────────────────────────────
   static const Color error = Color(0xFFD32F2F);
@@ -49,6 +33,26 @@ class AppColors {
   static const Color grey = Colors.grey;
   static const Color transparent = Colors.transparent;
 
+  // ─── Calendar Helpers ────────────────────────────────────────────
+  static Color getPeriodColor(DateTime date) => periodDay;
+
+  static Color getPredictedColor(DateTime date) {
+    return predictedDay.withValues(alpha: 0.6);
+  }
+
+  static Color getOvulationColor(DateTime date) => ovulationDay;
+
+  static Color getFertileColor(DateTime date) => fertileDay;
+
+  static Color getSafeColor(DateTime date) {
+    return safeDay.withValues(alpha: 0.4);
+  }
+}
+
+// ─── Spacing & Radius Tokens (theme-independent) ────────────────
+class AppDimens {
+  AppDimens._();
+
   // ─── Spacing Tokens ──────────────────────────────────────────────
   static const double spacingXs = 4.0;
   static const double spacingSm = 8.0;
@@ -71,19 +75,91 @@ class AppColors {
   static const double elevationLow = 1;
   static const double elevationMedium = 2;
   static const double elevationHigh = 4;
+}
 
-  // ─── Calendar Helpers ────────────────────────────────────────────
-  static Color getPeriodColor(DateTime date) => periodDay;
+/// Theme-dependent semantic colors registered as a [ThemeExtension].
+///
+/// Retrieve via `Theme.of(context).extension<AppThemeColors>()!`
+/// or the convenience extension `context.themeColors`.
+class AppThemeColors extends ThemeExtension<AppThemeColors> {
+  final Color surface;
+  final Color surfaceCard;
+  final Color onSurface;
+  final Color onSurfaceSecondary;
+  final Color onSurfaceTertiary;
+  final Color divider;
+  final Color background;
 
-  static Color getPredictedColor(DateTime date) {
-    return predictedDay.withValues(alpha: 0.6);
+  const AppThemeColors._({
+    required this.surface,
+    required this.surfaceCard,
+    required this.onSurface,
+    required this.onSurfaceSecondary,
+    required this.onSurfaceTertiary,
+    required this.divider,
+    required this.background,
+  });
+
+  static const light = AppThemeColors._(
+    surface: Color(0xFFFAFAFA),
+    surfaceCard: Colors.white,
+    onSurface: Color(0xFF1A1A1A),
+    onSurfaceSecondary: Color(0xFF666666),
+    onSurfaceTertiary: Color(0xFF999999),
+    divider: Color(0xFFE0E0E0),
+    background: Color(0xFFF5F5F5),
+  );
+
+  static const dark = AppThemeColors._(
+    surface: Color(0xFF121212),
+    surfaceCard: Color(0xFF1E1E1E),
+    onSurface: Color(0xFFE0E0E0),
+    onSurfaceSecondary: Color(0xFFAAAAAA),
+    onSurfaceTertiary: Color(0xFF777777),
+    divider: Color(0xFF2A2A2A),
+    background: Color(0xFF0A0A0A),
+  );
+
+  @override
+  AppThemeColors copyWith({
+    Color? surface,
+    Color? surfaceCard,
+    Color? onSurface,
+    Color? onSurfaceSecondary,
+    Color? onSurfaceTertiary,
+    Color? divider,
+    Color? background,
+  }) {
+    return AppThemeColors._(
+      surface: surface ?? this.surface,
+      surfaceCard: surfaceCard ?? this.surfaceCard,
+      onSurface: onSurface ?? this.onSurface,
+      onSurfaceSecondary: onSurfaceSecondary ?? this.onSurfaceSecondary,
+      onSurfaceTertiary: onSurfaceTertiary ?? this.onSurfaceTertiary,
+      divider: divider ?? this.divider,
+      background: background ?? this.background,
+    );
   }
 
-  static Color getOvulationColor(DateTime date) => ovulationDay;
-
-  static Color getFertileColor(DateTime date) => fertileDay;
-
-  static Color getSafeColor(DateTime date) {
-    return safeDay.withValues(alpha: 0.4);
+  @override
+  AppThemeColors lerp(AppThemeColors? other, double t) {
+    if (other is! AppThemeColors) return this;
+    return AppThemeColors._(
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceCard: Color.lerp(surfaceCard, other.surfaceCard, t)!,
+      onSurface: Color.lerp(onSurface, other.onSurface, t)!,
+      onSurfaceSecondary:
+          Color.lerp(onSurfaceSecondary, other.onSurfaceSecondary, t)!,
+      onSurfaceTertiary:
+          Color.lerp(onSurfaceTertiary, other.onSurfaceTertiary, t)!,
+      divider: Color.lerp(divider, other.divider, t)!,
+      background: Color.lerp(background, other.background, t)!,
+    );
   }
+}
+
+/// Convenience extension for accessing [AppThemeColors] from [BuildContext].
+extension AppThemeColorsX on BuildContext {
+  AppThemeColors get themeColors =>
+      Theme.of(this).extension<AppThemeColors>()!;
 }
