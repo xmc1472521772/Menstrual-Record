@@ -9,10 +9,9 @@ flutter run
 flutter test
 flutter test test/providers/period_provider_test.dart   # single test
 flutter analyze
-flutter pub run flutter_launcher_icons  # regenerate launcher icon
 ```
 
-> **Do not use `run_app.bat` or `run_app.ps1` as-is.** They hardcode absolute paths (`E:\yimaflutter`, `D:\Android\Sdk`) from the original dev machine. If you need China mirrors, set `FLUTTER_STORAGE_BASE_URL` and `PUB_HOSTED_URL` yourself and then run `flutter run`.
+> If you need China mirrors, set `FLUTTER_STORAGE_BASE_URL` and `PUB_HOSTED_URL` environment variables yourself and then run `flutter run`.
 
 ## Versioning
 
@@ -87,5 +86,4 @@ Standard `package:flutter_lints/flutter.yaml` via `analysis_options.yaml`. No cu
 
 - **`AppDateUtils` is duplicated.** It exists in both `lib/utils/date_utils.dart` and `lib/providers/period_provider.dart` (local class at the bottom of the file). The local definition shadows the import. If you change date logic, you may need to change both or deduplicate them.
 - **`table_calendar`** has been removed from dependencies. The custom calendar is the only calendar implementation.
-- **`generate_icon.py` hardcodes `E:\yimaflutter\assets\icon\app_icon.png`.** Won't work outside the original dev machine. Edit the path before running.
 - **Static text styles in `record_screen.dart`** are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors. They cannot be `const`.

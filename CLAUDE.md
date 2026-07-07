@@ -18,9 +18,6 @@ flutter test test/providers/period_provider_test.dart  # single file
 
 # Analyze code
 flutter analyze
-
-# Regenerate app icon
-python generate_icon.py
 ```
 
 ## Architecture
@@ -57,5 +54,4 @@ python generate_icon.py
 ## Known Issues
 
 - `AppDateUtils` is defined in both `lib/utils/date_utils.dart` and `lib/providers/period_provider.dart` with identical methods. The local definition shadows the import.
-- `generate_icon.py` hardcodes `E:\yimaflutter\assets\icon\app_icon.png`. Edit the path before running.
 - Static text styles in `record_screen.dart` are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors.

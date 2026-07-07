@@ -99,6 +99,6 @@ DAO 和 Provider 均支持构造函数注入 `DatabaseProvider`，便于单元�
 
 ## 版本
 
-当前版本：1.1.0+3
+当前版本：1.2.2+7
 
 格式：`major.minor.patch+build`

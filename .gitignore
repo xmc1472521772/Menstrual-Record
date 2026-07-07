@@ -41,3 +41,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# AI assistant tool configs (not project-related)
+.claude/
+.mimocode/
+.cursor/
+.aider*
+
