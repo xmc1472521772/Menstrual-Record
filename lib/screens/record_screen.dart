@@ -17,22 +17,53 @@ class RecordScreen extends StatefulWidget {
 }
 
 class _RecordScreenState extends State<RecordScreen> {
+  late DateTime _startDate;
+  DateTime? _endDate;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _startDate = DateTime(now.year, now.month, now.day);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 68,
+        titleSpacing: AppDimens.spacingXl,
         title: const Text(AppStrings.record),
+        actions: [
+          IconButton.filled(
+            onPressed: () =>
+                _showAddRecordDialog(context, context.read<PeriodProvider>()),
+            icon: const Icon(Icons.add_rounded, size: 20),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.brandPrimary,
+              foregroundColor: AppColors.white,
+            ),
+            tooltip: '多选日历',
+          ),
+          const SizedBox(width: AppDimens.spacingXl),
+        ],
       ),
       body: Consumer<PeriodProvider>(
         builder: (context, provider, child) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppDimens.spacingLg),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimens.spacingXl,
+              AppDimens.spacingSm,
+              AppDimens.spacingXl,
+              AppDimens.spacing2xl,
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildAddButton(context, provider),
-                const SizedBox(height: AppDimens.spacing2xl),
-                _buildHistorySection(provider),
+                _buildTodayStrip(provider),
+                const SizedBox(height: AppDimens.spacingLg),
+                _buildAddCard(provider),
+                const SizedBox(height: AppDimens.spacingLg),
+                _buildHistoryCard(provider),
               ],
             ),
           );
@@ -41,18 +72,281 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  Widget _buildAddButton(BuildContext context, PeriodProvider provider) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () => _showAddRecordDialog(context, provider),
-        icon: const Icon(Icons.add, size: 22),
-        label: const Text('添加经期记录'),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(
-            vertical: AppDimens.spacingLg,
-          ),
+  // ─── Today strip ──────────────────────────────────────────────────
+  Widget _buildTodayStrip(PeriodProvider provider) {
+    final hasOngoing = provider.records.any((r) => r.isOngoing);
+    final cycleData = provider.cycleData;
+
+    if (hasOngoing) {
+      final day = cycleData?.currentCycleDay ?? 1;
+      return Container(
+        padding: const EdgeInsets.all(AppDimens.spacingLg),
+        decoration: BoxDecoration(
+          color: AppColors.brandSurface,
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
         ),
+        child: Row(
+          children: [
+            _stripIcon(Icons.favorite_rounded, AppColors.brandPrimary),
+            const SizedBox(width: AppDimens.spacingMd),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppStrings.periodOngoing,
+                    style: AppTheme.titleMedium.copyWith(
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${AppStrings.currentDay} $day ${AppStrings.days}',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppColors.inkSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 36,
+              child: OutlinedButton(
+                onPressed: () async {
+                  await provider.endPeriod(DateTime.now());
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brandPrimary,
+                  side: const BorderSide(color: AppColors.brandPrimary),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.spacingMd,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppDimens.radiusFull),
+                  ),
+                  textStyle: AppTheme.labelMedium,
+                ),
+                child: const Text(AppStrings.endPeriod),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final predicted = cycleData?.predictedNextPeriod;
+    final daysUntil = cycleData?.daysUntilPredicted;
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.spacingLg),
+      decoration: BoxDecoration(
+        color: context.themeColors.surfaceTile,
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+      ),
+      child: Row(
+        children: [
+          _stripIcon(Icons.calendar_today_rounded, AppColors.inkSecondary),
+          const SizedBox(width: AppDimens.spacingMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '暂无进行中的经期',
+                  style: AppTheme.titleMedium.copyWith(
+                    color: AppColors.ink,
+                  ),
+                ),
+                if (predicted != null && daysUntil != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${AppStrings.predictedNextPeriod} ${predicted.month}月${predicted.day}日 · $daysUntil ${AppStrings.days}后',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppColors.inkSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stripIcon(IconData icon, Color color) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppColors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+      ),
+      child: Icon(icon, color: color, size: 18),
+    );
+  }
+
+  // ─── Add card ─────────────────────────────────────────────────────
+  Widget _buildAddCard(PeriodProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.spacingLg),
+      decoration: BoxDecoration(
+        color: context.themeColors.surfaceCard,
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '添加经期记录',
+                  style: AppTheme.titleLarge.copyWith(
+                    color: context.themeColors.onSurface,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _showAddRecordDialog(context, provider),
+                icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                label: const Text('多选日历'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.brandPrimary,
+                  textStyle: AppTheme.labelMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppDimens.spacingSm),
+          _buildDateRow(
+            label: AppStrings.startDate,
+            date: _startDate,
+            onTap: () => _pickDate(isStart: true),
+          ),
+          const Divider(height: 1),
+          _buildDateRow(
+            label: AppStrings.endDate,
+            date: _endDate,
+            onTap: () => _pickDate(isStart: false),
+          ),
+          const SizedBox(height: AppDimens.spacingLg),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: () => _saveRange(provider),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary,
+                foregroundColor: AppColors.white,
+                elevation: AppDimens.elevationNone,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                ),
+                textStyle: AppTheme.titleMedium,
+              ),
+              child: const Text('保存记录'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateRow({
+    required String label,
+    required DateTime? date,
+    required VoidCallback onTap,
+  }) {
+    final text = date != null
+        ? '${date.year}年${date.month}月${date.day}日'
+        : AppStrings.selectDate;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingMd),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppColors.inkSecondary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              text,
+              style: AppTheme.titleMedium.copyWith(
+                color: date != null
+                    ? context.themeColors.onSurface
+                    : AppColors.inkTertiary,
+              ),
+            ),
+            const SizedBox(width: AppDimens.spacingSm),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.inkTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStart ? _startDate : (_endDate ?? _startDate),
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      locale: const Locale('zh', 'CN'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: AppColors.brandPrimary,
+                  onPrimary: AppColors.white,
+                  surface: AppColors.white,
+                  onSurface: AppColors.ink,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+        if (_endDate != null && _endDate!.isBefore(picked)) {
+          _endDate = null;
+        }
+      } else {
+        if (picked.isBefore(_startDate)) {
+          _endDate = _startDate;
+        } else {
+          _endDate = picked;
+        }
+      }
+    });
+  }
+
+  Future<void> _saveRange(PeriodProvider provider) async {
+    final end = _endDate ?? _startDate;
+    final success = await provider.savePeriodRecord(_startDate, end);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? '记录已保存' : '保存失败，请检查日期是否冲突'),
+        backgroundColor: success ? AppColors.brandPrimary : AppColors.error,
       ),
     );
   }
@@ -77,162 +371,197 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  Widget _buildHistorySection(PeriodProvider provider) {
+  // ─── History ──────────────────────────────────────────────────────
+  Widget _buildHistoryCard(PeriodProvider provider) {
     final records = provider.records;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              AppStrings.historyRecords,
-              style: AppTheme.headingSmall.copyWith(
-                color: context.themeColors.onSurface,
-              ),
-            ),
-            if (records.isNotEmpty)
-              Text(
-                '共 ${records.length} 条记录',
-                style: AppTheme.bodySmall.copyWith(
-                  color: context.themeColors.onSurfaceTertiary,
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: AppDimens.spacingMd),
-        if (records.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppDimens.spacing3xl),
-            decoration: BoxDecoration(
-              color: context.themeColors.surfaceCard,
-              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.history,
-                  size: 48,
-                  color: context.themeColors.onSurfaceTertiary,
-                ),
-                const SizedBox(height: AppDimens.spacingMd),
-                Text(
-                  AppStrings.noRecords,
-                  style: AppTheme.bodyMedium.copyWith(
-                    color: context.themeColors.onSurfaceTertiary,
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.spacingLg),
+      decoration: BoxDecoration(
+        color: context.themeColors.surfaceCard,
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  AppStrings.historyRecords,
+                  style: AppTheme.titleLarge.copyWith(
+                    color: context.themeColors.onSurface,
                   ),
                 ),
-              ],
-            ),
-          )
-        else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: records.length,
-            itemBuilder: (context, index) {
-              final record = records[index];
-              return _buildRecordCard(record, provider);
-            },
+              ),
+              if (records.isNotEmpty)
+                Text(
+                  '共 ${records.length} 条',
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppColors.inkTertiary,
+                  ),
+                ),
+            ],
           ),
-      ],
+          const SizedBox(height: AppDimens.spacingSm),
+          if (records.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                vertical: AppDimens.spacing2xl,
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.history_rounded,
+                      size: 36,
+                      color: AppColors.inkTertiary,
+                    ),
+                    const SizedBox(height: AppDimens.spacingSm),
+                    Text(
+                      AppStrings.noRecords,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppColors.inkTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: records.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) =>
+                  _buildRecordRow(records[index], provider),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildRecordCard(PeriodRecord record, PeriodProvider provider) {
-    final startDate = DateFormat('yyyy-MM-dd').parse(record.startDate);
-    final endDate = record.endDate != null
+  Widget _buildRecordRow(PeriodRecord record, PeriodProvider provider) {
+    final start = DateFormat('yyyy-MM-dd').parse(record.startDate);
+    final end = record.endDate != null
         ? DateFormat('yyyy-MM-dd').parse(record.endDate!)
         : null;
     final isOngoing = record.isOngoing;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingLg,
-          vertical: AppDimens.spacingSm,
-        ),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: isOngoing
-                ? AppColors.warning.withValues(alpha: 0.15)
-                : AppColors.lightPink,
-            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+    final rangeText = end != null
+        ? '${DateFormat('MM月dd日').format(start)} - ${DateFormat('MM月dd日').format(end)}'
+        : '${DateFormat('MM月dd日').format(start)} - 进行中';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingMd),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: isOngoing
+                  ? AppColors.brandSurface
+                  : context.themeColors.surfaceTile,
+              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${start.month}月',
+                  style: const TextStyle(
+                    color: AppColors.inkSecondary,
+                    fontSize: 10,
+                    height: 1.1,
+                  ),
+                ),
+                Text(
+                  '${start.day}',
+                  style: TextStyle(
+                    color: isOngoing
+                        ? AppColors.brandPrimary
+                        : context.themeColors.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    height: 1.15,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: Icon(
-            isOngoing ? Icons.play_circle_filled : Icons.favorite,
-            color: isOngoing ? AppColors.warning : AppColors.primaryPink,
-            size: 24,
+          const SizedBox(width: AppDimens.spacingMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  rangeText,
+                  style: AppTheme.titleMedium.copyWith(
+                    color: context.themeColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '持续 ${record.periodDays} ${AppStrings.days}',
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppColors.inkSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        title: Text(
-          '${DateFormat('yyyy年MM月dd日').format(startDate)} - ${endDate != null ? DateFormat('yyyy年MM月dd日').format(endDate) : '进行中'}',
-          style: AppTheme.titleMedium.copyWith(color: context.themeColors.onSurface),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: AppDimens.spacingXs),
-            Text(
-              '持续 ${record.periodDays} 天',
-              style: AppTheme.bodySmall.copyWith(
-                color: context.themeColors.onSurfaceSecondary,
+          if (isOngoing)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.spacingSm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.brandSurface,
+                borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+              ),
+              child: Text(
+                '进行中',
+                style: AppTheme.labelMedium.copyWith(
+                  color: AppColors.brandPrimary,
+                  fontSize: 11,
+                ),
               ),
             ),
-            if (isOngoing) ...[
-              const SizedBox(height: AppDimens.spacingXs),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.spacingSm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-                ),
-                child: Text(
-                  '进行中',
-                  style: AppTheme.labelMedium.copyWith(
-                    color: AppColors.warning,
-                  ),
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              size: 18,
+              color: AppColors.inkTertiary,
+            ),
+            onSelected: (value) {
+              if (value == 'delete') {
+                _showDeleteConfirmDialog(record, provider);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_outline_rounded,
+                        color: AppColors.error, size: 18),
+                    const SizedBox(width: AppDimens.spacingSm),
+                    Text(
+                      '删除记录',
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          icon: Icon(
-            Icons.more_vert,
-            color: context.themeColors.onSurfaceTertiary,
           ),
-          onSelected: (value) {
-            if (value == 'delete') {
-              _showDeleteConfirmDialog(record, provider);
-            }
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  const Icon(Icons.delete, color: AppColors.error, size: 20),
-                  const SizedBox(width: AppDimens.spacingSm),
-                  Text(
-                    '删除记录',
-                    style: AppTheme.bodyMedium.copyWith(
-                      color: AppColors.error,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -530,7 +859,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
           TextButton(
             onPressed: _scrollToCurrentMonth,
             style: TextButton.styleFrom(
-              backgroundColor: AppColors.info,
+              backgroundColor: AppColors.brandPrimary,
               foregroundColor: AppColors.white,
               minimumSize: const Size(40, 36),
               padding: const EdgeInsets.symmetric(
@@ -583,44 +912,44 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   static const Widget _weekdayHeader = _WeekdayHeaderWidget();
 
   static final BoxDecoration _existingDecoration = BoxDecoration(
-    color: AppColors.primaryPink.withValues(alpha: 0.15),
-    borderRadius: BorderRadius.circular(6),
+    color: AppColors.brandPrimary.withValues(alpha: 0.15),
+    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
   );
   static final BoxDecoration _selectedDecoration = BoxDecoration(
-    color: AppColors.primaryPink,
-    borderRadius: BorderRadius.circular(6),
+    color: AppColors.brandPrimary,
+    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
   );
   static final BoxDecoration _selectedFutureDecoration = BoxDecoration(
-    color: AppColors.primaryPink.withValues(alpha: 0.25),
+    color: AppColors.brandPrimary.withValues(alpha: 0.25),
     border: Border.all(
-      color: AppColors.primaryPink.withValues(alpha: 0.5),
+      color: AppColors.brandPrimary.withValues(alpha: 0.5),
       width: 1.2,
     ),
-    borderRadius: BorderRadius.circular(6),
+    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
   );
   static final BoxDecoration _selectedFutureTodayDecoration = BoxDecoration(
-    color: AppColors.primaryPink.withValues(alpha: 0.25),
+    color: AppColors.brandPrimary.withValues(alpha: 0.25),
     border: Border.all(
-      color: AppColors.info,
+      color: AppColors.brandPrimary,
       width: 1.5,
     ),
-    borderRadius: BorderRadius.circular(6),
+    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
   );
   static final BoxDecoration _todayDecoration = BoxDecoration(
-    border: Border.all(color: AppColors.info, width: 1.5),
-    borderRadius: BorderRadius.circular(6),
+    border: Border.all(color: AppColors.brandPrimary, width: 1.5),
+    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
   );
   static const EdgeInsets _cellMargin = EdgeInsets.all(3);
   static const TextStyle _existingTodayStyle = TextStyle(
-    color: AppColors.info,
+    color: AppColors.brandPrimary,
     fontSize: 13,
   );
   static final TextStyle _existingStyle = TextStyle(
-    color: AppColors.primaryPink.withValues(alpha: 0.4),
+    color: AppColors.brandPrimary.withValues(alpha: 0.4),
     fontSize: 13,
   );
   static const TextStyle _selectedTodayStyle = TextStyle(
-    color: AppColors.info,
+    color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
@@ -630,17 +959,17 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontSize: 13,
   );
   static const TextStyle _selectedFutureStyle = TextStyle(
-    color: AppColors.primaryPink,
+    color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
   static const TextStyle _selectedFutureTodayStyle = TextStyle(
-    color: AppColors.info,
+    color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
   static const TextStyle _todayStyle = TextStyle(
-    color: AppColors.info,
+    color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );
@@ -855,7 +1184,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                 horizontal: AppDimens.spacingLg,
                 vertical: AppDimens.spacingXs,
               ),
-              color: AppColors.lightPink.withValues(alpha: 0.4),
+              color: AppColors.brandSoft.withValues(alpha: 0.4),
               child: Builder(
                 builder: (context) {
                   final ranges = _buildRanges();
@@ -868,7 +1197,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                   return Text(
                     '已选 $totalDays 天：$rangeText',
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppColors.primaryPink,
+                      color: AppColors.brandPrimary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

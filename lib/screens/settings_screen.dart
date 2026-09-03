@@ -26,7 +26,7 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildSectionTitle(context, '周期设置'),
+                _buildSectionTitle(context, '周期参数'),
                 _buildPredictionHint(context),
                 const SizedBox(height: AppDimens.spacingMd),
                 _buildCycleLengthSetting(context, settingsProvider),
@@ -56,7 +56,7 @@ class SettingsScreen extends StatelessWidget {
       child: Text(
         title,
         style: AppTheme.headingSmall.copyWith(
-          color: AppColors.primaryPink,
+          color: AppColors.brandPrimary,
         ),
       ),
     );
@@ -66,10 +66,10 @@ class SettingsScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppDimens.spacingMd),
       decoration: BoxDecoration(
-        color: AppColors.lightPink.withValues(alpha: 0.5),
+        color: AppColors.brandSoft.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(AppDimens.radiusSm),
         border: Border.all(
-          color: AppColors.primaryPink.withValues(alpha: 0.2),
+          color: AppColors.brandPrimary.withValues(alpha: 0.2),
         ),
       ),
       child: Row(
@@ -78,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
           Icon(
             Icons.info_outline,
             size: 18,
-            color: AppColors.primaryPink.withValues(alpha: 0.7),
+            color: AppColors.brandPrimary.withValues(alpha: 0.7),
           ),
           const SizedBox(width: AppDimens.spacingSm),
           Expanded(
@@ -97,131 +97,91 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _buildCycleLengthSetting(
       BuildContext context, SettingsProvider provider) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingXs),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppDimens.spacingLg,
-            vertical: AppDimens.spacingSm,
-          ),
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.lightPink,
-              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-            ),
-            child: const Icon(
-              Icons.calendar_month,
-              color: AppColors.primaryPink,
-              size: 24,
-            ),
-          ),
-          title: Text(
-            AppStrings.cycleLength,
-            style: AppTheme.titleMedium.copyWith(
-              color: context.themeColors.onSurface,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: AppDimens.spacingXs),
-              Text(
-                '${provider.cycleLength} 天',
-                style: AppTheme.bodyLarge.copyWith(
-                  color: AppColors.primaryPink,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: AppDimens.spacingXs),
-              Text(
-                '两次经期开始之间的间隔天数，用于预测下次经期开始日期',
-                style: AppTheme.bodySmall.copyWith(
-                  color: context.themeColors.onSurfaceTertiary,
-                ),
-              ),
-            ],
-          ),
-          trailing: Icon(
-            Icons.chevron_right,
-            color: context.themeColors.onSurfaceTertiary,
-          ),
-          onTap: () => _showNumberPicker(
-            context: context,
-            title: AppStrings.cycleLength,
-            value: provider.cycleLength,
-            min: 20,
-            max: 45,
-            onChanged: (value) => provider.setCycleLength(value),
-          ),
-        ),
-      ),
+    return _buildSliderSetting(
+      context: context,
+      title: AppStrings.cycleLength,
+      icon: Icons.calendar_month,
+      value: provider.cycleLength,
+      min: 20,
+      max: 45,
+      onChanged: (v) => provider.setCycleLength(v.round()),
     );
   }
 
   Widget _buildPeriodLengthSetting(
       BuildContext context, SettingsProvider provider) {
+    return _buildSliderSetting(
+      context: context,
+      title: AppStrings.periodDuration,
+      icon: Icons.water_drop,
+      value: provider.periodLength,
+      min: 2,
+      max: 10,
+      onChanged: (v) => provider.setPeriodLength(v.round()),
+    );
+  }
+
+  Widget _buildSliderSetting({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required int value,
+    required int min,
+    required int max,
+    required ValueChanged<double> onChanged,
+  }) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingXs),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppDimens.spacingLg,
-            vertical: AppDimens.spacingSm,
-          ),
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.lightPink,
-              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-            ),
-            child: const Icon(
-              Icons.water_drop,
-              color: AppColors.primaryPink,
-              size: 24,
-            ),
-          ),
-          title: Text(
-            AppStrings.periodDuration,
-            style: AppTheme.titleMedium.copyWith(
-              color: context.themeColors.onSurface,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: AppDimens.spacingXs),
-              Text(
-                '${provider.periodLength} 天',
-                style: AppTheme.bodyLarge.copyWith(
-                  color: AppColors.primaryPink,
-                  fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.fromLTRB(
+          AppDimens.spacingLg,
+          AppDimens.spacingLg,
+          AppDimens.spacingLg,
+          AppDimens.spacingMd,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoft,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                  ),
+                  child: Icon(icon, color: AppColors.brandPrimary, size: 16),
                 ),
-              ),
-              const SizedBox(height: AppDimens.spacingXs),
-              Text(
-                '每次经期持续的天数，用于预测经期结束日期',
-                style: AppTheme.bodySmall.copyWith(
-                  color: context.themeColors.onSurfaceTertiary,
+                const SizedBox(width: AppDimens.spacingSm),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppTheme.titleMedium.copyWith(
+                      color: context.themeColors.onSurface,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          trailing: Icon(
-            Icons.chevron_right,
-            color: context.themeColors.onSurfaceTertiary,
-          ),
-          onTap: () => _showNumberPicker(
-            context: context,
-            title: AppStrings.periodDuration,
-            value: provider.periodLength,
-            min: 2,
-            max: 10,
-            onChanged: (value) => provider.setPeriodLength(value),
-          ),
+                Text(
+                  '$value 天',
+                  style: AppTheme.titleMedium.copyWith(
+                    color: AppColors.brandPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppDimens.spacingSm),
+            Slider(
+              value: value.toDouble(),
+              min: min.toDouble(),
+              max: max.toDouble(),
+              divisions: max - min,
+              label: '$value 天',
+              activeColor: AppColors.brandPrimary,
+              inactiveColor: AppColors.tile,
+              onChanged: onChanged,
+            ),
+          ],
         ),
       ),
     );
@@ -239,12 +199,12 @@ class SettingsScreen extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.lightPink,
+            color: AppColors.brandSoft,
             borderRadius: BorderRadius.circular(AppDimens.radiusSm),
           ),
           child: const Icon(
             Icons.notifications,
-            color: AppColors.primaryPink,
+            color: AppColors.brandPrimary,
             size: 24,
           ),
         ),
@@ -288,12 +248,12 @@ class SettingsScreen extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.lightPink,
+            color: AppColors.brandSoft,
             borderRadius: BorderRadius.circular(AppDimens.radiusSm),
           ),
           child: const Icon(
             Icons.access_time,
-            color: AppColors.primaryPink,
+            color: AppColors.brandPrimary,
             size: 24,
           ),
         ),
@@ -486,7 +446,7 @@ class SettingsScreen extends StatelessWidget {
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         style: AppTheme.statValue.copyWith(
-                          color: AppColors.primaryPink,
+                          color: AppColors.brandPrimary,
                         ),
                         decoration: InputDecoration(
                           contentPadding: const EdgeInsets.symmetric(
@@ -541,7 +501,7 @@ class SettingsScreen extends StatelessWidget {
                               : null,
                           icon: const Icon(Icons.remove_circle_outline),
                           iconSize: 40,
-                          color: AppColors.primaryPink,
+                          color: AppColors.brandPrimary,
                         ),
                         const SizedBox(width: AppDimens.spacing2xl),
                         IconButton(
@@ -557,7 +517,7 @@ class SettingsScreen extends StatelessWidget {
                               : null,
                           icon: const Icon(Icons.add_circle_outline),
                           iconSize: 40,
-                          color: AppColors.primaryPink,
+                          color: AppColors.brandPrimary,
                         ),
                       ],
                     ),

@@ -138,13 +138,13 @@ class EmptyState extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.lightPink,
+              color: AppColors.brandSoft,
               borderRadius: BorderRadius.circular(AppDimens.radiusLg),
             ),
             child: Icon(
               icon,
               size: 40,
-              color: iconColor ?? AppColors.primaryPink,
+              color: iconColor ?? AppColors.brandPrimary,
             ),
           ),
           const SizedBox(height: AppDimens.spacingXl),
@@ -196,7 +196,7 @@ class LegendItem extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDashed ? AppColors.transparent : color,
               border: isDashed
-                  ? Border.all(color: AppColors.mediumPink, width: 1.5)
+                  ? Border.all(color: AppColors.brandLight, width: 1.5)
                   : null,
               shape: BoxShape.circle,
             ),

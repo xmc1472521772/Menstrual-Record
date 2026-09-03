@@ -54,13 +54,13 @@ class StatsScreen extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.lightPink,
+              color: AppColors.brandSoft,
               borderRadius: BorderRadius.circular(AppDimens.radiusLg),
             ),
             child: const Icon(
               Icons.bar_chart,
               size: 40,
-              color: AppColors.primaryPink,
+              color: AppColors.brandPrimary,
             ),
           ),
           const SizedBox(height: AppDimens.spacingXl),
@@ -87,14 +87,14 @@ class StatsScreen extends StatelessWidget {
       padding: const EdgeInsets.all(AppDimens.spacingXl),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.primaryPink, AppColors.accentPink],
+          colors: [AppColors.brandPrimary, AppColors.brandLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppDimens.radiusLg),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withValues(alpha: 0.3),
+            color: AppColors.brandPrimary.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -250,11 +250,11 @@ class StatsScreen extends StatelessWidget {
         padding: const EdgeInsets.all(AppDimens.spacingMd),
         decoration: BoxDecoration(
           border: Border.all(
-            color: isSelected ? AppColors.primaryPink : context.themeColors.divider,
+            color: isSelected ? AppColors.brandPrimary : context.themeColors.divider,
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-          color: isSelected ? AppColors.lightPink : context.themeColors.surfaceCard,
+          color: isSelected ? AppColors.brandSoft : context.themeColors.surfaceCard,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,7 +266,7 @@ class StatsScreen extends StatelessWidget {
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
                   color:
-                      isSelected ? AppColors.primaryPink : AppColors.grey,
+                      isSelected ? AppColors.brandPrimary : AppColors.grey,
                   size: 20,
                 ),
                 const SizedBox(width: AppDimens.spacingSm),
@@ -275,7 +275,7 @@ class StatsScreen extends StatelessWidget {
                     title,
                     style: AppTheme.titleMedium.copyWith(
                       color: isSelected
-                          ? AppColors.darkPink
+                          ? AppColors.brandDeep
                           : context.themeColors.onSurface,
                     ),
                   ),
@@ -322,7 +322,7 @@ class StatsScreen extends StatelessWidget {
                       Text(
                         DateFormat('yyyy年MM月dd日').format(predictedDate),
                         style: AppTheme.headingSmall.copyWith(
-                          color: AppColors.primaryPink,
+                          color: AppColors.brandPrimary,
                         ),
                       ),
                       const SizedBox(height: AppDimens.spacingXs),
@@ -357,13 +357,13 @@ class StatsScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(AppDimens.spacingMd),
                     decoration: BoxDecoration(
-                      color: AppColors.lightPink,
+                      color: AppColors.brandSoft,
                       borderRadius:
                           BorderRadius.circular(AppDimens.radiusSm),
                     ),
                     child: const Icon(
                       Icons.calendar_today,
-                      color: AppColors.primaryPink,
+                      color: AppColors.brandPrimary,
                       size: 24,
                     ),
                   ),
@@ -446,7 +446,7 @@ class StatsScreen extends StatelessWidget {
       padding: const EdgeInsets.all(AppDimens.spacingMd),
       decoration: BoxDecoration(
         color: index % 2 == 0
-            ? AppColors.lightPink.withValues(alpha: 0.3)
+            ? AppColors.brandSoft.withValues(alpha: 0.3)
             : AppColors.transparent,
         borderRadius: BorderRadius.circular(AppDimens.radiusSm),
       ),
@@ -477,7 +477,7 @@ class StatsScreen extends StatelessWidget {
               Text(
                 '${period.periodDays} 天',
                 style: AppTheme.titleMedium.copyWith(
-                  color: AppColors.primaryPink,
+                  color: AppColors.brandPrimary,
                 ),
               ),
               if (period.cycleLength != null)

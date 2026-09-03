@@ -74,8 +74,8 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppColors.lightPink,
-              AppColors.primaryPink,
+              AppColors.brandSoft,
+              AppColors.brandPrimary,
             ],
           ),
         ),
