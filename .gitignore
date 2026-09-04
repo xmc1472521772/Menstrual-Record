@@ -52,3 +52,13 @@ app.*.map.json
 # Flutter transient tool files
 .flutter
 .flutter_tool_state
+
+# Gradle build output inside android/
+/android/build/
+
+# 临时诊断产物
+diag_count.txt
+diag_*.log
+addcal_*.log
+test_run.log
+check_env.log
