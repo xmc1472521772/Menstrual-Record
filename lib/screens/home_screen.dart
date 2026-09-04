@@ -18,6 +18,14 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _selectedDay = DateTime.now();
   int _slideDirection = 1;
 
+  /// 日历格子的局部刷新通知器：key 为 `yyyyMMdd`，按需懒创建。
+  /// 选中某天时只重建受影响的 1~2 个格子，不再整页 setState。
+  final Map<int, ValueNotifier<int>> _dayCellNotifiers =
+      <int, ValueNotifier<int>>{};
+
+  /// 选中状态版本号 —— 供「回到今天」按钮这类需要读取 _selectedDay 的部件监听。
+  final ValueNotifier<int> _selectionVersion = ValueNotifier<int>(0);
+
   bool get _isTodaySelected {
     final now = DateTime.now();
     return _selectedDay != null &&
@@ -26,12 +34,33 @@ class _HomeScreenState extends State<HomeScreen> {
         _selectedDay!.day == now.day;
   }
 
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _focusedDay.year == now.year && _focusedDay.month == now.month;
+  }
+
   void _jumpToToday() {
     final now = DateTime.now();
+    final previous = _selectedDay;
     setState(() {
-      _selectedDay = now;
       _focusedDay = DateTime(now.year, now.month, 1);
     });
+    _selectedDay = now;
+    if (previous != null) {
+      _dayCellNotifiers[_dayKey(previous)]?.value++;
+    }
+    _dayCellNotifiers[_dayKey(now)]?.value++;
+    _selectionVersion.value++;
+  }
+
+  @override
+  void dispose() {
+    for (final notifier in _dayCellNotifiers.values) {
+      notifier.dispose();
+    }
+    _dayCellNotifiers.clear();
+    _selectionVersion.dispose();
+    super.dispose();
   }
 
   static const List<String> _weekdayLabels = [
@@ -44,15 +73,17 @@ class _HomeScreenState extends State<HomeScreen> {
     '日',
   ];
 
+  /// 普通格子的外边距。
+  static const EdgeInsets _kDayCellMargin = EdgeInsets.all(3);
+
+  /// 「今天 / 选中」描边格子的外边距。
+  static const EdgeInsets _kDaySelectedMargin = EdgeInsets.all(2);
+
   static String _weekdayLabel(int weekday) => _weekdayLabels[weekday - 1];
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final isCurrentMonth =
-        _focusedDay.year == now.year && _focusedDay.month == now.month;
-    final showJumpToToday =
-        !isCurrentMonth || (_selectedDay != null && !_isTodaySelected);
 
     return Scaffold(
       appBar: AppBar(
@@ -82,23 +113,31 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: AppDimens.spacingSm),
         ],
       ),
-      floatingActionButton: showJumpToToday
-          ? FloatingActionButton.small(
-              onPressed: _jumpToToday,
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: AppColors.white,
-              elevation: AppDimens.elevationNone,
-              child: const Text(
-                '今',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
+      floatingActionButton: ValueListenableBuilder<int>(
+        valueListenable: _selectionVersion,
+        builder: (context, _, __) {
+          final showFab =
+              !_isCurrentMonth || (_selectedDay != null && !_isTodaySelected);
+          if (!showFab) return const SizedBox.shrink();
+          return FloatingActionButton.small(
+            onPressed: _jumpToToday,
+            backgroundColor: AppColors.brandPrimary,
+            foregroundColor: AppColors.white,
+            elevation: AppDimens.elevationNone,
+            child: const Text(
+              '今',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
               ),
-            )
-          : null,
-      body: Consumer<PeriodProvider>(
-        builder: (context, provider, child) {
+            ),
+          );
+        },
+      ),
+      body: Selector<PeriodProvider, int>(
+        selector: (_, provider) => provider.dataVersion,
+        builder: (context, _, __) {
+          final provider = context.read<PeriodProvider>();
           final cycleData = provider.cycleData;
 
           return SingleChildScrollView(
@@ -110,11 +149,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Column(
               children: [
-                _buildStatusHero(cycleData),
+                // 状态卡内容在数据不变时是静态的：RepaintBoundary 让它滚动时只
+                // 整体平移、不逐帧重录（同时与下方日历的重绘相互隔离）。阴影等
+                // 昂贵绘制已在 _buildStatusHero 内扁平化处理，见其注释。
+                RepaintBoundary(child: _buildStatusHero(cycleData, provider)),
                 const SizedBox(height: AppDimens.spacingLg),
                 _buildQuickActions(provider),
                 const SizedBox(height: AppDimens.spacingLg),
-                _buildCalendar(provider),
+                // 日历与上方可独立重绘，互不影响；数据变化（添加经期）时
+                // 只重绘本图层内的格子，不会波及上方状态卡片的重绘。
+                RepaintBoundary(child: _buildCalendar(provider)),
               ],
             ),
           );
@@ -124,15 +168,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─── Status hero ──────────────────────────────────────────────────
-  Widget _buildStatusHero(CycleData? cycleData) {
+  Widget _buildStatusHero(CycleData? cycleData, PeriodProvider provider) {
     if (cycleData == null) {
       return _buildEmptyHero();
     }
 
     final daysUntil = cycleData.daysUntilPredicted;
     final currentDay = cycleData.currentCycleDay;
-    final provider = context.read<PeriodProvider>();
-    final hasOngoing = provider.records.any((r) => r.isOngoing);
+    final hasOngoing = provider.hasOngoingPeriod;
 
     final String caption;
     final String headline;
@@ -170,7 +213,12 @@ class _HomeScreenState extends State<HomeScreen> {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppDimens.radiusXl),
-        boxShadow: AppShadows.high,
+        // 性能说明：这里刻意不放 boxShadow。此前用 blur 28 的大投影制造悬浮感，
+        // 但该卡片常驻在上下可滚动的首屏中——RepaintBoundary 只能避免重录，
+        // 滚动时图层的每一帧仍会重放一次高斯模糊栅格化（这是「添加经期后，
+        // 状态卡变为渐变版，滑动开始掉帧」的直接根因）。去掉后状态卡依靠渐变
+        // 本身与画布底色形成层次，与整套 A1 扁平卡片语言保持一致，且渲染成本
+        // 从「每帧 blur」降为「每帧一个线性渐变填充」。
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,7 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ─── Quick actions ────────────────────────────────────────────────
   Widget _buildQuickActions(PeriodProvider provider) {
-    final hasOngoing = provider.records.any((r) => r.isOngoing);
+    final hasOngoing = provider.hasOngoingPeriod;
 
     return Row(
       children: [
@@ -518,40 +566,83 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
 
+    // 用固定行数的 Column/Row 代替 shrinkWrap 的 GridView。
+    // shrinkWrap 的 GridView 每次布局都要测量全部子项，无法懒加载；
+    // 这里格子数量固定（最多 42 个），直接展开成行列更省。
+    final rows = totalCells ~/ 7;
+
+    // 主题相关的三个文字色在整个网格构建中只查询一次，再传给 42 个格子，
+    // 避免每格重复做 Theme/ThemeExtension 查找（一次网格构建少 80+ 次）。
+    final themeColors = context.themeColors;
+    final palette = _DayCellPalette(
+      onSurface: themeColors.onSurface,
+      onSurfaceSecondary: themeColors.onSurfaceSecondary,
+      onSurfaceTertiary: themeColors.onSurfaceTertiary,
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingMd),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 7,
-          childAspectRatio: 1.0,
-        ),
-        itemCount: totalCells,
-        itemBuilder: (context, index) {
-          final dayOffset = index - prevMonthDays;
-          if (dayOffset < 0 || dayOffset >= daysInMonth) {
-            return const SizedBox.shrink();
-          }
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List<Widget>.generate(rows, (row) {
+          return Row(
+            children: List<Widget>.generate(7, (col) {
+              final index = row * 7 + col;
+              final dayOffset = index - prevMonthDays;
+              if (dayOffset < 0 || dayOffset >= daysInMonth) {
+                return const Expanded(child: SizedBox.shrink());
+              }
 
-          final day =
-              DateTime(_focusedDay.year, _focusedDay.month, dayOffset + 1);
-          final dayType = provider.getDayType(day);
-          final isSelected = _isSameDay(_selectedDay, day);
-          final isToday = _isSameDay(now, day);
+              final day =
+                  DateTime(_focusedDay.year, _focusedDay.month, dayOffset + 1);
+              final dayType = provider.getDayType(day);
+              final isToday = _isSameDay(now, day);
 
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                _selectedDay = day;
-              });
-            },
-            child: _buildDayCell(day, dayType, isSelected, isToday, todayStart),
+              return Expanded(
+                child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: ValueListenableBuilder<int>(
+                    // 只在选中日期变化时重建格子，而不是整个页面
+                    valueListenable: _cellNotifierFor(_dayKey(day)),
+                    builder: (context, _, __) {
+                      final isSelected = _isSameDay(_selectedDay, day);
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _selectDay(day),
+                        child: _buildDayCell(
+                          day,
+                          dayType,
+                          isSelected,
+                          isToday,
+                          todayStart,
+                          palette,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            }),
           );
-        },
+        }),
       ),
     );
+  }
+
+  /// Integer day key: year * 10000 + month * 100 + day.
+  static int _dayKey(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
+
+  ValueNotifier<int> _cellNotifierFor(int key) =>
+      _dayCellNotifiers.putIfAbsent(key, () => ValueNotifier<int>(0));
+
+  void _selectDay(DateTime day) {
+    final previous = _selectedDay;
+    _selectedDay = day;
+    // 只刷新旧选中项和新选中项这两个格子
+    if (previous != null) {
+      _dayCellNotifiers[_dayKey(previous)]?.value++;
+    }
+    _dayCellNotifiers[_dayKey(day)]?.value++;
   }
 
   bool _isSameDay(DateTime? a, DateTime? b) {
@@ -565,6 +656,7 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isSelected,
     bool isToday,
     DateTime todayStart,
+    _DayCellPalette palette,
   ) {
     final isPast = DateTime(day.year, day.month, day.day).isBefore(todayStart);
 
@@ -593,19 +685,17 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 'safe':
         fill = AppColors.safeDay.withValues(alpha: 0.55);
-        textColor = context.themeColors.onSurfaceSecondary;
+        textColor = palette.onSurfaceSecondary;
         break;
       default:
         textColor = isToday
             ? AppColors.brandPrimary
-            : (isPast
-                ? context.themeColors.onSurface
-                : context.themeColors.onSurfaceTertiary);
+            : (isPast ? palette.onSurface : palette.onSurfaceTertiary);
         fontWeight = isToday ? FontWeight.w700 : FontWeight.w400;
     }
 
     final cell = Container(
-      margin: const EdgeInsets.all(3),
+      margin: _kDayCellMargin,
       decoration: BoxDecoration(
         color: fill,
         borderRadius: BorderRadius.circular(AppDimens.radiusMd),
@@ -624,7 +714,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isToday || isSelected) {
       return Container(
-        margin: const EdgeInsets.all(2),
+        margin: _kDaySelectedMargin,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppDimens.radiusLg),
           border: Border.all(
@@ -691,4 +781,20 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+/// 单次网格构建解析出的主题色快照。
+///
+/// 42 个日历格子共用同一份，避免每个格子构建时各自执行
+/// `Theme.of(context).extension<AppThemeColors>()` 查找。
+class _DayCellPalette {
+  const _DayCellPalette({
+    required this.onSurface,
+    required this.onSurfaceSecondary,
+    required this.onSurfaceTertiary,
+  });
+
+  final Color onSurface;
+  final Color onSurfaceSecondary;
+  final Color onSurfaceTertiary;
 }

@@ -36,8 +36,9 @@ class _RecordScreenState extends State<RecordScreen> {
         title: const Text(AppStrings.record),
         actions: [
           IconButton.filled(
-            onPressed: () =>
-                _showAddRecordDialog(context, context.read<PeriodProvider>()),
+              onPressed: () => _showAddRecordDialog(
+                    context.read<PeriodProvider>(),
+                  ),
             icon: const Icon(Icons.add_rounded, size: 20),
             style: IconButton.styleFrom(
               backgroundColor: AppColors.brandPrimary,
@@ -48,33 +49,36 @@ class _RecordScreenState extends State<RecordScreen> {
           const SizedBox(width: AppDimens.spacingXl),
         ],
       ),
-      body: Consumer<PeriodProvider>(
-        builder: (context, provider, child) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimens.spacingXl,
-              AppDimens.spacingSm,
-              AppDimens.spacingXl,
-              AppDimens.spacing2xl,
+      // 把 provider 监听拆到真正依赖数据的两个区块（今日条 / 历史列表），
+      // 「添加卡片」只在本地的 setState 下重建，添加经期触发的 notifyListeners
+      // 不再连带重建它，减少一次无关的子树重建。
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppDimens.spacingXl,
+          AppDimens.spacingSm,
+          AppDimens.spacingXl,
+          AppDimens.spacing2xl,
+        ),
+        child: Column(
+          children: [
+            Consumer<PeriodProvider>(
+              builder: (context, provider, _) => _buildTodayStrip(provider),
             ),
-            child: Column(
-              children: [
-                _buildTodayStrip(provider),
-                const SizedBox(height: AppDimens.spacingLg),
-                _buildAddCard(provider),
-                const SizedBox(height: AppDimens.spacingLg),
-                _buildHistoryCard(provider),
-              ],
+            const SizedBox(height: AppDimens.spacingLg),
+            _buildAddCard(),
+            const SizedBox(height: AppDimens.spacingLg),
+            Consumer<PeriodProvider>(
+              builder: (context, provider, _) => _buildHistoryCard(provider),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
 
   // ─── Today strip ──────────────────────────────────────────────────
   Widget _buildTodayStrip(PeriodProvider provider) {
-    final hasOngoing = provider.records.any((r) => r.isOngoing);
+    final hasOngoing = provider.hasOngoingPeriod;
     final cycleData = provider.cycleData;
 
     if (hasOngoing) {
@@ -188,7 +192,9 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   // ─── Add card ─────────────────────────────────────────────────────
-  Widget _buildAddCard(PeriodProvider provider) {
+  /// 添加卡片只依赖本地状态（_startDate / _endDate），不需要监听 provider。
+  /// 仅在回调里通过 [context.read] 取 provider，避免其在数据变化时随 Consumer 重建。
+  Widget _buildAddCard() {
     return Container(
       padding: const EdgeInsets.all(AppDimens.spacingLg),
       decoration: BoxDecoration(
@@ -210,7 +216,8 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
               ),
               TextButton.icon(
-                onPressed: () => _showAddRecordDialog(context, provider),
+                onPressed: () =>
+                    _showAddRecordDialog(context.read<PeriodProvider>()),
                 icon: const Icon(Icons.calendar_month_rounded, size: 16),
                 label: const Text('多选日历'),
                 style: TextButton.styleFrom(
@@ -237,7 +244,7 @@ class _RecordScreenState extends State<RecordScreen> {
             width: double.infinity,
             height: 46,
             child: ElevatedButton(
-              onPressed: () => _saveRange(provider),
+              onPressed: () => _saveRange(context.read<PeriodProvider>()),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: AppColors.white,
@@ -351,7 +358,7 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  void _showAddRecordDialog(BuildContext context, PeriodProvider provider) {
+  Future<void> _showAddRecordDialog(PeriodProvider provider) async {
     final cycleData = provider.cycleData;
     final defaultDays = cycleData != null && cycleData.averagePeriodLength > 0
         ? cycleData.averagePeriodLength.round()
@@ -359,14 +366,43 @@ class _RecordScreenState extends State<RecordScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    Navigator.push(
+    // 默认带出起始日：优先「上次记录的下一天」以顺延记录；若上次记录结束已较久
+    // （顺延日早于今日）则按今日新开，避免把很久以前的日期误当默认。
+    DateTime defaultStart = today;
+    final recs = provider.records;
+    if (recs.isNotEmpty) {
+      final latest = recs.first; // records 按 start_date DESC，首条即最近一次
+      if (!latest.isOngoing) {
+        final end = latest.endDateTime!;
+        final next = DateTime(end.year, end.month, end.day + 1);
+        if (!next.isBefore(today)) defaultStart = next;
+      }
+    }
+
+    final ranges = await Navigator.push<List<(DateTime, DateTime)>>(
       context,
       MaterialPageRoute(
         builder: (ctx) => AddRecordCalendarPage(
           provider: provider,
           defaultDays: defaultDays,
           today: today,
+          defaultStart: defaultStart,
         ),
+      ),
+    );
+
+    if (!mounted || ranges == null || ranges.isEmpty) return;
+
+    // 页面已经关闭，这里在后台落库并用 SnackBar 反馈结果
+    final success = await provider.saveMultipleRecords(ranges);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? '已保存 ${ranges.length} 条记录' : '保存失败',
+        ),
+        backgroundColor: success ? AppColors.success : AppColors.error,
       ),
     );
   }
@@ -600,11 +636,16 @@ class AddRecordCalendarPage extends StatefulWidget {
   final int defaultDays;
   final DateTime today;
 
+  /// 打开时默认带出的起始日。不传则取 [today]。
+  /// 用于「默认带出今日 / 上次记录的下一天」实现一键保存。
+  final DateTime? defaultStart;
+
   const AddRecordCalendarPage({
     super.key,
     required this.provider,
     required this.defaultDays,
     required this.today,
+    this.defaultStart,
   });
 
   @override
@@ -615,7 +656,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   static const int _totalMonths = 72;
   static const int _monthsBefore = 36;
 
-  late final ScrollController _scrollController;
+  late ScrollController _scrollController;
   late Set<int> _selectedDays;
   late final Set<int> _existingDays;
   String? _conflictMsg;
@@ -623,8 +664,20 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   bool _didInitialScroll = false;
   double _cellWidth = 49.0;
 
+  /// 打开时默认带出的起始日（今日或上次记录顺延），用于一键保存。
+  late final DateTime _defaultStartDay;
+
   // Precomputed month metadata cache — avoids per-frame DateTime/string allocations
   late final Map<int, _MonthInfo> _monthCache;
+
+  // 说明：日历曾经给每个可点格子挂 ValueNotifier + ValueListenableBuilder 做
+  // 「点击只重建单个格子」的局部刷新。当时列表 keep-alive 开启，整页 setState
+  // 会让上千个已滑过的格子全部重建，才需要这套机制。
+  // 现在月份列表已关闭 keep-alive（addAutomaticKeepAlives: false），同一时刻
+  // 只有视口附近的几个月份存活（约 2~3 个月、~150 个格子）。整页 setState 的
+  // 重建量已被严格限界且远小于旧方案，因此移除逐格 Notifier：既消除无限滚动时
+  // _cellNotifiers 无界累积（数千个 ValueNotifier 常驻）与滚动建格时的对象分配，
+  // 也让代码回到最简路径。底部面板随整页重建自然更新，无需额外通知。
 
   // Integer key: year*10000 + month*100 + day — avoids string allocation
   static int _dayKeyInt(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
@@ -637,27 +690,30 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     super.initState();
     _selectedDays = {};
     _existingDays = _buildExistingDaysSet();
-    _scrollController = ScrollController();
     _monthCache = _buildMonthCache();
+    // 打开即预选「默认起始日」起 defaultDays 天（默认今日，可由上次记录顺延），
+    // 用户无需先点选即可一键「确定」完成记录；若默认日落在已有记录内（进行中经期）
+    // 则跳过，待用户点选其它日期。底部面板同步即时显示「已选 N 天」。
+    _defaultStartDay = widget.defaultStart ?? widget.today;
+    _autoSelectFrom(_defaultStartDay);
+    // ScrollController 延迟到 didChangeDependencies 创建：初始滚动偏移依赖
+    // MediaQuery 屏宽（initState 时 context 尚未就绪），在那里算出精确偏移后用
+    // 声明式 initialScrollOffset 定位，避免 addPostFrameCallback+jumpTo 在路由
+    // 进出场动画期间反复调度帧（表现为测试挂起 / 真机卡顿、掉帧、耗电）。
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _cellWidth = (MediaQuery.of(context).size.width - AppDimens.spacingSm * 2) / 7;
+    // 只创建一次：用真实的屏宽算出当前月（_monthsBefore 之前那个月）起始偏移，
+    // 声明式地让 ListView 首帧就定位到当前月，无需 post-frame 回调。
     if (!_didInitialScroll) {
       _didInitialScroll = true;
       _exactInitialOffset = _computeExactOffset();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients) return;
-        _scrollController.jumpTo(
-          _exactInitialOffset!.clamp(
-            0.0,
-            _scrollController.position.maxScrollExtent,
-          ),
-        );
-        _retryEnsureVisible();
-      });
+      _scrollController = ScrollController(
+        initialScrollOffset: _exactInitialOffset ?? 0.0,
+      );
     }
   }
 
@@ -678,49 +734,20 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     super.dispose();
   }
 
-  void _retryEnsureVisible() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _currentMonthKey.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: Duration.zero,
-          alignment: 0.0,
-        );
-      } else {
-        _retryEnsureVisible();
-      }
-    });
-  }
-
+  /// 回到「当前月」：直接按预计算出的精确偏移量滚动（当前月的起始位置）。
+  /// 不依赖 GlobalKey 取 context —— 在 ListView.builder 的 item 上挂 GlobalKey
+  /// 会与 [findChildIndexCallback] 冲突，路由出栈时引发无限重建、pumpAndSettle
+  /// 永不收敛（表现为添加经期后返回卡死）。
   void _scrollToCurrentMonth() {
-    final ctx = _currentMonthKey.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        alignment: 0.0,
-      );
-    } else if (_scrollController.hasClients && _exactInitialOffset != null) {
-      _scrollController.jumpTo(
-        _exactInitialOffset!.clamp(
-          0.0,
-          _scrollController.position.maxScrollExtent,
-        ),
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ctx2 = _currentMonthKey.currentContext;
-        if (ctx2 != null) {
-          Scrollable.ensureVisible(
-            ctx2,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            alignment: 0.0,
-          );
-        }
-      });
-    }
+    if (!_scrollController.hasClients || _exactInitialOffset == null) return;
+    _scrollController.animateTo(
+      _exactInitialOffset!.clamp(
+        0.0,
+        _scrollController.position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Set<int> _buildExistingDaysSet() {
@@ -779,16 +806,17 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     return cache;
   }
 
-  void _onDayTap(DateTime day) {
-    final key = _dayKeyInt(day);
+  void _onDayTap(int key, DateTime day) {
     if (_existingDays.contains(key)) return;
 
-    if (_selectedDays.isEmpty) {
-      _autoSelectFrom(day);
-      return;
-    }
-
+    // 整页重建：由于月份列表关闭了 keep-alive，同一时刻存活的月份只有
+    // 视口附近的 2~3 个（~150 个格子），重建量有界且远小于旧逐格 Notifier
+    // 方案的无界累积。底部面板的选中摘要随本次重建一起刷新。
     setState(() {
+      if (_selectedDays.isEmpty) {
+        _autoSelectFrom(day);
+        return;
+      }
       if (_selectedDays.contains(key)) {
         _selectedDays.remove(key);
       } else {
@@ -798,6 +826,8 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     });
   }
 
+  /// 从 [startDay] 起顺延选中 [widget.defaultDays] 天（遇到已有记录即停）。
+  /// 仅供 [initState] 或 [_onDayTap]（其内部已包 setState）调用，自身不触发重建。
   void _autoSelectFrom(DateTime startDay) {
     final days = widget.defaultDays;
     final newSelection = <int>{};
@@ -809,10 +839,8 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
       newSelection.add(key);
     }
 
-    setState(() {
-      _selectedDays = newSelection;
-      _validateConflict();
-    });
+    _selectedDays = newSelection;
+    _validateConflict();
   }
 
   void _validateConflict() {
@@ -987,36 +1015,22 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     fontSize: 16,
   );
 
-  final GlobalKey _currentMonthKey = GlobalKey();
-
   Widget _buildMonthList() {
     return ListView.builder(
       controller: _scrollController,
       itemCount: _totalMonths,
-      // Keep built items alive to avoid gesture recognizer re-registration
-      addAutomaticKeepAlives: true,
+      // 不再 keepAlive：保活会让所有滑过的月份都常驻并参与 cell 重建，
+      // 点击一天时反而要重建上千个 cell。改用下面的局部刷新来保证流畅度。
+      addAutomaticKeepAlives: false,
       // Pre-render nearby months for smoother scrolling
       scrollCacheExtent: const ScrollCacheExtent.pixels(800),
       itemBuilder: (context, index) {
         final info = _monthCache[index]!;
-        final isCurrentMonth = info.year == widget.today.year &&
-            info.month == widget.today.month;
         final monthKey = ValueKey('${info.year}-${info.month}');
         return KeyedSubtree(
-          key: isCurrentMonth ? _currentMonthKey : monthKey,
+          key: monthKey,
           child: _buildMonthView(info),
         );
-      },
-      findChildIndexCallback: (key) {
-        if (key is ValueKey<String>) {
-          final parts = key.value.split('-');
-          final y = int.parse(parts[0]);
-          final m = int.parse(parts[1]);
-          final offset = (y - widget.today.year) * 12 + m - widget.today.month;
-          final index = offset + _monthsBefore;
-          if (index >= 0 && index < _totalMonths) return index;
-        }
-        return null;
       },
     );
   }
@@ -1061,31 +1075,19 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
             final dayNum = dayOffset + 1;
             final key = year * 10000 + month * 100 + dayNum;
             final isExisting = _existingDays.contains(key);
-            final isSelected = _selectedDays.contains(key);
             final isToday = isTodayYear && isTodayMonth && dayNum == todayDay;
             final isPast = !isToday && key < todayKey;
             final isFuture = !isToday && !isPast;
 
-            final cell = _buildDayCell(
-              dayNum,
-              isExisting,
-              isSelected && !isFuture,
-              isSelected && isFuture,
-              isToday,
-              isPast,
-            );
-
-            // Skip GestureDetector for non-interactive existing-day cells
-            if (isExisting) {
-              return Expanded(child: cell);
-            }
-
-            final day = DateTime(year, month, dayNum);
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => _onDayTap(day),
-                child: cell,
-              ),
+            return _buildCellSlot(
+              key: key,
+              dayNum: dayNum,
+              isExisting: isExisting,
+              isFuture: isFuture,
+              isToday: isToday,
+              isPast: isPast,
+              year: year,
+              month: month,
             );
           }),
         ),
@@ -1100,6 +1102,44 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
         ...rowWidgets,
         const SizedBox(height: AppDimens.spacingSm),
       ],
+    );
+  }
+
+  /// 构建一个日历格子。
+  ///
+  /// 选中状态直接读取 [_selectedDays]：月份列表已关闭 keep-alive，整页 setState
+  /// 只重建存活的 2~3 个月份，无需 per-cell Notifier（见类顶部说明）。
+  Widget _buildCellSlot({
+    required int key,
+    required int dayNum,
+    required bool isExisting,
+    required bool isFuture,
+    required bool isToday,
+    required bool isPast,
+    required int year,
+    required int month,
+  }) {
+    final isSelected = _selectedDays.contains(key);
+    final cell = _buildDayCell(
+      dayNum,
+      isExisting,
+      isSelected && !isFuture,
+      isSelected && isFuture,
+      isToday,
+      isPast,
+    );
+
+    // 已有记录的格子不可点击，省掉手势识别器的注册开销
+    if (isExisting) {
+      return Expanded(child: cell);
+    }
+
+    return Expanded(
+      child: GestureDetector(
+        // DateTime 只在真正点击时才构造，滚动时不产生分配
+        onTap: () => _onDayTap(key, DateTime(year, month, dayNum)),
+        child: cell,
+      ),
     );
   }
 
@@ -1171,6 +1211,11 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   }
 
   Widget _buildBottomPanel() {
+    // 面板随整页重建自然刷新（选中变化走 _onDayTap 里的 setState）。
+    return _buildBottomPanelContent();
+  }
+
+  Widget _buildBottomPanelContent() {
     final canSave = _selectedDays.isNotEmpty && _conflictMsg == null;
 
     return SafeArea(
@@ -1235,26 +1280,11 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: canSave
-                        ? () async {
+                        ? () {
+                            // 只做取数 + 关闭页面，DB 写入交给 RecordScreen 在后台执行，
+                            // 这样点击「确定」后页面立刻返回，不会有等待感。
                             final ranges = _buildRanges();
-                            final success =
-                                await widget.provider.saveMultipleRecords(ranges);
-                            if (success && mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('已保存 ${ranges.length} 条记录'),
-                                  backgroundColor: AppColors.success,
-                                ),
-                              );
-                            } else if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('保存失败'),
-                                  backgroundColor: AppColors.error,
-                                ),
-                              );
-                            }
+                            Navigator.pop(context, ranges);
                           }
                         : null,
                     child: const Text(AppStrings.confirm),

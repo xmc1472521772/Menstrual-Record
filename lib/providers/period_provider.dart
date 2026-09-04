@@ -33,41 +33,119 @@ class PeriodProvider with ChangeNotifier {
   bool _isLoading = false;
   String _algorithm = 'simple';
 
-  // 日类型缓存
-  final Map<String, String> _dayTypeCache = {};
+  /// 日类型缓存。key 为整数 `yyyyMMdd`（见 [_dayKey]），
+  /// 相比字符串 key 可避免每次日历构建时 40+ 次字符串拼接与哈希。
+  final Map<int, String> _dayTypeCache = {};
+
+  /// 经期日索引：`yyyyMMdd -> true`。
+  /// 让 [isPeriodDay] 从 O(记录数) 降为 O(1)，日历构建时收益明显。
+  final Set<int> _periodDayKeys = <int>{};
+
+  /// 单调递增的数据版本号。UI 可用 `Selector<PeriodProvider, int>` 监听它，
+  /// 从而只在实际数据变化时重建，而不被其它 notifyListeners 波及。
+  int _dataVersion = 0;
+
+  /// 上一次真正下发到通知插件的预测日期。
+  /// `zonedSchedule` 是跨进程调用（十毫秒级），预测日期未变时不必重复调度。
+  DateTime? _lastScheduledPrediction;
+
+  /// 是否存在进行中的经期，由 [_recalculate] 维护。
+  bool _hasOngoing = false;
 
   List<PeriodRecord> get records => _records;
   CycleData? get cycleData => _cycleData;
   bool get isLoading => _isLoading;
+  int get dataVersion => _dataVersion;
+
+  /// 是否存在进行中的经期。缓存以避免 UI 每次构建都遍历一遍记录列表。
+  bool get hasOngoingPeriod => _hasOngoing;
+
+  /// Integer day key: year * 10000 + month * 100 + day (e.g. 20260105).
+  static int _dayKey(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
 
   Future<void> loadRecords() async {
     _isLoading = true;
-    _clearDayTypeCache();
-    notifyListeners();
 
     try {
       _algorithm = await _settingsDao.getPredictionAlgorithm();
       _records = await _dao.getAll();
-      _cycleData = PredictionService.calculateCycleData(
-        _records,
-        algorithm: _algorithm,
-      );
+      _recalculate();
       if (_autoEndEnabled) {
         await _autoEndExpiredPeriods();
       }
-      await _scheduleReminderIfNeeded();
     } catch (e) {
       debugPrint('Error loading records: $e');
     }
 
     _isLoading = false;
-    _clearDayTypeCache();
     notifyListeners();
+
+    // 通知调度涉及 platform channel，刻意不 await —— 它不应阻塞 UI 刷新。
+    _scheduleReminderIfNeeded();
+  }
+
+  /// 重算派生数据（周期预测 + 经期日索引 + 日类型缓存）。
+  void _recalculate() {
+    _hasOngoing = _records.any((r) => r.isOngoing);
+    _cycleData = PredictionService.calculateCycleData(
+      _records,
+      algorithm: _algorithm,
+    );
+    _clearDayTypeCache();
+    _rebuildPeriodDayIndex();
+    _dataVersion++;
+  }
+
+  /// 写操作后的轻量提交路径。
+  ///
+  /// 与 [loadRecords] 的区别：不再重新读取整张表、不再重复读取设置项、
+  /// 也不再等待通知插件返回。一次写操作的成本因此只剩「一次 DB 写入 +
+  /// 一次内存重算 + 一次 UI 通知」。
+  void _commitMutation() {
+    _recalculate();
+    notifyListeners();
+    _scheduleReminderIfNeeded();
+  }
+
+  /// 按 `start_date DESC` 重新排序，保持与 [PeriodDao.getAll] 一致的顺序。
+  void _sortRecords() {
+    _records.sort((a, b) => b.startDate.compareTo(a.startDate));
+  }
+
+  void _rebuildPeriodDayIndex() {
+    _periodDayKeys.clear();
+    if (_records.isEmpty) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    for (final record in _records) {
+      final start = record.startDateTime;
+      var cur = DateTime(start.year, start.month, start.day);
+
+      DateTime end;
+      if (record.isOngoing) {
+        end = today;
+      } else {
+        final e = record.endDateTime;
+        end = e == null ? cur : DateTime(e.year, e.month, e.day);
+      }
+      if (end.isBefore(cur)) continue;
+
+      // 经期通常 3~8 天，逐天展开的成本可忽略
+      while (!cur.isAfter(end)) {
+        _periodDayKeys.add(_dayKey(cur));
+        cur = DateTime(cur.year, cur.month, cur.day + 1);
+      }
+    }
   }
 
   /// Ends any ongoing period that exceeds the user's configured period length.
   /// Does NOT reload records — the caller ([loadRecords]) handles that.
   Future<void> _autoEndExpiredPeriods() async {
+    // 没有任何 ongoing 记录时直接返回，省掉一次设置表读取
+    if (!_records.any((r) => r.isOngoing)) return;
+
     final settingsPeriodLength = await _settingsDao.getPeriodLength();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -89,6 +167,9 @@ class PeriodProvider with ChangeNotifier {
           periodLength: daysPassed,
         );
         await _dao.update(updated);
+        // 同步内存，避免下面可能的二次全表读取
+        final index = _records.indexOf(record);
+        if (index >= 0) _records[index] = updated;
         changed = true;
       }
     }
@@ -96,24 +177,34 @@ class PeriodProvider with ChangeNotifier {
     // Only reload if we actually changed something
     if (changed) {
       _records = await _dao.getAll();
-      _cycleData = PredictionService.calculateCycleData(
-        _records,
-        algorithm: _algorithm,
-      );
+      _recalculate();
     }
   }
 
   /// Schedules a notification reminder if a prediction is available.
+  ///
+  /// Safe to call without `await`: all failures are swallowed internally.
   Future<void> _scheduleReminderIfNeeded() async {
     if (!_scheduleReminders) return;
-    if (_cycleData?.predictedNextPeriod == null) return;
+    final predicted = _cycleData?.predictedNextPeriod;
+    if (predicted == null) return;
+
+    // 预测日期未变化则跳过重复调度（zonedSchedule 需要跨进程调用）
+    final last = _lastScheduledPrediction;
+    if (last != null &&
+        last.year == predicted.year &&
+        last.month == predicted.month &&
+        last.day == predicted.day) {
+      return;
+    }
+    _lastScheduledPrediction = predicted;
 
     try {
       final reminderDays = await _settingsDao.getReminderDays();
       final reminderHour = await _settingsDao.getReminderHour();
 
       await NotificationService().schedulePeriodReminder(
-        predictedDate: _cycleData!.predictedNextPeriod!,
+        predictedDate: predicted,
         reminderDays: reminderDays,
         reminderHour: reminderHour,
       );
@@ -133,13 +224,9 @@ class PeriodProvider with ChangeNotifier {
   /// ```
   Future<void> setAlgorithm(String algorithm) async {
     _algorithm = algorithm;
-    _cycleData = PredictionService.calculateCycleData(
-      _records,
-      algorithm: _algorithm,
-    );
-    _clearDayTypeCache();
-    await _scheduleReminderIfNeeded();
+    _recalculate();
     notifyListeners();
+    _scheduleReminderIfNeeded();
   }
 
   Future<bool> startPeriod(DateTime startDate) async {
@@ -165,9 +252,12 @@ class PeriodProvider with ChangeNotifier {
       }
 
       final record = PeriodRecord(startDate: startStr);
+      final id = await _dao.insert(record);
 
-      await _dao.insert(record);
-      await loadRecords();
+      // 直接更新内存，避免一次全表读取
+      _records = [..._records, record.copyWith(id: id)];
+      _sortRecords();
+      _commitMutation();
       return true;
     } catch (e) {
       debugPrint('Error starting period: $e');
@@ -191,7 +281,10 @@ class PeriodProvider with ChangeNotifier {
       );
 
       await _dao.update(updated);
-      await loadRecords();
+      final index = _records.indexOf(record);
+      if (index >= 0) _records[index] = updated;
+      _sortRecords();
+      _commitMutation();
       return true;
     } catch (e) {
       debugPrint('Error ending period: $e');
@@ -206,8 +299,10 @@ class PeriodProvider with ChangeNotifier {
         endDate: endDate.toIso8601String().split('T')[0],
         periodLength: endDate.difference(startDate).inDays + 1,
       );
-      await _dao.insert(record);
-      await loadRecords();
+      final id = await _dao.insert(record);
+      _records = [..._records, record.copyWith(id: id)];
+      _sortRecords();
+      _commitMutation();
       return true;
     } catch (e) {
       debugPrint('Error saving period record: $e');
@@ -216,6 +311,8 @@ class PeriodProvider with ChangeNotifier {
   }
 
   Future<bool> saveMultipleRecords(List<(DateTime, DateTime)> ranges) async {
+    if (ranges.isEmpty) return true;
+
     try {
       final records = ranges.map((range) {
         final (start, end) = range;
@@ -228,7 +325,9 @@ class PeriodProvider with ChangeNotifier {
 
       // Use batch insert for efficiency
       await _dao.insertAll(records);
-      await loadRecords();
+      _records = [..._records, ...records];
+      _sortRecords();
+      _commitMutation();
       return true;
     } catch (e) {
       debugPrint('Error saving multiple records: $e');
@@ -245,7 +344,7 @@ class PeriodProvider with ChangeNotifier {
     return false;
   }
 
-  /// Internal helper used by both [isDateInAnyRecord] and [isPeriodDay].
+  /// Internal helper used by both [isDateInAnyRecord] and [getRecordForDate].
   bool _isDateInRecord(DateTime date, PeriodRecord record) {
     if (record.isOngoing) {
       final now = DateTime.now();
@@ -266,7 +365,14 @@ class PeriodProvider with ChangeNotifier {
   Future<bool> updateRecord(PeriodRecord record) async {
     try {
       await _dao.update(record);
-      await loadRecords();
+      final index = _records.indexWhere((r) => r.id == record.id);
+      if (index >= 0) {
+        _records[index] = record;
+      } else {
+        _records = [..._records, record];
+      }
+      _sortRecords();
+      _commitMutation();
       return true;
     } catch (e) {
       debugPrint('Error updating record: $e');
@@ -277,7 +383,8 @@ class PeriodProvider with ChangeNotifier {
   Future<void> deleteRecord(int id) async {
     try {
       await _dao.delete(id);
-      await loadRecords();
+      _records = _records.where((r) => r.id != id).toList();
+      _commitMutation();
     } catch (e) {
       debugPrint('Error deleting record: $e');
     }
@@ -302,6 +409,7 @@ class PeriodProvider with ChangeNotifier {
         await _dao.insertAll(records);
       }
 
+      // 导入会整体改写数据集，走完整刷新
       await loadRecords();
       return true;
     } catch (e) {
@@ -310,12 +418,8 @@ class PeriodProvider with ChangeNotifier {
     }
   }
 
-  bool isPeriodDay(DateTime date) {
-    for (final record in _records) {
-      if (_isDateInRecord(date, record)) return true;
-    }
-    return false;
-  }
+  /// O(1) 查询 —— 依赖 [_periodDayKeys] 索引。
+  bool isPeriodDay(DateTime date) => _periodDayKeys.contains(_dayKey(date));
 
   bool isPredictedDay(DateTime date) {
     if (_cycleData?.predictedNextPeriod == null) return false;
@@ -349,11 +453,10 @@ class PeriodProvider with ChangeNotifier {
   }
 
   String getDayType(DateTime date) {
-    final cacheKey = '${date.year}-${date.month}-${date.day}';
+    final key = _dayKey(date);
 
-    if (_dayTypeCache.containsKey(cacheKey)) {
-      return _dayTypeCache[cacheKey]!;
-    }
+    final cached = _dayTypeCache[key];
+    if (cached != null) return cached;
 
     final bool period = isPeriodDay(date);
     final bool predicted = !period && isPredictedDay(date);
@@ -376,7 +479,7 @@ class PeriodProvider with ChangeNotifier {
       dayType = 'normal';
     }
 
-    _dayTypeCache[cacheKey] = dayType;
+    _dayTypeCache[key] = dayType;
     return dayType;
   }
 
