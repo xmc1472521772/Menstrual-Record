@@ -133,6 +133,48 @@ void main() {
       expect(find.textContaining('已选 5 天'), findsOneWidget);
     });
 
+    testWidgets('点击非相邻日期：替换默认预选并自动延展 X 天', (tester) async {
+      await buildCalendar(tester);
+
+      // 默认预选今日(6/15)起 5 天；点击 3 号（非相邻）应替换为 6/03 起 5 天
+      await tester.tap(_dayInCurrentMonth(tester, 3, DateTime(2026, 6, 15)));
+      await tester.pump();
+      expect(find.textContaining('已选 5 天：06/03-06/07'), findsOneWidget);
+    });
+
+    testWidgets('编辑过后点击非相邻日期：追加为新区间，支持一次多段补录',
+        (tester) async {
+      await buildCalendar(tester);
+
+      // 第一次点击 3 号：仍是默认预选 -> 替换为 6/03-06/07
+      await tester.tap(_dayInCurrentMonth(tester, 3, DateTime(2026, 6, 15)));
+      await tester.pump();
+      expect(find.textContaining('已选 5 天：06/03-06/07'), findsOneWidget);
+
+      // 第二次点击 20 号（非相邻）：已编辑过 -> 追加为新区间，共两段 10 天
+      await tester.tap(_dayInCurrentMonth(tester, 20, DateTime(2026, 6, 15)));
+      await tester.pump();
+      expect(
+        find.textContaining('已选 10 天：06/03-06/07、06/20-06/24'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('自动延展遇到已有记录即停', (tester) async {
+      // 预置一条 6/10-6/12 的已有记录
+      await tester.runAsync(() async {
+        await provider
+            .savePeriodRecord(DateTime(2026, 6, 10), DateTime(2026, 6, 12));
+      });
+
+      await buildCalendar(tester);
+
+      // 点击 8 号：从 8 号起应延展 5 天，但 10-12 已有记录 -> 只选中 8、9 两天
+      await tester.tap(_dayInCurrentMonth(tester, 8, DateTime(2026, 6, 15)));
+      await tester.pump();
+      expect(find.textContaining('已选 2 天：06/08-06/09'), findsOneWidget);
+    });
+
     testWidgets('确定后返回选中区间，且写入数据库', (tester) async {
       final ranges = <(DateTime, DateTime)>[];
 

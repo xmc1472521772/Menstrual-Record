@@ -360,9 +360,14 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _showAddRecordDialog(PeriodProvider provider) async {
     final cycleData = provider.cycleData;
-    final defaultDays = cycleData != null && cycleData.averagePeriodLength > 0
-        ? cycleData.averagePeriodLength.round()
-        : context.read<SettingsProvider>().periodLength;
+    // X 的取值：存在已结束的经期记录时取其经期天数平均值；否则取设置中的
+    // 经期天数。注意不能直接信 cycleData.averagePeriodLength —— 完全没有
+    // 已结束记录时 PredictionService 会回退到硬编码默认值 5 而非设置值。
+    final hasCompletedRecord = provider.records.any((r) => !r.isOngoing);
+    final defaultDays =
+        hasCompletedRecord && cycleData != null && cycleData.averagePeriodLength > 0
+            ? cycleData.averagePeriodLength.round()
+            : context.read<SettingsProvider>().periodLength;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -667,6 +672,11 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   /// 打开时默认带出的起始日（今日或上次记录顺延），用于一键保存。
   late final DateTime _defaultStartDay;
 
+  /// 用户是否手动编辑过选择（点选/取消过任何一天）。
+  /// 用于区分「点击新日期」时的两种语义：仍是打开时的默认预选 →
+  /// 视为改起点（替换）；已编辑过 → 视为追加一段新区间（多段补录）。
+  bool _userEditedSelection = false;
+
   // Precomputed month metadata cache — avoids per-frame DateTime/string allocations
   late final Map<int, _MonthInfo> _monthCache;
 
@@ -813,24 +823,45 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     // 视口附近的 2~3 个（~150 个格子），重建量有界且远小于旧逐格 Notifier
     // 方案的无界累积。底部面板的选中摘要随本次重建一起刷新。
     setState(() {
-      if (_selectedDays.isEmpty) {
-        _autoSelectFrom(day);
-        return;
-      }
       if (_selectedDays.contains(key)) {
+        // 已选中的天：点击移除，支持逐天微调。
         _selectedDays.remove(key);
-      } else {
+        _userEditedSelection = true;
+      } else if (_isAdjacentToSelection(key)) {
+        // 与当前选择相邻：视为在现有区间上逐天增减，只加入该天。
         _selectedDays.add(key);
+        _userEditedSelection = true;
+      } else {
+        // 全新起点（与所有已选天都不相邻，含选择为空）：从该天起自动
+        // 往后延 defaultDays 天（遇到已有记录即停）。仍是打开时的默认
+        // 预选（未编辑过）时直接替换为新起点；已编辑过则追加为新区间，
+        // 便于一次圈出多段记录、批量补录。
+        _autoSelectFrom(day, replace: !_userEditedSelection);
+        _userEditedSelection = true;
+        return;
       }
       _validateConflict();
     });
   }
 
-  /// 从 [startDay] 起顺延选中 [widget.defaultDays] 天（遇到已有记录即停）。
+  /// [key] 对应日期是否与当前选择集中的某天前后相邻。
+  /// 用 DateTime 计算相邻，避免整数 key 在跨月处（如 20260131/20260201）
+  /// 被误判为不相邻。
+  bool _isAdjacentToSelection(int key) {
+    if (_selectedDays.isEmpty) return false;
+    final day = DateTime(_keyToYear(key), _keyToMonth(key), _keyToDay(key));
+    final prevKey = _dayKeyInt(day.subtract(const Duration(days: 1)));
+    final nextKey = _dayKeyInt(day.add(const Duration(days: 1)));
+    return _selectedDays.contains(prevKey) || _selectedDays.contains(nextKey);
+  }
+
+  /// 从 [startDay] 起往后选中 [widget.defaultDays] 天（遇到已有记录即停）。
+  /// [replace] 为 true 时替换当前选择（打开页面的默认预选 / 改起点）；
+  /// 为 false 时在现有选择上追加新区间（一次会话圈出多段记录）。
   /// 仅供 [initState] 或 [_onDayTap]（其内部已包 setState）调用，自身不触发重建。
-  void _autoSelectFrom(DateTime startDay) {
+  void _autoSelectFrom(DateTime startDay, {bool replace = true}) {
     final days = widget.defaultDays;
-    final newSelection = <int>{};
+    final newSelection = replace ? <int>{} : Set<int>.of(_selectedDays);
 
     for (int i = 0; i < days; i++) {
       final d = startDay.add(Duration(days: i));
@@ -929,7 +960,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
         AppDimens.spacingSm,
       ),
       child: Text(
-        '首次点击自动选中 ${widget.defaultDays} 天，之后点击可逐天添加/移除',
+        '点击日期自动从该天起选中 ${widget.defaultDays} 天，点相邻日期可逐天增减',
         style: AppTheme.bodySmall.copyWith(
           color: context.themeColors.onSurfaceTertiary,
         ),
