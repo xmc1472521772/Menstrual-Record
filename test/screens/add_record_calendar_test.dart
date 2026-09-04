@@ -23,6 +23,30 @@ Finder _dayInCurrentMonth(WidgetTester tester, int day, DateTime today) {
 }
 
 void main() {
+  group('computeDefaultPeriodDays 取值规则', () {
+    int days(int completedCount, double avg, int setting) =>
+        computeDefaultPeriodDays(
+          completedRecordCount: completedCount,
+          averagePeriodLength: avg,
+          settingsPeriodLength: setting,
+        );
+
+    test('已完成记录不足 3 条时以设置值为准', () {
+      expect(days(0, 5.0, 8), 8);
+      expect(days(1, 5.0, 10), 10);
+      expect(days(2, 4.5, 7), 7);
+    });
+
+    test('已完成记录达到 3 条时取平均值', () {
+      expect(days(3, 6.4, 10), 6);
+      expect(days(5, 5.5, 2), 6);
+    });
+
+    test('平均值异常（<=0）时回落到设置值', () {
+      expect(days(3, 0, 9), 9);
+    });
+  });
+
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
     sqfliteFfiInit();

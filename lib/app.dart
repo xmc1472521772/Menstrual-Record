@@ -17,12 +17,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => PeriodProvider()..loadRecords()),
-        ChangeNotifierProvider(create: (_) => SettingsProvider()..loadSettings()),
-      ],
-      child: MaterialApp(
+  return MultiProvider(
+    // lazy: false —— 在应用启动（splash 期间）就创建并开始加载，避免用户
+    // 直达"记录"等页面时设置/记录数据尚未加载完成的竞态。
+    providers: [
+      ChangeNotifierProvider(
+          lazy: false, create: (_) => PeriodProvider()..loadRecords()),
+      ChangeNotifierProvider(
+          lazy: false, create: (_) => SettingsProvider()..ensureLoaded()),
+    ],
+    child: MaterialApp(
         title: AppStrings.appName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [

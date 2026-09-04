@@ -370,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 ),
-                textStyle: AppTheme.titleMedium,
+                textStyle: AppTheme.buttonLabel,
               ),
             ),
           ),
@@ -398,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 ),
-                textStyle: AppTheme.titleMedium,
+                textStyle: AppTheme.buttonLabel,
               ),
             ),
           ),

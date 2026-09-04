@@ -13,11 +13,22 @@ class SettingsProvider with ChangeNotifier {
   int _reminderHour = 9;
   String _algorithm = 'simple';
 
+  /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
+  Future<void>? _loadFuture;
+
   int get cycleLength => _cycleLength;
   int get periodLength => _periodLength;
   int get reminderDays => _reminderDays;
   int get reminderHour => _reminderHour;
   String get algorithm => _algorithm;
+
+  /// 确保设置已从 DB 加载完成，返回加载完成的 Future（重复调用安全）。
+  ///
+  /// [ChangeNotifierProvider] 默认懒创建：若用户冷启动后不经过设置页直接
+  /// 进入需要设置值的页面（如多选日历计算延展天数），首次 read 会触发
+  /// 创建并开始异步 loadSettings，此刻立即读 getter 只能拿到构造默认值。
+  /// 因此任何读取设置值做业务决策的路径都必须先 await 本方法。
+  Future<void> ensureLoaded() => _loadFuture ??= loadSettings();
 
   Future<void> loadSettings() async {
     try {

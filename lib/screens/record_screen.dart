@@ -9,6 +9,23 @@ import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
 
+/// 多选日历默认延展天数（X）的取值规则：
+/// 1) 已完成（已结束）的经期记录达到 3 条及以上（"足够多"，与
+///    [PredictionService] 加权平均的门槛一致）时，取这些记录的经期天数平均值；
+/// 2) 否则以设置中的经期天数为准。
+/// 抽成纯函数便于单测。此前任何一条已完成记录就会让平均值覆盖设置值，
+/// 导致用户修改"经期天数"后日历自动延展不跟随设置（被误认为持久化失效）。
+int computeDefaultPeriodDays({
+  required int completedRecordCount,
+  required double averagePeriodLength,
+  required int settingsPeriodLength,
+}) {
+  if (completedRecordCount >= 3 && averagePeriodLength > 0) {
+    return averagePeriodLength.round();
+  }
+  return settingsPeriodLength;
+}
+
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key});
 
@@ -252,7 +269,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 ),
-                textStyle: AppTheme.titleMedium,
+                textStyle: AppTheme.buttonLabel,
               ),
               child: const Text('保存记录'),
             ),
@@ -360,14 +377,18 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _showAddRecordDialog(PeriodProvider provider) async {
     final cycleData = provider.cycleData;
-    // X 的取值：存在已结束的经期记录时取其经期天数平均值；否则取设置中的
-    // 经期天数。注意不能直接信 cycleData.averagePeriodLength —— 完全没有
-    // 已结束记录时 PredictionService 会回退到硬编码默认值 5 而非设置值。
-    final hasCompletedRecord = provider.records.any((r) => !r.isOngoing);
-    final defaultDays =
-        hasCompletedRecord && cycleData != null && cycleData.averagePeriodLength > 0
-            ? cycleData.averagePeriodLength.round()
-            : context.read<SettingsProvider>().periodLength;
+    // X 的取值规则见 [computeDefaultPeriodDays]：设置值为主，已完成记录
+    // 达到 3 条才切换到其经期天数平均值。
+    // 注意必须先 ensureLoaded：SettingsProvider 懒创建后首次访问时
+    // loadSettings 可能尚未完成，直接读 periodLength 会拿到构造默认值。
+    final settingsProvider = context.read<SettingsProvider>();
+    await settingsProvider.ensureLoaded();
+    final completedCount = provider.records.where((r) => !r.isOngoing).length;
+    final defaultDays = computeDefaultPeriodDays(
+      completedRecordCount: completedCount,
+      averagePeriodLength: cycleData?.averagePeriodLength ?? 0,
+      settingsPeriodLength: settingsProvider.periodLength,
+    );
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -384,6 +405,7 @@ class _RecordScreenState extends State<RecordScreen> {
       }
     }
 
+    if (!mounted) return;
     final ranges = await Navigator.push<List<(DateTime, DateTime)>>(
       context,
       MaterialPageRoute(
@@ -1007,8 +1029,10 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     color: AppColors.brandPrimary.withValues(alpha: 0.4),
     fontSize: 13,
   );
+  // 选中实底色上的「今天」必须用白字：此前沿用陶土红文字，与实色背景同色，
+  // 导致今天的日期数字被完全盖住不可见。
   static const TextStyle _selectedTodayStyle = TextStyle(
-    color: AppColors.brandPrimary,
+    color: AppColors.white,
     fontWeight: FontWeight.w600,
     fontSize: 13,
   );

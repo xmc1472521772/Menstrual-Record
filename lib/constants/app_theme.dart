@@ -484,6 +484,15 @@ class AppTheme {
     height: 1.4,
   );
 
+  /// 按钮文字专用样式：**不带 height**。
+  /// Impeller(Vulkan) 渲染下，按钮文字若使用带 height 的样式（如
+  /// titleMedium 的 1.4），字形底部会超出行框被平切（Impeller 已知的
+  /// 文本裁剪问题，表现为"保存记录"等按钮文字下半部分消失）。
+  static const TextStyle buttonLabel = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  );
+
   static const TextStyle bodyLarge = TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.w400,
