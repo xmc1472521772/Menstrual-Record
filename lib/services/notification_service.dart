@@ -103,7 +103,19 @@ class NotificationService {
     );
 
     // Convert to TZDateTime in the local timezone
-    final tzDateTime = tz.TZDateTime.from(scheduledDate, tz.local);
+    //
+    // 注意：timezone 包无法自动感知 Android 系统时区，本项目从未调用
+    // tz.setLocalLocation，tz.local 恒为 UTC。若直接 TZDateTime.from(
+    // 本地墙钟时间, UTC)，提醒会被排到错误的绝对时刻（设置 9:00 实际
+    // 17:00 才响）。改用系统 UTC 偏移量把墙钟时间换算成正确绝对时刻。
+    final offset = DateTime.now().timeZoneOffset;
+    final tzDateTime = tz.TZDateTime.utc(
+      scheduledDate.year,
+      scheduledDate.month,
+      scheduledDate.day,
+      scheduledDate.hour,
+      scheduledDate.minute,
+    ).subtract(offset);
 
     await _notifications.zonedSchedule(
       _reminderNotificationId,
@@ -116,6 +128,8 @@ class NotificationService {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: null,
     );
+    debugPrint('[notify] reminder scheduled: $tzDateTime (UTC瞬间，'
+        '对应本地 $scheduledDate)');
   }
 
   Future<void> showNotification({

@@ -187,7 +187,16 @@ class PeriodProvider with ChangeNotifier {
   Future<void> _scheduleReminderIfNeeded() async {
     if (!_scheduleReminders) return;
     final predicted = _cycleData?.predictedNextPeriod;
-    if (predicted == null) return;
+    if (predicted == null) {
+      // 无预测（无任何记录）时清掉残留的已注册提醒，避免过期闹钟误弹。
+      _lastScheduledPrediction = null;
+      try {
+        await NotificationService().cancelAll();
+      } catch (e) {
+        debugPrint('Error cancelling stale reminder: $e');
+      }
+      return;
+    }
 
     // 预测日期未变化则跳过重复调度（zonedSchedule 需要跨进程调用）
     final last = _lastScheduledPrediction;
