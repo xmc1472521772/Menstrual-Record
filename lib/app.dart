@@ -69,6 +69,9 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // extendBody 让 body 延伸到 bottomNavigationBar 下方，
+      // 这样 BackdropFilter 才能模糊到底下页面的内容。
+      extendBody: true,
       body: _screens[_currentIndex],
       bottomNavigationBar: _GlassNavBar(
         currentIndex: _currentIndex,
@@ -85,7 +88,7 @@ class _MainScreenState extends State<MainScreen> {
 ///
 /// 特点：
 /// - 高斯模糊背景（透过可见底下的内容）
-/// - 选中项的指示器是一个圆角滑块，切换时左右滑动（AnimatedAlign）
+/// - 选中项的指示器是一个圆角滑块，切换时左右滑动（AnimatedPositioned）
 /// - 图标 + 文字双行布局
 class _GlassNavBar extends StatelessWidget {
   final int currentIndex;
@@ -131,7 +134,6 @@ class _GlassNavBar extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-        // 高斯模糊背景
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
@@ -148,27 +150,27 @@ class _GlassNavBar extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final itemW = constraints.maxWidth / n;
+                // 滑块宽度：单格的 72%
+                final sliderW = itemW * 0.72;
+                // 滑块 left = 当前格的起始 + (单格 - 滑块) / 2 居中
+                final sliderLeft =
+                    currentIndex * itemW + (itemW - sliderW) / 2;
+
                 return Stack(
                   children: [
-                    // ─── 滑块指示器 ───
-                    AnimatedAlign(
-                      alignment: Alignment(
-                        -1 + 2 * currentIndex / (n - 1),
-                        0,
-                      ),
+                    // ─── 滑块指示器（AnimatedPositioned 精确定位）───
+                    AnimatedPositioned(
                       duration: const Duration(milliseconds: 280),
                       curve: Curves.easeOutCubic,
-                      child: FractionalTranslation(
-                        translation: const Offset(-0.5, 0),
-                        child: Container(
-                          width: itemW * 0.72,
-                          height: 44,
-                          margin: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.brandPrimary,
-                            borderRadius:
-                                BorderRadius.circular(AppDimens.radiusFull),
-                          ),
+                      left: sliderLeft,
+                      top: 10,
+                      width: sliderW,
+                      height: 44,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPrimary,
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radiusFull),
                         ),
                       ),
                     ),
@@ -184,7 +186,6 @@ class _GlassNavBar extends StatelessWidget {
                             child: _NavItemView(
                               item: item,
                               selected: selected,
-                              isDark: isDark,
                             ),
                           ),
                         );
@@ -216,12 +217,10 @@ class _NavItem {
 class _NavItemView extends StatelessWidget {
   final _NavItem item;
   final bool selected;
-  final bool isDark;
 
   const _NavItemView({
     required this.item,
     required this.selected,
-    required this.isDark,
   });
 
   @override
