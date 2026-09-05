@@ -688,24 +688,34 @@ class _HomeScreenState extends State<HomeScreen> {
             //    BallisticSimulation 决定，Material 默认 250ms 左右
             // ▶ 边缘拉伸强度：在 [_StretchScrollBehavior] 中通过
             //    OverscrollStretch 规则控制
-            SizedBox(
-              height: _calendarGridHeight,
-              child: ScrollConfiguration(
-                behavior: _StretchScrollBehavior(),
-                child: PageView.builder(
-                  controller: _pageController,
-                  physics: const ClampingScrollPhysics(
-                    // ▶ 边缘拉伸/发光强度（可调）：
-                    //    ClampingScrollPhysics 默认使用 GlowOverscrollIndicator
-                    //    （Android 12+ 会自动升级为 Stretch overscroll）
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // 根据实际可用宽度动态计算6行格子总高度：
+                // 每格宽度 = (屏宽 - 2*spacingMd) / 7，高度 = 宽度 (1:1)，
+                // 总高度 = 6 × 单格高度。
+                final cellWidth =
+                    (constraints.maxWidth - AppDimens.spacingMd * 2) / 7;
+                final gridHeight = cellWidth * 6;
+                return SizedBox(
+                  height: gridHeight,
+                  child: ScrollConfiguration(
+                    behavior: _StretchScrollBehavior(),
+                    child: PageView.builder(
+                      controller: _pageController,
+                      physics: const ClampingScrollPhysics(
+                        // ▶ 边缘拉伸/发光强度（可调）：
+                        //    ClampingScrollPhysics 默认使用 GlowOverscrollIndicator
+                        //    （Android 12+ 会自动升级为 Stretch overscroll）
+                      ),
+                      pageSnapping: true, // 吸附到整数页
+                      itemBuilder: (context, page) {
+                        final month = _monthFromPage(page);
+                        return _buildCalendarGridForMonth(provider, month);
+                      },
+                    ),
                   ),
-                  pageSnapping: true, // 吸附到整数页
-                  itemBuilder: (context, page) {
-                    final month = _monthFromPage(page);
-                    return _buildCalendarGridForMonth(provider, month);
-                  },
-                ),
-              ),
+                );
+              },
             ),
             const Divider(height: 1),
             const SizedBox(height: AppDimens.spacingMd),
@@ -715,16 +725,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  /// 日历网格固定高度：6 行 × 每格边长。
-  /// 每个格子的 AspectRatio 为 1:1，宽度为 (屏宽 - 2*spacingMd) / 7。
-  /// 固定 6 行保证不同月份间日历高度一致，不会因天数不同导致与
-  /// 下方预测信息区域的间隙忽大忽小。
-  static double get _calendarGridHeight {
-    // 使用一个合理的固定高度估算：6 行格子，每行约 48px。
-    // 实际运行时由 AspectRatio 1:1 和 Expanded 自动校正。
-    return 300.0; // 6 * ~48
   }
 
   Widget _buildCalendarGridForMonth(
@@ -772,27 +772,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 final isToday = _isSameDay(now, day);
 
                 return Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: ValueListenableBuilder<int>(
-                      // 只在选中日期变化时重建格子，而不是整个页面
-                      valueListenable: _cellNotifierFor(AppDateUtils.dayKey(day)),
-                      builder: (context, _, __) {
-                        final isSelected = _isSameDay(_selectedDay, day);
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _selectDay(day),
-                          child: _buildDayCell(
-                            day,
-                            dayType,
-                            isSelected,
-                            isToday,
-                            todayStart,
-                            palette,
-                          ),
-                        );
-                      },
-                    ),
+                  child: ValueListenableBuilder<int>(
+                    // 只在选中日期变化时重建格子，而不是整个页面
+                    valueListenable: _cellNotifierFor(AppDateUtils.dayKey(day)),
+                    builder: (context, _, __) {
+                      final isSelected = _isSameDay(_selectedDay, day);
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _selectDay(day),
+                        child: _buildDayCell(
+                          day,
+                          dayType,
+                          isSelected,
+                          isToday,
+                          todayStart,
+                          palette,
+                        ),
+                      );
+                    },
                   ),
                 );
               }),
