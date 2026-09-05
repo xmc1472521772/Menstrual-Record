@@ -72,7 +72,12 @@ class _MainScreenState extends State<MainScreen> {
       // extendBody 让 body 延伸到 bottomNavigationBar 下方，
       // 这样 BackdropFilter 才能模糊到底下页面的内容。
       extendBody: true,
-      body: _screens[_currentIndex],
+      // 使用 IndexedStack 保持所有 tab 的 State，
+      // 切换 tab 时不会销毁前一个 tab 的页面（如日历的滚动位置、选中日期等）。
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
       bottomNavigationBar: _GlassNavBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -135,6 +140,10 @@ class _GlassNavBar extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppDimens.radiusFull),
         child: BackdropFilter(
+          // 性能说明：BackdropFilter 每帧都会对底层内容做高斯模糊栅格化。
+          // 在低端 Android 设备上（GPU 性能弱）可能导致掉帧。
+          // 如遇性能问题，可将此 BackdropFilter 替换为半透明纯色背景：
+          // color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.85)
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             height: 64,

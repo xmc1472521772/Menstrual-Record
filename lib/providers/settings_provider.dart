@@ -43,33 +43,63 @@ class SettingsProvider with ChangeNotifier {
     }
   }
 
-  Future<void> setCycleLength(int value) async {
-    await _dao.setValue('avg_cycle_length', value.toString());
-    _cycleLength = value;
-    notifyListeners();
+  Future<bool> setCycleLength(int value) async {
+    try {
+      await _dao.setValue('avg_cycle_length', value.toString());
+      _cycleLength = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting cycle length: $e');
+      return false;
+    }
   }
 
-  Future<void> setPeriodLength(int value) async {
-    await _dao.setValue('avg_period_length', value.toString());
-    _periodLength = value;
-    notifyListeners();
+  Future<bool> setPeriodLength(int value) async {
+    try {
+      await _dao.setValue('avg_period_length', value.toString());
+      _periodLength = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting period length: $e');
+      return false;
+    }
   }
 
-  Future<void> setReminderDays(int value) async {
-    await _dao.setValue('reminder_days', value.toString());
-    _reminderDays = value;
-    notifyListeners();
+  Future<bool> setReminderDays(int value) async {
+    try {
+      await _dao.setValue('reminder_days', value.toString());
+      _reminderDays = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting reminder days: $e');
+      return false;
+    }
   }
 
-  Future<void> setReminderHour(int value) async {
-    await _dao.setValue('reminder_hour', value.toString());
-    _reminderHour = value;
-    notifyListeners();
+  Future<bool> setReminderHour(int value) async {
+    try {
+      await _dao.setValue('reminder_hour', value.toString());
+      _reminderHour = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting reminder hour: $e');
+      return false;
+    }
   }
 
-  Future<void> setAlgorithm(String value) async {
-    await _dao.setValue('prediction_algorithm', value);
-    _algorithm = value;
-    notifyListeners();
+  Future<bool> setAlgorithm(String value) async {
+    try {
+      await _dao.setValue('prediction_algorithm', value);
+      _algorithm = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting algorithm: $e');
+      return false;
+    }
   }
 }

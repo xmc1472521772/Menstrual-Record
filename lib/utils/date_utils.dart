@@ -65,4 +65,21 @@ class AppDateUtils {
     }
     return days;
   }
+
+  // ─── Integer day key helpers ─────────────────────────────────────
+  //
+  // Compact integer encoding of a date: year * 10000 + month * 100 + day.
+  // Used as Map/Set keys to avoid per-cell string allocation in calendars.
+
+  /// Integer day key: year * 10000 + month * 100 + day (e.g. 20260105).
+  static int dayKey(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
+
+  /// Extract the year component from an integer day key.
+  static int dayKeyToYear(int k) => k ~/ 10000;
+
+  /// Extract the month component from an integer day key.
+  static int dayKeyToMonth(int k) => (k % 10000) ~/ 100;
+
+  /// Extract the day component from an integer day key.
+  static int dayKeyToDay(int k) => k % 100;
 }

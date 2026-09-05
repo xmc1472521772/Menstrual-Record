@@ -9,13 +9,17 @@ class PredictionService {
   static CycleData calculateCycleData(
     List<PeriodRecord> records, {
     String algorithm = 'simple',
+    DateTime? today,
   }) {
+    final now = today ?? DateTime.now();
+
     if (records.isEmpty) {
       return CycleData(
         averageCycleLength: defaultCycleLength.toDouble(),
         averagePeriodLength: defaultPeriodLength.toDouble(),
         totalCycles: 0,
         recentPeriods: [],
+        today: now,
       );
     }
 
@@ -28,7 +32,7 @@ class PredictionService {
 
     for (int i = 0; i < sortedRecords.length; i++) {
       final record = sortedRecords[i];
-      final periodDays = record.periodDays;
+      final periodDays = record.periodDaysAt(now);
 
       // Only include completed records in the period length average.
       // Ongoing records use DateTime.now() for periodDays which would skew
@@ -85,26 +89,30 @@ class PredictionService {
       lastPeriodStart: lastRecord.startDateTime,
       predictedNextPeriod: predictedNext,
       recentPeriods: recentPeriods.reversed.toList(),
+      today: now,
     );
   }
 
+  /// 加权移动平均：最近的周期权重最高。
+  ///
+  /// 使用线性递减权重（n, n-1, ..., 1）归一化后计算，
+  /// 确保任意数量的输入都有合理的权重分布。
   static double _calculateWeightedAverage(List<int> values) {
-    if (values.length <= 4) {
-      final weights = [0.4, 0.3, 0.2, 0.1];
-      double weightedSum = 0;
-      double weightTotal = 0;
+    final n = values.length;
+    if (n == 0) return defaultCycleLength.toDouble();
 
-      for (int i = 0; i < values.length; i++) {
-        final weight = weights[i];
-        weightedSum += values[values.length - 1 - i] * weight;
-        weightTotal += weight;
-      }
+    // 线性递减权重：最近 n, 次近 n-1, ..., 最远 1
+    final weights = List<double>.generate(n, (i) => (n - i).toDouble());
+    final weightTotal = weights.fold<double>(0.0, (a, b) => a + b);
 
-      return weightedSum / weightTotal;
-    } else {
-      final lastFour = values.sublist(values.length - 4);
-      return _calculateWeightedAverage(lastFour);
+    double weightedSum = 0;
+    for (int i = 0; i < n; i++) {
+      // values[0] 最远，values[n-1] 最近
+      // weights[0] = n（最高，对应最近的 values[n-1-i]）
+      weightedSum += values[n - 1 - i] * weights[i];
     }
+
+    return weightedSum / weightTotal;
   }
 
   static DateTime? predictNextPeriod(

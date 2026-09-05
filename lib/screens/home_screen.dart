@@ -5,6 +5,7 @@ import '../models/cycle_data.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../utils/date_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// 缓存今日日期，只在 initState 时初始化，避免每次 build 都调用 DateTime.now()。
+  late DateTime _today;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay = DateTime.now();
 
@@ -36,6 +39,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _today = DateTime(now.year, now.month, now.day);
+    _focusedDay = _today;
+    _selectedDay = _today;
     _pageController.addListener(_onPageChanged);
   }
 
@@ -79,8 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final m = _focusedDay.month;
     final toRemove = <int>[];
     for (final key in _dayCellNotifiers.keys) {
-      final keyY = key ~/ 10000;
-      final keyM = (key % 10000) ~/ 100;
+      final keyY = AppDateUtils.dayKeyToYear(key);
+      final keyM = AppDateUtils.dayKeyToMonth(key);
       if (keyY != y || keyM != m) {
         if (_selectedDay != null &&
             keyY == _selectedDay!.year &&
@@ -105,27 +112,24 @@ class _HomeScreenState extends State<HomeScreen> {
   final ValueNotifier<int> _selectionVersion = ValueNotifier<int>(0);
 
   bool get _isTodaySelected {
-    final now = DateTime.now();
     return _selectedDay != null &&
-        _selectedDay!.year == now.year &&
-        _selectedDay!.month == now.month &&
-        _selectedDay!.day == now.day;
+        _selectedDay!.year == _today.year &&
+        _selectedDay!.month == _today.month &&
+        _selectedDay!.day == _today.day;
   }
 
   bool get _isCurrentMonth {
-    final now = DateTime.now();
-    return _focusedDay.year == now.year && _focusedDay.month == now.month;
+    return _focusedDay.year == _today.year && _focusedDay.month == _today.month;
   }
 
   void _jumpToToday() {
-    final now = DateTime.now();
     final previous = _selectedDay;
-    _jumpToPage(DateTime(now.year, now.month, 1));
-    _selectedDay = now;
+    _jumpToPage(DateTime(_today.year, _today.month, 1));
+    _selectedDay = _today;
     if (previous != null) {
-      _dayCellNotifiers[_dayKey(previous)]?.value++;
+      _dayCellNotifiers[AppDateUtils.dayKey(previous)]?.value++;
     }
-    _dayCellNotifiers[_dayKey(now)]?.value++;
+    _dayCellNotifiers[AppDateUtils.dayKey(_today)]?.value++;
     _selectionVersion.value++;
   }
 
@@ -161,8 +165,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 68,
@@ -174,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text(AppStrings.appName),
             const SizedBox(height: 2),
             Text(
-              '${now.month}月${now.day}日 星期${_weekdayLabel(now.weekday)}',
+              '${_today.month}月${_today.day}日 星期${_weekdayLabel(_today.weekday)}',
               style: AppTheme.bodySmall.copyWith(
                 color: AppColors.inkSecondary,
               ),
@@ -205,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
               foregroundColor: AppColors.white,
               elevation: AppDimens.elevationLow,
               child: const Text(
-                '今',
+                AppStrings.todayButton,
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
@@ -267,8 +269,8 @@ class _HomeScreenState extends State<HomeScreen> {
       headline = '${AppStrings.currentDay} $currentDay ${AppStrings.days}';
       icon = Icons.favorite_rounded;
     } else if (daysUntil == null) {
-      caption = '记录经期以开始预测';
-      headline = '暂无数据';
+      caption = AppStrings.recordToStartPredict;
+      headline = AppStrings.noData;
       icon = Icons.info_outline_rounded;
     } else if (daysUntil > 0) {
       caption = AppStrings.daysUntilPeriod;
@@ -276,10 +278,10 @@ class _HomeScreenState extends State<HomeScreen> {
       icon = Icons.calendar_today_rounded;
     } else if (daysUntil == 0) {
       caption = AppStrings.predictedNextPeriod;
-      headline = '预计今天';
+      headline = AppStrings.predictedToday;
       icon = Icons.notifications_active_rounded;
     } else {
-      caption = '已逾期';
+      caption = AppStrings.overdue;
       headline = '${-daysUntil} ${AppStrings.days}';
       icon = Icons.warning_amber_rounded;
     }
@@ -412,12 +414,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           SizedBox(height: AppDimens.spacingMd),
           Text(
-            '开始记录您的经期',
+            AppStrings.startRecordingPrompt,
             style: AppTheme.titleLarge,
           ),
           SizedBox(height: AppDimens.spacingXs),
           Text(
-            '记录后可查看周期预测与统计',
+            AppStrings.recordToViewStats,
             style: AppTheme.bodySmall,
           ),
         ],
@@ -652,7 +654,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final prevMonthDays = weekday - 1;
     final totalCells = ((prevMonthDays + daysInMonth) / 7).ceil() * 7;
 
-    final now = DateTime.now();
+    final now = _today;
     final todayStart = DateTime(now.year, now.month, now.day);
 
     // 用固定行数的 Column/Row 代替 shrinkWrap 的 GridView。
@@ -692,7 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   aspectRatio: 1.0,
                   child: ValueListenableBuilder<int>(
                     // 只在选中日期变化时重建格子，而不是整个页面
-                    valueListenable: _cellNotifierFor(_dayKey(day)),
+                    valueListenable: _cellNotifierFor(AppDateUtils.dayKey(day)),
                     builder: (context, _, __) {
                       final isSelected = _isSameDay(_selectedDay, day);
                       return GestureDetector(
@@ -718,9 +720,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Integer day key: year * 10000 + month * 100 + day.
-  static int _dayKey(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
-
   ValueNotifier<int> _cellNotifierFor(int key) =>
       _dayCellNotifiers.putIfAbsent(key, () => ValueNotifier<int>(0));
 
@@ -729,9 +728,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedDay = day;
     // 只刷新旧选中项和新选中项这两个格子
     if (previous != null) {
-      _dayCellNotifiers[_dayKey(previous)]?.value++;
+      _dayCellNotifiers[AppDateUtils.dayKey(previous)]?.value++;
     }
-    _dayCellNotifiers[_dayKey(day)]?.value++;
+    _dayCellNotifiers[AppDateUtils.dayKey(day)]?.value++;
   }
 
   bool _isSameDay(DateTime? a, DateTime? b) {
@@ -825,15 +824,15 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildLegendItem(color: AppColors.brandPrimary, label: '经期中'),
+          _buildLegendItem(color: AppColors.brandPrimary, label: AppStrings.legendPeriod),
           _buildLegendItem(
             color: AppColors.transparent,
             ring: AppColors.brandPrimary,
-            label: '预测',
+            label: AppStrings.legendPredicted,
           ),
-          _buildLegendItem(color: AppColors.ovulationDay, label: '排卵期'),
-          _buildLegendItem(color: AppColors.fertileBg, label: '易孕期'),
-          _buildLegendItem(color: AppColors.safeDay, label: '安全期'),
+          _buildLegendItem(color: AppColors.ovulationDay, label: AppStrings.legendOvulation),
+          _buildLegendItem(color: AppColors.fertileBg, label: AppStrings.legendFertile),
+          _buildLegendItem(color: AppColors.safeDay, label: AppStrings.legendSafe),
         ],
       ),
     );

@@ -31,14 +31,14 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildSectionTitle(context, '周期参数'),
+                _buildSectionTitle(context, AppStrings.cycleParams),
                 _buildPredictionHint(context),
                 const SizedBox(height: AppDimens.spacingMd),
                 _buildCycleLengthSetting(context, settingsProvider),
                 const SizedBox(height: AppDimens.spacingSm),
                 _buildPeriodLengthSetting(context, settingsProvider),
                 const SizedBox(height: AppDimens.spacing2xl),
-                _buildSectionTitle(context, '提醒设置'),
+                _buildSectionTitle(context, AppStrings.reminderSettings),
                 _buildReminderDaysSetting(context, settingsProvider),
                 const SizedBox(height: AppDimens.spacingSm),
                 _buildReminderHourSetting(context, settingsProvider),
@@ -263,7 +263,7 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
         title: Text(
-          '提醒时间',
+          AppStrings.reminderTime,
           style: AppTheme.titleMedium.copyWith(
             color: context.themeColors.onSurface,
           ),
@@ -280,7 +280,7 @@ class SettingsScreen extends StatelessWidget {
         ),
         onTap: () => _showNumberPicker(
           context: context,
-          title: '提醒时间',
+          title: AppStrings.reminderTime,
           value: provider.reminderHour,
           min: 0,
           max: 23,
@@ -326,12 +326,15 @@ class SettingsScreen extends StatelessWidget {
       BuildContext context, PeriodProvider provider) async {
     try {
       final jsonData = await provider.exportData();
+      if (!context.mounted) return;
       final directory = await getApplicationDocumentsDirectory();
+      if (!context.mounted) return;
       final now = DateTime.now();
       final fileName =
           'period_data_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.json';
       final file = File('${directory.path}/$fileName');
       await file.writeAsString(jsonData);
+      if (!context.mounted) return;
 
       await Share.shareXFiles(
         [XFile(file.path)],
@@ -339,15 +342,15 @@ class SettingsScreen extends StatelessWidget {
       );
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(
-            content: Text('数据导出成功（明文 JSON，请妥善保管）'),
+            content: Text(AppStrings.exportSuccessHint),
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(content: Text('导出失败: $e')),
         );
       }
@@ -373,7 +376,7 @@ class SettingsScreen extends StatelessWidget {
           builder: (context) => AlertDialog(
             title: const Text(AppStrings.importMode),
             content: Text(
-              '选择导入模式：',
+              AppStrings.selectImportMode,
               style: AppTheme.bodyMedium.copyWith(
                 color: context.themeColors.onSurfaceSecondary,
               ),
@@ -399,7 +402,7 @@ class SettingsScreen extends StatelessWidget {
         );
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             SnackBar(
               content:
                   Text(success ? AppStrings.importSuccess : AppStrings.importError),
@@ -409,7 +412,7 @@ class SettingsScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(content: Text('导入失败: $e')),
         );
       }

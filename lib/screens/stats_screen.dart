@@ -73,14 +73,14 @@ class StatsScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppDimens.spacingXl),
           Text(
-            '暂无统计数据',
+            AppStrings.noStatsData,
             style: AppTheme.headingSmall.copyWith(
               color: context.themeColors.onSurface,
             ),
           ),
           const SizedBox(height: AppDimens.spacingSm),
           Text(
-            '记录经期后即可查看统计',
+            AppStrings.recordToViewStatsData,
             style: AppTheme.bodyMedium.copyWith(
               color: context.themeColors.onSurfaceTertiary,
             ),
@@ -106,7 +106,7 @@ class StatsScreen extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            '周期概览',
+            AppStrings.cycleOverview,
             style: AppTheme.headingMedium.copyWith(color: AppColors.white),
           ),
           const SizedBox(height: AppDimens.spacingXl),
@@ -115,18 +115,18 @@ class StatsScreen extends StatelessWidget {
             children: [
               _buildStatCircle(
                 '${cycleData.averageCycleLength.round()}',
-                '平均周期',
-                '天',
+                AppStrings.avgCycleLabel,
+                AppStrings.days,
               ),
               _buildStatCircle(
                 '${cycleData.averagePeriodLength.round()}',
-                '平均经期',
-                '天',
+                AppStrings.avgPeriodLabel,
+                AppStrings.days,
               ),
               _buildStatCircle(
                 '${cycleData.totalCycles}',
-                '记录周期',
-                '个',
+                AppStrings.recordCycles,
+                AppStrings.nDaysUnit,
               ),
             ],
           ),
@@ -201,7 +201,7 @@ class StatsScreen extends StatelessWidget {
                     context,
                     'simple',
                     AppStrings.simpleAverage,
-                    '基于所有历史数据的平均值',
+                    AppStrings.basedOnAllHistory,
                     settingsProvider,
                     periodProvider,
                   ),
@@ -212,7 +212,7 @@ class StatsScreen extends StatelessWidget {
                     context,
                     'weighted',
                     AppStrings.weightedAverage,
-                    '近期周期数据权重更高，更准确',
+                    AppStrings.weightedMoreAccurate,
                     settingsProvider,
                     periodProvider,
                   ),
@@ -221,7 +221,7 @@ class StatsScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppDimens.spacingSm),
             Text(
-              '加权移动平均法：基于最近 4 个周期的数据，越近的周期权重越高（40%/30%/20%/10%），不足 4 个周期时按实际数量加权计算。',
+              AppStrings.weightedDescription,
               style: AppTheme.bodySmall.copyWith(
                 color: context.themeColors.onSurfaceTertiary,
                 height: 1.4,
@@ -375,7 +375,7 @@ class StatsScreen extends StatelessWidget {
               ),
             ] else ...[
               Text(
-                '需要更多数据来预测',
+                AppStrings.needMoreDataToPredict,
                 style: AppTheme.bodyMedium.copyWith(
                   color: context.themeColors.onSurfaceTertiary,
                 ),

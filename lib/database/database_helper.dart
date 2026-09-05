@@ -12,6 +12,7 @@ class DatabaseHelper implements DatabaseProvider {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
   static Completer<Database>? _initCompleter;
+  static bool _isClosing = false;
 
   factory DatabaseHelper() => _instance;
 
@@ -98,9 +99,17 @@ class DatabaseHelper implements DatabaseProvider {
   }
 
   Future<void> close() async {
-    final db = await database;
-    await db.close();
-    _database = null;
-    _initCompleter = null;
+    if (_isClosing) return;
+    _isClosing = true;
+    try {
+      final db = _database;
+      if (db != null) {
+        await db.close();
+      }
+      _database = null;
+      _initCompleter = null;
+    } finally {
+      _isClosing = false;
+    }
   }
 }

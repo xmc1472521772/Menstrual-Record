@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -33,11 +34,16 @@ class NotificationService {
     // Initialize timezone data (idempotent)
     if (!_tzInitialized) {
       tz.initializeTimeZones();
-      // Try to set local timezone; fall back to UTC if detection fails
+      // 尝试获取系统时区名称并设置 local location
+      // 之前未调用 setLocalLocation，导致 tz.local 恒为 UTC，
+      // 通知时间被排到错误的绝对时刻。
       try {
-        debugPrint('Timezone initialized: ${tz.local.name}');
-      } catch (_) {
-        // timezone lookup may fail on some platforms; UTC is the fallback
+        final localTimeZone = await FlutterTimezone.getLocalTimezone();
+        final location = tz.getLocation(localTimeZone);
+        tz.setLocalLocation(location);
+        debugPrint('Timezone set to: ${tz.local.name}');
+      } catch (e) {
+        debugPrint('Failed to set local timezone: $e');
       }
       _tzInitialized = true;
     }
@@ -102,20 +108,14 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    // Convert to TZDateTime in the local timezone
-    //
-    // 注意：timezone 包无法自动感知 Android 系统时区，本项目从未调用
-    // tz.setLocalLocation，tz.local 恒为 UTC。若直接 TZDateTime.from(
-    // 本地墙钟时间, UTC)，提醒会被排到错误的绝对时刻（设置 9:00 实际
-    // 17:00 才响）。改用系统 UTC 偏移量把墙钟时间换算成正确绝对时刻。
-    final offset = DateTime.now().timeZoneOffset;
-    final tzDateTime = tz.TZDateTime.utc(
+    // 设置了 local location 后直接用 TZDateTime.local 构造正确时刻。
+    final tzDateTime = tz.TZDateTime.local(
       scheduledDate.year,
       scheduledDate.month,
       scheduledDate.day,
       scheduledDate.hour,
       scheduledDate.minute,
-    ).subtract(offset);
+    );
 
     await _notifications.zonedSchedule(
       _reminderNotificationId,
@@ -128,8 +128,7 @@ class NotificationService {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: null,
     );
-    debugPrint('[notify] reminder scheduled: $tzDateTime (UTC瞬间，'
-        '对应本地 $scheduledDate)');
+    debugPrint('[notify] reminder scheduled: $tzDateTime (本地 $scheduledDate)');
   }
 
   Future<void> showNotification({

@@ -8,6 +8,7 @@ import '../providers/settings_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../utils/date_utils.dart';
 
 /// 多选日历默认延展天数（X）的取值规则：
 /// 1) 已完成（已结束）的经期记录达到 3 条及以上（"足够多"，与
@@ -61,7 +62,7 @@ class _RecordScreenState extends State<RecordScreen> {
               backgroundColor: AppColors.brandPrimary,
               foregroundColor: AppColors.white,
             ),
-            tooltip: '多选日历',
+            tooltip: AppStrings.multiSelectCalendar,
           ),
           const SizedBox(width: AppDimens.spacingXl),
         ],
@@ -173,12 +174,12 @@ class _RecordScreenState extends State<RecordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '暂无进行中的经期',
-                  style: AppTheme.titleMedium.copyWith(
-                    color: AppColors.ink,
+                  Text(
+                    AppStrings.noOngoingPeriod,
+                    style: AppTheme.titleMedium.copyWith(
+                      color: AppColors.ink,
+                    ),
                   ),
-                ),
                 if (predicted != null && daysUntil != null) ...[
                   const SizedBox(height: 2),
                   Text(
@@ -226,7 +227,7 @@ class _RecordScreenState extends State<RecordScreen> {
             children: [
               Expanded(
                 child: Text(
-                  '添加经期记录',
+                  AppStrings.addPeriodRecord,
                   style: AppTheme.titleLarge.copyWith(
                     color: context.themeColors.onSurface,
                   ),
@@ -236,7 +237,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 onPressed: () =>
                     _showAddRecordDialog(context.read<PeriodProvider>()),
                 icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                label: const Text('多选日历'),
+                label: const Text(AppStrings.multiSelectCalendar),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.brandPrimary,
                   textStyle: AppTheme.labelMedium,
@@ -275,7 +276,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
                 textStyle: AppTheme.buttonLabel,
               ),
-              child: const Text('保存记录'),
+              child: const Text(AppStrings.saveRecord),
             ),
           ),
         ],
@@ -373,7 +374,7 @@ class _RecordScreenState extends State<RecordScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(success ? '记录已保存' : '保存失败，请检查日期是否冲突'),
+        content: Text(success ? AppStrings.recordSaved : AppStrings.saveFailed),
         backgroundColor: success ? AppColors.brandPrimary : AppColors.error,
       ),
     );
@@ -428,10 +429,10 @@ class _RecordScreenState extends State<RecordScreen> {
     final success = await provider.saveMultipleRecords(ranges);
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(
-          success ? '已保存 ${ranges.length} 条记录' : '保存失败',
+          success ? '已保存 ${ranges.length} 条记录' : AppStrings.saveFailed2,
         ),
         backgroundColor: success ? AppColors.success : AppColors.error,
       ),
@@ -649,7 +650,10 @@ class _RecordScreenState extends State<RecordScreen> {
           ),
           TextButton(
             onPressed: () {
-              provider.deleteRecord(record.id!);
+              final id = record.id;
+              if (id != null) {
+                provider.deleteRecord(id);
+              }
               Navigator.pop(context);
             },
             child: Text(
@@ -718,11 +722,11 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   // _cellNotifiers 无界累积（数千个 ValueNotifier 常驻）与滚动建格时的对象分配，
   // 也让代码回到最简路径。底部面板随整页重建自然更新，无需额外通知。
 
-  // Integer key: year*10000 + month*100 + day — avoids string allocation
-  static int _dayKeyInt(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
-  static int _keyToYear(int k) => k ~/ 10000;
-  static int _keyToMonth(int k) => (k % 10000) ~/ 100;
-  static int _keyToDay(int k) => k % 100;
+  // Integer key helpers delegated to AppDateUtils to avoid code duplication.
+  static int _dayKeyInt(DateTime d) => AppDateUtils.dayKey(d);
+  static int _keyToYear(int k) => AppDateUtils.dayKeyToYear(k);
+  static int _keyToMonth(int k) => AppDateUtils.dayKeyToMonth(k);
+  static int _keyToDay(int k) => AppDateUtils.dayKeyToDay(k);
 
   @override
   void initState() {
@@ -906,7 +910,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   void _validateConflict() {
     for (final key in _selectedDays) {
       if (_existingDays.contains(key)) {
-        _conflictMsg = '所选日期与已有记录冲突';
+        _conflictMsg = AppStrings.dateConflict;
         return;
       }
     }
@@ -942,7 +946,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('添加经期记录'),
+        title: const Text(AppStrings.addPeriodRecordTitle),
         actions: [
           TextButton(
             onPressed: _scrollToCurrentMonth,

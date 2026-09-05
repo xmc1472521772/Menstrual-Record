@@ -33,7 +33,7 @@ class PeriodProvider with ChangeNotifier {
   bool _isLoading = false;
   String _algorithm = 'simple';
 
-  /// 日类型缓存。key 为整数 `yyyyMMdd`（见 [_dayKey]），
+  /// 日类型缓存。key 为整数 `yyyyMMdd`（见 [AppDateUtils.dayKey]），
   /// 相比字符串 key 可避免每次日历构建时 40+ 次字符串拼接与哈希。
   final Map<int, String> _dayTypeCache = {};
 
@@ -60,11 +60,9 @@ class PeriodProvider with ChangeNotifier {
   /// 是否存在进行中的经期。缓存以避免 UI 每次构建都遍历一遍记录列表。
   bool get hasOngoingPeriod => _hasOngoing;
 
-  /// Integer day key: year * 10000 + month * 100 + day (e.g. 20260105).
-  static int _dayKey(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
-
   Future<void> loadRecords() async {
     _isLoading = true;
+    notifyListeners();
 
     try {
       _algorithm = await _settingsDao.getPredictionAlgorithm();
@@ -86,13 +84,16 @@ class PeriodProvider with ChangeNotifier {
 
   /// 重算派生数据（周期预测 + 经期日索引 + 日类型缓存）。
   void _recalculate() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     _hasOngoing = _records.any((r) => r.isOngoing);
     _cycleData = PredictionService.calculateCycleData(
       _records,
       algorithm: _algorithm,
+      today: today,
     );
     _clearDayTypeCache();
-    _rebuildPeriodDayIndex();
+    _rebuildPeriodDayIndex(today);
     _dataVersion++;
   }
 
@@ -112,12 +113,9 @@ class PeriodProvider with ChangeNotifier {
     _records.sort((a, b) => b.startDate.compareTo(a.startDate));
   }
 
-  void _rebuildPeriodDayIndex() {
+  void _rebuildPeriodDayIndex(DateTime today) {
     _periodDayKeys.clear();
     if (_records.isEmpty) return;
-
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
 
     for (final record in _records) {
       final start = record.startDateTime;
@@ -136,7 +134,7 @@ class PeriodProvider with ChangeNotifier {
       // 安全阀：防止异常数据（如 endDate 距 start_date 跨数年）导致超长循环。
       int expanded = 0;
       while (!cur.isAfter(end) && expanded < 10000) {
-        _periodDayKeys.add(_dayKey(cur));
+        _periodDayKeys.add(AppDateUtils.dayKey(cur));
         cur = DateTime(cur.year, cur.month, cur.day + 1);
         expanded++;
       }
@@ -265,6 +263,9 @@ class PeriodProvider with ChangeNotifier {
               startDate.isBefore(rEnd)) {
             return false;
           }
+        } else {
+          // endDate == null but not ongoing — 数据异常，按保守策略视为冲突
+          return false;
         }
       }
 
@@ -434,11 +435,24 @@ class PeriodProvider with ChangeNotifier {
         // Use atomic replaceAll to avoid data loss on failure
         await _dao.replaceAll(records);
       } else {
-        // 追加模式：按 startDate 去重，避免重复导入产生重叠记录
-        final existingStartDates = _records.map((r) => r.startDate).toSet();
-        final newRecords = records
-            .where((r) => !existingStartDates.contains(r.startDate))
-            .toList();
+        // 追加模式：检测区间重叠，避免重复导入产生重叠记录
+        // 不只按 startDate 去重，而是检查日期区间是否与现有记录重叠
+        bool hasOverlap(PeriodRecord r) {
+          final rStart = r.startDateTime;
+          final rEnd = r.endDateTime ?? rStart;
+          for (final existing in _records) {
+            final eStart = existing.startDateTime;
+            final eEnd = existing.endDateTime ?? eStart;
+            // 区间 [rStart, rEnd] 与 [eStart, eEnd] 有交集
+            if (rStart.isBefore(eEnd.add(const Duration(days: 1))) &&
+                rEnd.isAfter(eStart.subtract(const Duration(days: 1)))) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        final newRecords = records.where((r) => !hasOverlap(r)).toList();
         if (newRecords.isEmpty) {
           // 全部重复，无需写库但仍刷新以保证状态一致
           return true;
@@ -456,7 +470,7 @@ class PeriodProvider with ChangeNotifier {
   }
 
   /// O(1) 查询 —— 依赖 [_periodDayKeys] 索引。
-  bool isPeriodDay(DateTime date) => _periodDayKeys.contains(_dayKey(date));
+  bool isPeriodDay(DateTime date) => _periodDayKeys.contains(AppDateUtils.dayKey(date));
 
   bool isPredictedDay(DateTime date) {
     if (_cycleData?.predictedNextPeriod == null) return false;
@@ -490,7 +504,7 @@ class PeriodProvider with ChangeNotifier {
   }
 
   String getDayType(DateTime date) {
-    final key = _dayKey(date);
+    final key = AppDateUtils.dayKey(date);
 
     final cached = _dayTypeCache[key];
     if (cached != null) return cached;

@@ -22,8 +22,7 @@ class PeriodRecord {
   }) : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'start_date': startDate,
       'end_date': endDate,
       'cycle_length': cycleLength,
@@ -33,6 +32,8 @@ class PeriodRecord {
       'symptoms': symptoms,
       'created_at': createdAt,
     };
+    if (id != null) map['id'] = id;
+    return map;
   }
 
   factory PeriodRecord.fromMap(Map<String, dynamic> map) {
@@ -130,6 +131,17 @@ class PeriodRecord {
   int get periodDays {
     if (endDate == null) {
       return DateTime.now().difference(startDateTime).inDays + 1;
+    }
+    return endDateTime!.difference(startDateTime).inDays + 1;
+  }
+
+  /// 计算在给定时间点 [at] 的经期天数。
+  ///
+  /// 对 ongoing 记录使用 [at] 代替 `DateTime.now()`，
+  /// 避免同一帧内多次访问时跨天边界返回不同值。
+  int periodDaysAt(DateTime at) {
+    if (endDate == null) {
+      return at.difference(startDateTime).inDays + 1;
     }
     return endDateTime!.difference(startDateTime).inDays + 1;
   }

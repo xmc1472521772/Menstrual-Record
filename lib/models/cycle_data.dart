@@ -6,6 +6,10 @@ class CycleData {
   final DateTime? predictedNextPeriod;
   final List<PeriodSummary> recentPeriods;
 
+  /// 计算时的「今天」，用于 daysUntilPredicted / currentCycleDay 的稳定取值。
+  /// 避免每次 getter 调用 DateTime.now() 导致同一帧内可能不一致。
+  final DateTime _today;
+
   CycleData({
     required this.averageCycleLength,
     required this.averagePeriodLength,
@@ -13,7 +17,8 @@ class CycleData {
     this.lastPeriodStart,
     this.predictedNextPeriod,
     required this.recentPeriods,
-  });
+    DateTime? today,
+  }) : _today = today ?? DateTime.now();
 
   /// Returns the number of days until the predicted next period.
   /// Returns `null` when [predictedNextPeriod] is null (no prediction available).
@@ -23,8 +28,7 @@ class CycleData {
   /// stable throughout the day regardless of the current hour.
   int? get daysUntilPredicted {
     if (predictedNextPeriod == null) return null;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = DateTime(_today.year, _today.month, _today.day);
     final predicted = DateTime(
       predictedNextPeriod!.year,
       predictedNextPeriod!.month,
@@ -39,8 +43,7 @@ class CycleData {
   /// stable throughout the day regardless of the current hour.
   int get currentCycleDay {
     if (lastPeriodStart == null) return 0;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = DateTime(_today.year, _today.month, _today.day);
     final start = DateTime(
       lastPeriodStart!.year,
       lastPeriodStart!.month,
