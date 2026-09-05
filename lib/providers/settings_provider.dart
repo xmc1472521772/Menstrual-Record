@@ -12,6 +12,7 @@ class SettingsProvider with ChangeNotifier {
   int _reminderDays = 2;
   int _reminderHour = 9;
   String _algorithm = 'simple';
+  int _mergeThreshold = 2;
 
   /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
   Future<void>? _loadFuture;
@@ -21,6 +22,7 @@ class SettingsProvider with ChangeNotifier {
   int get reminderDays => _reminderDays;
   int get reminderHour => _reminderHour;
   String get algorithm => _algorithm;
+  int get mergeThreshold => _mergeThreshold;
 
   /// 确保设置已从 DB 加载完成，返回加载完成的 Future（重复调用安全）。
   ///
@@ -37,6 +39,7 @@ class SettingsProvider with ChangeNotifier {
       _reminderDays = await _dao.getReminderDays();
       _reminderHour = await _dao.getReminderHour();
       _algorithm = await _dao.getPredictionAlgorithm();
+      _mergeThreshold = await _dao.getMergeThreshold();
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -99,6 +102,18 @@ class SettingsProvider with ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error setting algorithm: $e');
+      return false;
+    }
+  }
+
+  Future<bool> setMergeThreshold(int value) async {
+    try {
+      await _dao.setValue('merge_threshold', value.toString());
+      _mergeThreshold = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting merge threshold: $e');
       return false;
     }
   }

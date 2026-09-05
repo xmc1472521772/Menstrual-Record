@@ -56,6 +56,8 @@ void main() {
         await db.insert('settings', {'key': 'reminder_hour', 'value': '9'});
         await db.insert(
             'settings', {'key': 'prediction_algorithm', 'value': 'simple'});
+        await db.insert(
+            'settings', {'key': 'merge_threshold', 'value': '2'});
       },
     );
 
@@ -399,6 +401,151 @@ void main() {
       expect(data.predictedNextPeriod!.year, 2025);
       expect(data.predictedNextPeriod!.month, 1);
       expect(data.predictedNextPeriod!.day, 29);
+    });
+  });
+
+  // ─── Period Merge Tests ─────────────────────────────────────────────
+  group('PeriodProvider - startPeriodWithMerge', () {
+    test('scene A: same day (gap=0) → silent merge', () async {
+      // 08-31 开始，09-05 结束
+      await provider.startPeriod(DateTime(2026, 8, 31));
+      await provider.endPeriod(DateTime(2026, 9, 5));
+      expect(provider.records, hasLength(1));
+      expect(provider.records.first.isOngoing, isFalse);
+
+      // 同天再开 → 静默合并
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 5),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.mergedSilently);
+      expect(provider.records, hasLength(1)); // 没有新增记录
+      expect(provider.records.first.isOngoing, isTrue); // 恢复为进行中
+      expect(provider.records.first.startDate, '2026-08-31');
+      expect(provider.records.first.endDate, isNull); // endDate 被清空
+    });
+
+    test('scene A: start day equals end day (gap=0) → silent merge', () async {
+      // 09-01 开始，09-03 结束
+      await provider.startPeriod(DateTime(2026, 9, 1));
+      await provider.endPeriod(DateTime(2026, 9, 3));
+
+      // 09-03 同天再开
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 3),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.mergedSilently);
+      expect(provider.records, hasLength(1));
+      expect(provider.records.first.isOngoing, isTrue);
+    });
+
+    test('scene B: gap=1 → needs confirmation', () async {
+      // 09-01 开始，09-03 结束
+      await provider.startPeriod(DateTime(2026, 9, 1));
+      await provider.endPeriod(DateTime(2026, 9, 3));
+
+      // 09-04 再开（间隔 1 天）
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 4),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.needsConfirmation);
+      expect(outcome.mergeInfo, isNotNull);
+      expect(outcome.mergeInfo!.gapDays, 1);
+    });
+
+    test('scene B: gap=2 (equals threshold) → needs confirmation', () async {
+      // 09-01 开始，09-03 结束
+      await provider.startPeriod(DateTime(2026, 9, 1));
+      await provider.endPeriod(DateTime(2026, 9, 3));
+
+      // 09-05 再开（间隔 2 天 = 阈值）
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 5),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.needsConfirmation);
+      expect(outcome.mergeInfo, isNotNull);
+      expect(outcome.mergeInfo!.gapDays, 2);
+    });
+
+    test('scene C: gap > threshold → created (new period)', () async {
+      // 09-01 开始，09-03 结束
+      await provider.startPeriod(DateTime(2026, 9, 1));
+      await provider.endPeriod(DateTime(2026, 9, 3));
+
+      // 09-10 再开（间隔 7 天 > 阈值 2）
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 10),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.created);
+      expect(provider.records, hasLength(2));
+    });
+
+    test('no history → created', () async {
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 1),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.created);
+      expect(provider.records, hasLength(1));
+    });
+
+    test('user chooses merge → mergeWithLastPeriod', () async {
+      // 09-01 开始，09-03 结束
+      await provider.startPeriod(DateTime(2026, 9, 1));
+      await provider.endPeriod(DateTime(2026, 9, 3));
+
+      // 用户选择续接
+      final ok = await provider.mergeWithLastPeriod(DateTime(2026, 9, 4));
+      expect(ok, isTrue);
+      expect(provider.records, hasLength(1));
+      expect(provider.records.first.isOngoing, isTrue);
+      expect(provider.records.first.endDate, isNull);
+    });
+
+    test('user chooses new period → startNewPeriod', () async {
+      // 09-01 开始，09-03 结束
+      await provider.startPeriod(DateTime(2026, 9, 1));
+      await provider.endPeriod(DateTime(2026, 9, 3));
+
+      // 用户选择新开
+      final ok = await provider.startNewPeriod(DateTime(2026, 9, 4));
+      expect(ok, isTrue);
+      expect(provider.records, hasLength(2));
+      expect(provider.records.first.isOngoing, isTrue);
+    });
+
+    test('exact user scenario: 08-31 start, 09-05 end, 09-05 restart → merge',
+        () async {
+      // 用户场景：8月31日开始，9月5日结束，9月5日又开启
+      await provider.startPeriod(DateTime(2026, 8, 31));
+      await provider.endPeriod(DateTime(2026, 9, 5));
+
+      expect(provider.records, hasLength(1));
+      expect(provider.records.first.isOngoing, isFalse);
+      expect(provider.records.first.startDate, '2026-08-31');
+      expect(provider.records.first.endDate, '2026-09-05');
+
+      // 9月5日同天再开 → 应该静默合并
+      final outcome = await provider.startPeriodWithMerge(
+        DateTime(2026, 9, 5),
+        mergeThreshold: 2,
+      );
+
+      expect(outcome.result, PeriodStartResult.mergedSilently);
+      expect(provider.records, hasLength(1)); // 仍然只有一条记录
+      expect(provider.records.first.isOngoing, isTrue); // 恢复为进行中
+      expect(provider.records.first.startDate, '2026-08-31'); // 开始日期不变
+      expect(provider.records.first.endDate, isNull); // endDate 被清空
     });
   });
 }

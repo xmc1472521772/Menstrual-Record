@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/period_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/cycle_data.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
@@ -428,6 +429,86 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─── Quick actions ────────────────────────────────────────────────
+
+  /// 处理「开始经期」按钮点击，带自动合并逻辑。
+  Future<void> _handleStartPeriod(
+    BuildContext context,
+    PeriodProvider provider,
+  ) async {
+    final settings = context.read<SettingsProvider>();
+    final threshold = settings.mergeThreshold;
+
+    final outcome = await provider.startPeriodWithMerge(
+      DateTime.now(),
+      mergeThreshold: threshold,
+    );
+
+    if (!mounted) return;
+
+    switch (outcome.result) {
+      case PeriodStartResult.created:
+        // 直接新建成功，无需额外操作
+        break;
+      case PeriodStartResult.mergedSilently:
+        // 同天静默合并：显示 SnackBar 提示
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(AppStrings.mergeSilentDone),
+              duration: const Duration(seconds: 2),
+              backgroundColor: AppColors.brandPrimary,
+            ),
+          );
+        }
+        break;
+      case PeriodStartResult.needsConfirmation:
+        // 间隔在阈值内：弹窗让用户选择
+        if (mounted && outcome.mergeInfo != null) {
+          await _showMergeConfirmationDialog(
+            context,
+            provider,
+            outcome.mergeInfo!,
+          );
+        }
+        break;
+    }
+  }
+
+  /// 弹窗：让用户选择「续接上一段」还是「开启新经期」。
+  Future<void> _showMergeConfirmationDialog(
+    BuildContext context,
+    PeriodProvider provider,
+    PeriodMergeInfo info,
+  ) async {
+    final gapDays = info.gapDays;
+    final bodyText = AppStrings.mergePromptBody.replaceAll('{}', gapDays.toString());
+
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(AppStrings.mergePromptTitle),
+        content: Text(bodyText),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(AppStrings.mergeAction),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(AppStrings.newPeriodAction),
+          ),
+        ],
+      ),
+    );
+
+    // choice == true → 续接上一段；choice == false → 新经期；null → 取消
+    if (choice == true) {
+      await provider.mergeWithLastPeriod(info.newStartDate);
+    } else if (choice == false) {
+      await provider.startNewPeriod(info.newStartDate);
+    }
+  }
+
   Widget _buildQuickActions(PeriodProvider provider) {
     final hasOngoing = provider.hasOngoingPeriod;
 
@@ -440,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: hasOngoing
                   ? null
                   : () async {
-                      await provider.startPeriod(DateTime.now());
+                      await _handleStartPeriod(context, provider);
                     },
               icon: const Icon(Icons.play_arrow_rounded, size: 18),
               label: const Text(AppStrings.startPeriod),

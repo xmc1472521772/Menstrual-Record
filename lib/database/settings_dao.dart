@@ -62,4 +62,11 @@ class SettingsDao {
     final value = await getValue('prediction_algorithm');
     return value ?? 'simple';
   }
+
+  /// 合并阈值（天数）。两次经期结束与开始间隔 <= 此值时触发合并逻辑。
+  /// 默认 2 天。
+  Future<int> getMergeThreshold() async {
+    final value = await getValue('merge_threshold');
+    return int.tryParse(value ?? '2') ?? 2;
+  }
 }

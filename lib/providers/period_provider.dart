@@ -8,6 +8,47 @@ import '../services/prediction_service.dart';
 import '../services/notification_service.dart';
 import '../utils/date_utils.dart';
 
+/// `startPeriodWithMerge` 的返回类型。
+///
+/// 告知 UI 层应该执行哪种后续操作：
+/// - [created]：已直接新建一段经期（间隔 > 阈值，或无最近记录）
+/// - [mergedSilently]：同天/间隔 0 天，已静默合并（撤销上次结束状态）
+/// - [needsConfirmation]：间隔在阈值内（1~2 天），需要弹窗让用户选择
+enum PeriodStartResult {
+  /// 直接新建成功
+  created,
+  /// 静默合并成功（撤销上次结束）
+  mergedSilently,
+  /// 需要弹窗确认（返回 [PeriodMergeInfo] 供 UI 使用）
+  needsConfirmation,
+}
+
+/// 携带给 UI 的合并上下文信息。
+class PeriodMergeInfo {
+  /// 最近一条已结束的经期记录。
+  final PeriodRecord lastRecord;
+
+  /// 新经期的开始日期。
+  final DateTime newStartDate;
+
+  /// 距上次经期结束的天数。
+  final int gapDays;
+
+  PeriodMergeInfo({
+    required this.lastRecord,
+    required this.newStartDate,
+    required this.gapDays,
+  });
+}
+
+/// 将 [PeriodStartResult] 与可选的 [PeriodMergeInfo] 打包返回。
+class PeriodStartOutcome {
+  final PeriodStartResult result;
+  final PeriodMergeInfo? mergeInfo;
+
+  const PeriodStartOutcome(this.result, {this.mergeInfo});
+}
+
 class PeriodProvider with ChangeNotifier {
   final PeriodDao _dao;
   final SettingsDao _settingsDao;
@@ -281,6 +322,133 @@ class PeriodProvider with ChangeNotifier {
       debugPrint('Error starting period: $e');
       return false;
     }
+  }
+
+  /// 带自动合并逻辑的经期开启。
+  ///
+  /// 根据新开始日期与最近一段已结束经期的间隔天数：
+  /// - 间隔 0 天（同天）：静默合并（撤销上次结束状态）
+  /// - 间隔 1~阈值天：返回 [PeriodStartResult.needsConfirmation]，
+  ///   UI 弹窗让用户选择续接还是新开
+  /// - 间隔 > 阈值天 或无历史记录：直接新建
+  Future<PeriodStartOutcome> startPeriodWithMerge(
+    DateTime startDate, {
+    int? mergeThreshold,
+  }) async {
+    try {
+      // 已有进行中的经期 → 不能再开
+      if (_hasOngoing) {
+        return const PeriodStartOutcome(PeriodStartResult.created);
+      }
+
+      // 获取合并阈值
+      final threshold = mergeThreshold ?? await _settingsDao.getMergeThreshold();
+
+      // 查找最近一条已结束的经期记录（startDate DESC 排序，取第一条非 ongoing 的）
+      PeriodRecord? lastEnded;
+      for (final r in _records) {
+        if (!r.isOngoing && r.endDate != null) {
+          lastEnded = r;
+          break;
+        }
+      }
+
+      // 无历史记录 → 直接新建
+      if (lastEnded == null) {
+        final ok = await startPeriod(startDate);
+        return PeriodStartOutcome(
+          ok ? PeriodStartResult.created : PeriodStartResult.created,
+        );
+      }
+
+      // 计算间隔天数：新开始日期 - 上次经期结束日期
+      final lastEndDate = lastEnded.endDateTime!;
+      final lastEndDay = DateTime(
+        lastEndDate.year,
+        lastEndDate.month,
+        lastEndDate.day,
+      );
+      final newStartDay = DateTime(
+        startDate.year,
+        startDate.month,
+        startDate.day,
+      );
+      final gapDays = newStartDay.difference(lastEndDay).inDays;
+
+      // 场景 A：同天（间隔 0 天）→ 静默合并
+      if (gapDays <= 0) {
+        final ok = await _mergeWithLastPeriod(startDate);
+        return PeriodStartOutcome(
+          ok ? PeriodStartResult.mergedSilently : PeriodStartResult.created,
+        );
+      }
+
+      // 场景 B：间隔 1 ~ 阈值天 → 需要弹窗确认
+      if (gapDays <= threshold) {
+        return PeriodStartOutcome(
+          PeriodStartResult.needsConfirmation,
+          mergeInfo: PeriodMergeInfo(
+            lastRecord: lastEnded,
+            newStartDate: startDate,
+            gapDays: gapDays,
+          ),
+        );
+      }
+
+      // 场景 C：间隔 > 阈值天 → 直接新建
+      final ok = await startPeriod(startDate);
+      return PeriodStartOutcome(
+        ok ? PeriodStartResult.created : PeriodStartResult.created,
+      );
+    } catch (e) {
+      debugPrint('Error in startPeriodWithMerge: $e');
+      return const PeriodStartOutcome(PeriodStartResult.created);
+    }
+  }
+
+  /// 合并：撤销上次经期的结束状态，将其恢复为进行中。
+  ///
+  /// 清空 endDate 和 periodLength，让该记录回到 ongoing 状态。
+  Future<bool> _mergeWithLastPeriod(DateTime newStartDate) async {
+    try {
+      // 找到最近一条已结束的经期
+      PeriodRecord? lastEnded;
+      for (final r in _records) {
+        if (!r.isOngoing && r.endDate != null) {
+          lastEnded = r;
+          break;
+        }
+      }
+      if (lastEnded == null) return false;
+
+      // 撤销结束状态：清空 endDate 和 periodLength
+      final merged = lastEnded.copyWith(
+        clearEndDate: true,
+        clearPeriodLength: true,
+      );
+      await _dao.update(merged);
+      final index = _records.indexWhere((r) => r.id == merged.id);
+      if (index >= 0) {
+        _records[index] = merged;
+      }
+      _sortRecords();
+      _commitMutation();
+      return true;
+    } catch (e) {
+      debugPrint('Error merging with last period: $e');
+      return false;
+    }
+  }
+
+  /// 供 UI 调用：用户选择“续接上一段”时调用。
+  Future<bool> mergeWithLastPeriod(DateTime newStartDate) async {
+    return _mergeWithLastPeriod(newStartDate);
+  }
+
+  /// 供 UI 调用：用户选择“开启新经期”时调用。
+  /// 等价于 [startPeriod]，语义化方法名供 UI 调用。
+  Future<bool> startNewPeriod(DateTime startDate) async {
+    return startPeriod(startDate);
   }
 
   Future<bool> endPeriod(DateTime endDate) async {

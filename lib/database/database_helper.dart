@@ -96,6 +96,8 @@ class DatabaseHelper implements DatabaseProvider {
     await db.insert('settings', {'key': 'reminder_hour', 'value': '9'});
     await db.insert(
         'settings', {'key': 'prediction_algorithm', 'value': 'simple'});
+    await db.insert(
+        'settings', {'key': 'merge_threshold', 'value': '2'});
   }
 
   Future<void> close() async {

@@ -116,4 +116,11 @@ class AppStrings {
 
   // ─── Misc ────────────────────────────────────────────────────────
   static const String nDaysUnit = '个';
+
+  // ─── Period Merge ─────────────────────────────────────────────────
+  static const String mergePromptTitle = '是否续接上一段经期？';
+  static const String mergePromptBody = '您上一次经期刚结束{}天，本次是续接上一段经期，还是开启新的经期？';
+  static const String mergeAction = '续接上一段';
+  static const String newPeriodAction = '开启新经期';
+  static const String mergeSilentDone = '已续接上一段经期';
 }
