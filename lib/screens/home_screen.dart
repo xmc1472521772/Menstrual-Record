@@ -651,9 +651,7 @@ class _HomeScreenState extends State<HomeScreen>
             HorizontalDragGestureRecognizer:
                 GestureRecognizerFactoryWithHandlers<
                     HorizontalDragGestureRecognizer>(
-              () => HorizontalDragGestureRecognizer(
-                supportDeviceOrientation: true,
-              ),
+              () => HorizontalDragGestureRecognizer(),
               (HorizontalDragGestureRecognizer instance) {
                 instance.onStart = _onDragStart;
                 instance.onUpdate = _onDragUpdate;
