@@ -42,8 +42,8 @@ class _HomeScreenState extends State<HomeScreen>
   /// 是否处于 settle 动画（翻月或回弹）中。
   bool _isSettling = false;
 
-  /// 手势开始时是否已有 settle 动画在进行（用于中断续接）。
-  bool _wasSettlingOnDragStart = false;
+  /// settle 动画完成后要执行的月份切换方向（1=下月，-1=上月，0=回弹）。
+  int _pendingDelta = 0;
 
   // ─── 常量 ────────────────────────────────────────────────────────
   /// 翻月的拖拽距离阈值（屏幕宽度的比例）。
@@ -69,6 +69,19 @@ class _HomeScreenState extends State<HomeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    // 用 statusListener 替代 .then()，在动画 completed 时同步处理月份切换。
+    _animController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        final delta = _pendingDelta;
+        _pendingDelta = 0;
+        if (delta != 0) {
+          _doChangeMonth(delta);
+          _offsetNotifier.value = 0;
+          _titleProgressNotifier.value = 0;
+        }
+        _isSettling = false;
+      }
+    });
     _recomputeThreeMonths();
   }
 
@@ -465,11 +478,24 @@ class _HomeScreenState extends State<HomeScreen>
 
   /// 手指拖拽开始。
   void _onDragStart(DragStartDetails details) {
-    // 如果 settle 动画进行中，立即停止并从当前位置续接手势。
-    _wasSettlingOnDragStart = _isSettling;
-    _animController.stop();
-    _isSettling = false;
-    // 月份数据在拖拽期间保持不变。
+    // 如果 settle 动画进行中，检查是否接近完成。
+    if (_isSettling) {
+      if (_animController.value > 0.9 && _pendingDelta != 0) {
+        // 动画已接近完成，直接完成月份切换。
+        final delta = _pendingDelta;
+        _animController.stop();
+        _pendingDelta = 0;
+        _doChangeMonth(delta);
+        _offsetNotifier.value = 0;
+        _titleProgressNotifier.value = 0;
+        _isSettling = false;
+      } else {
+        // 中断动画，从当前位置续接手势。
+        _animController.stop();
+        _pendingDelta = 0;
+        _isSettling = false;
+      }
+    }
   }
 
   /// 手指拖拽过程中 1:1 跟随（不使用 Curve）。
