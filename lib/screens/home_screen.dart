@@ -97,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen>
     final previous = _selectedDay;
     _animController.stop();
     _isSettling = false;
+    _pendingDelta = 0;
     _offsetNotifier.value = 0;
     _titleProgressNotifier.value = 0;
     setState(() {
@@ -530,12 +531,11 @@ class _HomeScreenState extends State<HomeScreen>
       _titleProgressNotifier.value = (v / screenWidth).clamp(-1.0, 1.0);
     });
 
-    _animController.forward(from: 0).then((_) {
-      _isSettling = false;
-    });
+    _animController.forward(from: 0);
   }
 
   /// 翻月动画：偏移从当前值平移到完整页宽，然后切换月份并重置。
+  /// 用 statusListener 替代 .then()，确保 completed/dismissed 都能正确处理。
   void _settleToMonth(int delta) {
     final screenWidth = MediaQuery.of(context).size.width;
     // 目标偏移：delta>0(下月) → -screenWidth；delta<0(上月) → +screenWidth
@@ -558,14 +558,7 @@ class _HomeScreenState extends State<HomeScreen>
       _titleProgressNotifier.value = (v / screenWidth).clamp(-1.0, 1.0);
     });
 
-    _animController.forward(from: 0).then((_) {
-      // 动画完成：切换月份数据，重置偏移到 0。
-      // 用户看不到重置——因为月份已变，网格内容直接替换。
-      _doChangeMonth(delta);
-      _offsetNotifier.value = 0;
-      _titleProgressNotifier.value = 0;
-      _isSettling = false;
-    });
+    _animController.forward(from: 0);
   }
 
   /// 按钮点击切换月份（带平移动画）。
@@ -579,6 +572,7 @@ class _HomeScreenState extends State<HomeScreen>
     final startOffset = _offsetNotifier.value;
 
     _isSettling = true;
+    _pendingDelta = delta;
     _animController.value = 0;
     _animAnimation = Tween<double>(
       begin: startOffset,
@@ -594,13 +588,7 @@ class _HomeScreenState extends State<HomeScreen>
       _titleProgressNotifier.value = (v / screenWidth).clamp(-1.0, 1.0);
     });
 
-    _animController.forward(from: 0).then((_) {
-      // 切换月份，重置偏移到 0。
-      _doChangeMonth(delta);
-      _offsetNotifier.value = 0;
-      _titleProgressNotifier.value = 0;
-      _isSettling = false;
-    });
+    _animController.forward(from: 0);
   }
 
   /// 实际执行月份切换 + notifier 清理 + 三月数据更新。
