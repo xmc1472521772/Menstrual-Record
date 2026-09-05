@@ -1,16 +1,14 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_theme.dart';
 import '../models/cycle_data.dart';
 
-/// 周期折线图：用 [CustomPaint] 手绘，无需第三方依赖。
+/// 周期趋势图（基金风格）。
 ///
-/// 展示每条记录的周期天数（本次经期起始日到上次经期起始日的天数），
-/// 让用户直观看到周期的波动趋势。
-///
-/// 支持时间范围筛选（近三个月 / 六个月 / 一年 / 全部）。
-/// 图表始终填满可用宽度，通过智能标签间隔避免文字堆叠，
-/// 保证用户一览全局起伏变化。
+/// 顶部展示最新周期天数的大数字 + 较上次的涨跌（绿色↑ / 红色↓），
+/// 下方是渐变填充的平滑折线，数据点末端高亮最新值，
+/// 底部 X 轴只标首尾两个日期，极简不堆叠。
 class CycleChart extends StatefulWidget {
   final List<PeriodSummary> periods;
 
@@ -20,7 +18,6 @@ class CycleChart extends StatefulWidget {
   State<CycleChart> createState() => _CycleChartState();
 }
 
-/// 时间范围枚举。
 enum _TimeRange {
   threeMonths('近三月'),
   sixMonths('近六月'),
@@ -35,15 +32,11 @@ class _CycleChartState extends State<CycleChart> {
   _TimeRange _selectedRange = _TimeRange.all;
 
   List<PeriodSummary> get _filteredData {
-    // 只取有 cycleLength 的记录（第一条记录没有上一个周期可比较）
-    final withCycle = widget.periods.where((p) => p.cycleLength != null).toList();
-
-    // recentPeriods 是倒序的（最近在前），reversed 后正序（最早在前）
+    final withCycle =
+        widget.periods.where((p) => p.cycleLength != null).toList();
     final ascending = withCycle.reversed.toList();
 
-    if (_selectedRange == _TimeRange.all) {
-      return ascending;
-    }
+    if (_selectedRange == _TimeRange.all) return ascending;
 
     final now = DateTime.now();
     final cutoff = switch (_selectedRange) {
@@ -53,16 +46,7 @@ class _CycleChartState extends State<CycleChart> {
       _TimeRange.all => DateTime(2000),
     };
 
-    // 按经期开始日期筛选：只保留 cutoff 之后的记录。
-    // PredictionService 在构建 recentPeriods 时已计算好 cycleLength，
-    // 直接按 startDate 过滤即可。
-    final filtered = <PeriodSummary>[];
-    for (final p in ascending) {
-      if (!p.startDate.isBefore(cutoff)) {
-        filtered.add(p);
-      }
-    }
-    return filtered;
+    return ascending.where((p) => !p.startDate.isBefore(cutoff)).toList();
   }
 
   @override
@@ -75,7 +59,7 @@ class _CycleChartState extends State<CycleChart> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 标题行
+            // ─── 标题行 ───
             Row(
               children: [
                 const Icon(
@@ -92,22 +76,22 @@ class _CycleChartState extends State<CycleChart> {
                 ),
               ],
             ),
-            const SizedBox(height: AppDimens.spacingSm),
-            Text(
-              '各次经期周期天数变化',
-              style: AppTheme.bodySmall.copyWith(
-                color: context.themeColors.onSurfaceTertiary,
-              ),
-            ),
-            // 时间范围筛选
             const SizedBox(height: AppDimens.spacingMd),
+
+            // ─── 筛选条 ───
             _buildRangeChips(),
             const SizedBox(height: AppDimens.spacingLg),
+
             if (data.isEmpty)
               _buildEmptyChart(context)
             else ...[
-              _buildChartArea(context, data),
+              // ─── 顶部数值摘要 ───
+              _buildHeader(context, data),
+              const SizedBox(height: AppDimens.spacingLg),
+              // ─── 折线图 ───
+              _buildChart(context, data),
               const SizedBox(height: AppDimens.spacingSm),
+              // ─── 图例 ───
               _buildLegend(context, data),
             ],
           ],
@@ -116,7 +100,100 @@ class _CycleChartState extends State<CycleChart> {
     );
   }
 
-  // ─── 时间范围筛选条 ─────────────────────────────────────────
+  // ─── 顶部数值摘要（基金风格）──────────────────────────────
+  Widget _buildHeader(BuildContext context, List<PeriodSummary> data) {
+    final values = data.map((p) => p.cycleLength!).toList();
+    final latest = values.last;
+    final avg = (values.reduce((a, b) => a + b) / values.length).round();
+
+    // 计算较上次的涨跌
+    int? diff;
+    bool isUp = false;
+    if (values.length >= 2) {
+      final prev = values[values.length - 2];
+      diff = latest - prev;
+      isUp = diff >= 0;
+    }
+
+    // 涨跌颜色：基金风格中红涨绿跌，但此项目用红=品牌色系，
+    // 这里以"偏离平均值"来着色：高于平均偏暖色，低于平均偏绿色
+    final diffColor = diff == null
+        ? context.themeColors.onSurfaceTertiary
+        : isUp
+            ? AppColors.error
+            : AppColors.success;
+    final diffIcon = diff == null
+        ? null
+        : isUp
+            ? Icons.arrow_upward_rounded
+            : Icons.arrow_downward_rounded;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        // 最新周期值
+        Text(
+          '$latest',
+          style: TextStyle(
+            fontSize: 36,
+            fontWeight: FontWeight.w700,
+            color: context.themeColors.onSurface,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '天',
+          style: TextStyle(
+            fontSize: 14,
+            color: context.themeColors.onSurfaceSecondary,
+          ),
+        ),
+        const SizedBox(width: AppDimens.spacingMd),
+        // 涨跌
+        if (diff != null) ...[
+          Icon(diffIcon, size: 16, color: diffColor),
+          const SizedBox(width: 2),
+          Text(
+            '${diff >= 0 ? '+' : ''}$diff',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: diffColor,
+            ),
+          ),
+        ],
+        const Spacer(),
+        // 平均值小标签
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimens.spacingSm,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: context.themeColors.surfaceTile,
+            borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '平均 $avg 天',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.themeColors.onSurfaceSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── 筛选条 ───────────────────────────────────────────────
   Widget _buildRangeChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -132,11 +209,8 @@ class _CycleChartState extends State<CycleChart> {
             child: FilterChip(
               label: Text(range.label),
               selected: selected,
-              onSelected: (_) {
-                setState(() {
-                  _selectedRange = range;
-                });
-              },
+              onSelected: (_) =>
+                  setState(() => _selectedRange = range),
               selectedColor: AppColors.brandPrimary,
               backgroundColor: context.themeColors.surfaceTile,
               labelStyle: TextStyle(
@@ -167,7 +241,7 @@ class _CycleChartState extends State<CycleChart> {
     );
   }
 
-  // ─── 空数据状态 ─────────────────────────────────────────────
+  // ─── 空状态 ───────────────────────────────────────────────
   Widget _buildEmptyChart(BuildContext context) {
     return SizedBox(
       width: double.infinity,
@@ -183,33 +257,62 @@ class _CycleChartState extends State<CycleChart> {
     );
   }
 
-  // ─── 图表区域 ──────────────────────────────────────────────
-  /// 图表始终填满可用宽度，不使用水平滚动。
-  /// 数据点多时通过 [_CycleLineChartPainter] 内部的智能标签间隔
-  /// 自动跳过部分标签，避免文字堆叠，同时保证全局一览。
-  Widget _buildChartArea(BuildContext context, List<PeriodSummary> data) {
-    return SizedBox(
-      width: double.infinity,
-      height: 180,
-      child: CustomPaint(
-        painter: _CycleLineChartPainter(
-          data: data,
-          lineColor: AppColors.brandPrimary,
-          dotColor: AppColors.brandPrimary,
-          fillGradient: AppColors.brandPrimary,
-          axisColor: context.themeColors.divider,
-          textColor: context.themeColors.onSurfaceTertiary,
-          avgLineColor: AppColors.brandPrimary.withValues(alpha: 0.3),
+  // ─── 折线图区域 ────────────────────────────────────────────
+  Widget _buildChart(BuildContext context, List<PeriodSummary> data) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 140,
+          child: CustomPaint(
+            painter: _FundChartPainter(
+              data: data,
+              lineColor: AppColors.brandPrimary,
+              fillGradient: AppColors.brandPrimary,
+              axisColor: context.themeColors.divider,
+              textColor: context.themeColors.onSurfaceTertiary,
+              avgLineColor: AppColors.brandPrimary.withValues(alpha: 0.25),
+              highlightColor: AppColors.brandPrimary,
+            ),
+          ),
         ),
-      ),
+        // 首尾日期
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDate(data.first.startDate),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.themeColors.onSurfaceTertiary,
+                ),
+              ),
+              Text(
+                _formatDate(data.last.startDate),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.themeColors.onSurfaceTertiary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
+  }
+
+  String _formatDate(DateTime d) {
+    return '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
   }
 
   // ─── 图例 ─────────────────────────────────────────────────
   Widget _buildLegend(BuildContext context, List<PeriodSummary> data) {
     final values = data.map((p) => p.cycleLength!).toList();
-    final minVal = values.reduce((a, b) => a < b ? a : b);
-    final maxVal = values.reduce((a, b) => a > b ? a : b);
+    final minVal = values.reduce(math.min);
+    final maxVal = values.reduce(math.max);
     final avg = (values.reduce((a, b) => a + b) / values.length).round();
 
     return Row(
@@ -251,23 +354,30 @@ class _CycleChartState extends State<CycleChart> {
   }
 }
 
-class _CycleLineChartPainter extends CustomPainter {
+/// 基金风格的折线图 Painter。
+///
+/// 特点：
+/// - 无 Y 轴竖线、无网格线（极简）
+/// - 折线平滑（贝塞尔），底部渐变填充
+/// - 仅在折线上方为极值点标数值
+/// - 最新点用大圆 + 光晕高亮
+class _FundChartPainter extends CustomPainter {
   final List<PeriodSummary> data;
   final Color lineColor;
-  final Color dotColor;
   final Color fillGradient;
   final Color axisColor;
   final Color textColor;
   final Color avgLineColor;
+  final Color highlightColor;
 
-  _CycleLineChartPainter({
+  _FundChartPainter({
     required this.data,
     required this.lineColor,
-    required this.dotColor,
     required this.fillGradient,
     required this.axisColor,
     required this.textColor,
     required this.avgLineColor,
+    required this.highlightColor,
   });
 
   @override
@@ -275,90 +385,51 @@ class _CycleLineChartPainter extends CustomPainter {
     if (data.isEmpty) return;
 
     final values = data.map((p) => p.cycleLength!).toList();
-    final minVal = values.reduce((a, b) => a < b ? a : b);
-    final maxVal = values.reduce((a, b) => a > b ? a : b);
+    final minVal = values.reduce(math.min);
+    final maxVal = values.reduce(math.max);
     final avgVal = values.reduce((a, b) => a + b) / values.length;
 
-    // 纵轴范围：在 min/max 基础上留出余量，避免折线贴边
-    final yMin = (minVal - 2).clamp(15, minVal.toDouble()).toDouble();
-    final yMax = (maxVal + 2).clamp(maxVal.toDouble(), 60.0).toDouble();
-    final yRange = yMax - yMin;
+    // 纵轴范围：上下各留 12% 余量
+    final yRange = (maxVal - minVal).toDouble();
+    final yPad = yRange == 0 ? 2.0 : yRange * 0.15;
+    final yMin = minVal - yPad;
+    final yMax = maxVal + yPad;
+    final ySpan = yMax - yMin;
 
-    // 画布边距：左侧固定 36px 给 Y 轴标签，右侧 12px 留白
-    const leftPad = 36.0;
-    const rightPad = 12.0;
-    const topPad = 16.0;
-    const bottomPad = 28.0;
+    // 画布边距：无 Y 轴标签，左右只留极小边距
+    const leftPad = 4.0;
+    const rightPad = 4.0;
+    const topPad = 14.0;
+    const bottomPad = 6.0;
 
     final chartW = size.width - leftPad - rightPad;
     final chartH = size.height - topPad - bottomPad;
 
-    // ─── 横向网格线（3 条）───
-    final gridPaint = Paint()
-      ..color = axisColor
-      ..strokeWidth = 0.5
-      ..style = PaintingStyle.stroke;
-
-    for (int i = 0; i <= 3; i++) {
-      final y = topPad + chartH * (i / 3);
-      canvas.drawLine(
-        Offset(leftPad, y),
-        Offset(size.width - rightPad, y),
-        gridPaint,
-      );
-
-      // Y 轴标签：右对齐到 leftPad - 4 的位置
-      final val = (yMax - yRange * (i / 3)).round();
-      final yLabel = '$val';
-      final tp = TextPainter(
-        text: TextSpan(
-          text: yLabel,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 10,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(leftPad - tp.width - 4, y - tp.height / 2));
-    }
-
-    // ─── Y 轴线 ───
-    final axisPaint = Paint()
-        ..color = axisColor
-        ..strokeWidth = 1;
-    canvas.drawLine(
-      const Offset(leftPad, topPad),
-      Offset(leftPad, topPad + chartH),
-      axisPaint,
-    );
-
-    // ─── 平均值虚线 ───
-    final avgY = topPad + chartH * (1 - (avgVal - yMin) / yRange);
-    final dashPaint = Paint()
-      ..color = avgLineColor
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-    const dashWidth = 4.0;
-    const dashGap = 3.0;
-    double startX = leftPad;
-    while (startX < size.width - rightPad) {
-      final endX = startX + dashWidth;
-      canvas.drawLine(
-        Offset(startX, avgY),
-        Offset(endX.clamp(leftPad, size.width - rightPad), avgY),
-        dashPaint,
-      );
-      startX += dashWidth + dashGap;
-    }
-
-    // ─── 计算所有数据点坐标 ───
-    final points = <Offset>[];
+    // ─── 计算数据点坐标 ───
     final n = data.length;
+    final points = <Offset>[];
     for (int i = 0; i < n; i++) {
       final x = leftPad + (n == 1 ? chartW / 2 : chartW * i / (n - 1));
-      final y = topPad + chartH * (1 - (values[i] - yMin) / yRange);
+      final y = topPad + chartH * (1 - (values[i] - yMin) / ySpan);
       points.add(Offset(x, y));
+    }
+
+    // ─── 平均线（虚线）───
+    final avgY = topPad + chartH * (1 - (avgVal - yMin) / ySpan);
+    final dashPaint = Paint()
+      ..color = avgLineColor
+      ..strokeWidth = 0.8
+      ..style = PaintingStyle.stroke;
+    const dashW = 3.0;
+    const dashGap = 3.0;
+    double dx = leftPad;
+    while (dx < size.width - rightPad) {
+      canvas.drawLine(
+        Offset(dx, avgY),
+        Offset((dx + dashW).clamp(leftPad, size.width - rightPad), avgY),
+        dashPaint,
+      );
+      dx += dashW + dashGap;
     }
 
     // ─── 填充区域 ───
@@ -380,15 +451,12 @@ class _CycleLineChartPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            fillGradient.withValues(alpha: 0.25),
+            fillGradient.withValues(alpha: 0.22),
             fillGradient.withValues(alpha: 0.0),
           ],
-        ).createShader(Rect.fromLTWH(
-          leftPad,
-          topPad,
-          chartW,
-          chartH,
-        ));
+        ).createShader(
+          Rect.fromLTWH(leftPad, topPad, chartW, chartH),
+        );
       canvas.drawPath(fillPath, fillPaint);
     }
 
@@ -403,82 +471,67 @@ class _CycleLineChartPainter extends CustomPainter {
       }
       final linePaint = Paint()
         ..color = lineColor
-        ..strokeWidth = 2
+        ..strokeWidth = 2.2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
       canvas.drawPath(linePath, linePaint);
     }
 
-    // ─── 数据点 + 数值标签 ───
-    // 智能间隔：数据点多时只显示首、尾、极值和等间隔标签，避免堆叠。
-    final valueLabelStep = _computeLabelStep(n, chartW, 28.0);
+    // ─── 数据点 ───
+    final minIdx = values.indexOf(minVal);
+    final maxIdx = values.indexOf(maxVal);
     final dotPaint = Paint()
-      ..color = dotColor
+      ..color = lineColor
       ..style = PaintingStyle.fill;
-    final dotBorderPaint = Paint()
+    final whitePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
 
-    // 首尾和极值索引
-    final minIdx = values.indexOf(minVal);
-    final maxIdx = values.indexOf(maxVal);
-    final importantIdxs = <int>{0, n - 1, minIdx, maxIdx};
-
-    for (int i = 0; i < points.length; i++) {
-      // 白底圆
-      canvas.drawCircle(points[i], 5, dotBorderPaint);
-      // 实心圆
-      canvas.drawCircle(points[i], 3.5, dotPaint);
-
-      // 数值标签：等间隔 + 首尾极值
-      if (i % valueLabelStep == 0 || importantIdxs.contains(i)) {
-        _drawCenteredText(
-          canvas,
-          '${values[i]}',
-          Offset(points[i].dx, points[i].dy - 14),
-          lineColor,
-          10,
-          bold: true,
-        );
-      }
-    }
-
-    // ─── X 轴标签（日期）──智能间隔 + 居中对齐 ───
-    final dateLabelStep = _computeLabelStep(n, chartW, 40.0);
     for (int i = 0; i < n; i++) {
-      if (i % dateLabelStep == 0 || i == n - 1) {
-        final x = leftPad + (n == 1 ? chartW / 2 : chartW * i / (n - 1));
-        final label = _formatDate(data[i].startDate);
-        _drawCenteredText(
-          canvas,
-          label,
-          Offset(x, topPad + chartH + 12),
-          textColor,
-          9,
-        );
-      }
+      // 普通点：小白底 + 实心圆
+      canvas.drawCircle(points[i], 4, whitePaint);
+      canvas.drawCircle(points[i], 2.5, dotPaint);
     }
+
+    // 极值点数值标签
+    _drawCenteredText(
+      canvas,
+      '$minVal',
+      Offset(points[minIdx].dx, points[minIdx].dy + 16),
+      AppColors.success,
+      10,
+      bold: true,
+    );
+    _drawCenteredText(
+      canvas,
+      '$maxVal',
+      Offset(points[maxIdx].dx, points[maxIdx].dy - 14),
+      AppColors.error,
+      10,
+      bold: true,
+    );
+
+    // ─── 最新点高亮：光晕 + 大圆 ───
+    final last = points.last;
+    final glowPaint = Paint()
+      ..color = highlightColor.withValues(alpha: 0.15)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(last, 12, glowPaint);
+    canvas.drawCircle(last, 6, whitePaint);
+    canvas.drawCircle(last, 4, dotPaint);
+
+    // 最新值数值标签
+    _drawCenteredText(
+      canvas,
+      '${values.last}',
+      Offset(last.dx, last.dy - 16),
+      lineColor,
+      11,
+      bold: true,
+    );
   }
 
-  /// 计算标签显示间隔。
-  ///
-  /// 每个标签需要 [minSpacing] 像素的最小水平间距才不重叠。
-  /// 当数据点间距小于此值时，跳过部分标签。
-  /// 最小 step 为 1（每个都显示），数据多时自动增大。
-  int _computeLabelStep(int n, double chartW, double minSpacing) {
-    if (n <= 1) return 1;
-    final pointSpacing = chartW / (n - 1);
-    if (pointSpacing >= minSpacing) return 1;
-    final step = (minSpacing / pointSpacing).ceil();
-    return step.clamp(1, n);
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}';
-  }
-
-  /// 以 [center] 为中心绘制文字（水平 + 垂直居中）。
   void _drawCenteredText(
     Canvas canvas,
     String text,
@@ -502,7 +555,7 @@ class _CycleLineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _CycleLineChartPainter oldDelegate) {
+  bool shouldRepaint(covariant _FundChartPainter oldDelegate) {
     return oldDelegate.data.length != data.length ||
         oldDelegate.lineColor != lineColor ||
         oldDelegate.axisColor != axisColor;
