@@ -13,10 +13,32 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay = DateTime.now();
-  int _slideDirection = 1;
+
+  /// 当前拖拽的实时水平偏移（px），正值=向右拖→上月，负值=向左拖→下月。
+  double _dragOffset = 0;
+
+  /// 是否正在拖拽中（拖拽期间禁用按钮切换的动画）。 
+  bool _isDragging = false;
+
+  /// 动画控制器：用于翻月动画和回弹动画。
+  late final AnimationController _animController;
+  Animation<double>? _animAnimation;
+
+  /// 触发翻月的拖拽距离阈值（屏幕宽度的比例）。
+  static const double _kSwipeThresholdRatio = 0.25;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+  }
 
   /// 日历格子的局部刷新通知器：key 为 `yyyyMMdd`，按需懒创建。
   /// 选中某天时只重建受影响的 1~2 个格子，不再整页 setState。
@@ -42,8 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _jumpToToday() {
     final now = DateTime.now();
     final previous = _selectedDay;
+    _animController.stop();
     setState(() {
       _focusedDay = DateTime(now.year, now.month, 1);
+      _dragOffset = 0;
     });
     _selectedDay = now;
     if (previous != null) {
@@ -55,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _animController.dispose();
     for (final notifier in _dayCellNotifiers.values) {
       notifier.dispose();
     }
@@ -411,24 +436,164 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─── Calendar ─────────────────────────────────────────────────────
-  void _onSwipe(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
 
-    if (velocity > 300) {
-      _changeMonth(-1);
-    } else if (velocity < -300) {
-      _changeMonth(1);
+  /// 手指拖拽过程中实时更新偏移。
+  void _onDragUpdate(DragUpdateDetails details) {
+    if (!_isDragging) return;
+    setState(() {
+      _dragOffset += details.primaryDelta ?? 0;
+    });
+  }
+
+  /// 手指抬起时判断是否翻月。
+  void _onDragEnd(DragEndDetails details) {
+    if (!_isDragging) return;
+    _isDragging = false;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final threshold = screenWidth * _kSwipeThresholdRatio;
+
+    if (_dragOffset.abs() >= threshold) {
+      // 达到阈值 → 执行翻月动画
+      final delta = _dragOffset > 0 ? -1 : 1; // 右拖→上月(-1)，左拖→下月(+1)
+      _animateMonthSwitch(delta);
+    } else {
+      // 未达到阈值 → 回弹
+      _animateSpringBack();
     }
   }
 
+  /// 拖拽中：用户开始拖拽。
+  void _onDragStart(DragStartDetails details) {
+    _isDragging = true;
+    _dragOffset = 0;
+    _animController.stop();
+  }
+
+  /// 回弹动画：偏移从当前值回到 0。
+  void _animateSpringBack() {
+    final startOffset = _dragOffset;
+    if (startOffset == 0) return;
+
+    _animController.value = 0;
+    _animAnimation = Tween<double>(begin: startOffset, end: 0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+      ),
+    )..addListener(() {
+      setState(() {
+        _dragOffset = _animAnimation!.value;
+      });
+    });
+    _animController.forward(from: 0);
+  }
+
+  /// 翻月动画：偏移从当前值平移到完整页宽，然后切换月份并从反方向滑入。
+  void _animateMonthSwitch(int delta) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    // 目标偏移：完整页宽方向
+    final targetOffset = delta > 0 ? -screenWidth : screenWidth;
+    final startOffset = _dragOffset;
+
+    _animController.value = 0;
+    _animAnimation = Tween<double>(
+      begin: startOffset,
+      end: targetOffset,
+    ).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+      ),
+    )..addListener(() {
+      setState(() {
+        _dragOffset = _animAnimation!.value;
+      });
+    });
+
+    _animController.forward(from: 0).then((_) {
+      // 切换月份，同时将偏移设为反方向的屏外位置
+      _doChangeMonth(delta);
+      setState(() {
+        _dragOffset = -targetOffset;
+      });
+
+      // 新月份从屏外平移回到 0
+      _animController.value = 0;
+      _animAnimation = Tween<double>(
+        begin: -targetOffset,
+        end: 0,
+      ).animate(
+        CurvedAnimation(
+          parent: _animController,
+          curve: Curves.easeOutCubic,
+        ),
+      )..addListener(() {
+        setState(() {
+          _dragOffset = _animAnimation!.value;
+        });
+      });
+      _animController.forward(from: 0);
+    });
+  }
+
+  /// 按钮点击切换月份（带平移动画）。
   void _changeMonth(int delta) {
+    if (_isDragging) return;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final targetOffset = delta > 0 ? -screenWidth : screenWidth;
+
+    _animController.stop();
+    _animController.value = 0;
+    _animAnimation = Tween<double>(
+      begin: 0,
+      end: targetOffset,
+    ).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+      ),
+    )..addListener(() {
+      setState(() {
+        _dragOffset = _animAnimation!.value;
+      });
+    });
+
+    _animController.forward(from: 0).then((_) {
+      // 切换月份的同时将偏移设为反方向的屏外位置，
+      // 这样新月份会从正确方向平移回来，避免闪烁。
+      _doChangeMonth(delta);
+      setState(() {
+        _dragOffset = -targetOffset;
+      });
+
+      // 新月份从屏外平移回到 0
+      _animController.value = 0;
+      _animAnimation = Tween<double>(
+        begin: -targetOffset,
+        end: 0,
+      ).animate(
+        CurvedAnimation(
+          parent: _animController,
+          curve: Curves.easeOutCubic,
+        ),
+      )..addListener(() {
+        setState(() {
+          _dragOffset = _animAnimation!.value;
+        });
+      });
+      _animController.forward(from: 0);
+    });
+  }
+
+  /// 实际执行月份切换 + notifier 清理。
+  void _doChangeMonth(int delta) {
     setState(() {
       _focusedDay = DateTime(
         _focusedDay.year,
         _focusedDay.month + delta,
         1,
       );
-      _slideDirection = delta;
     });
     // 清理非当前月和选中日的 notifier，防止来回滑动多个月后无界增长。
     // 选中日的 notifier 由 _selectDay / _jumpToToday 维护，不在此清理。
@@ -466,7 +631,9 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ClipRRect(
         borderRadius: border,
         child: GestureDetector(
-          onHorizontalDragEnd: _onSwipe,
+          onHorizontalDragStart: _onDragStart,
+          onHorizontalDragUpdate: _onDragUpdate,
+          onHorizontalDragEnd: _onDragEnd,
           behavior: HitTestBehavior.opaque,
           child: Column(
             children: [
@@ -523,24 +690,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: AppDimens.spacingSm),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) {
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: Offset(_slideDirection.toDouble(), 0),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutCubic,
-                    )),
-                    child: child,
-                  );
-                },
-                child: Container(
-                  key: ValueKey(
-                      'grid-${_focusedDay.year}-${_focusedDay.month}'),
-                  child: _buildCalendarGrid(provider),
+              ClipRect(
+                child: Transform.translate(
+                  offset: Offset(_dragOffset, 0),
+                  child: Container(
+                    key: ValueKey(
+                        'grid-${_focusedDay.year}-${_focusedDay.month}'),
+                    child: _buildCalendarGrid(provider),
+                  ),
                 ),
               ),
               const Divider(height: 1),
