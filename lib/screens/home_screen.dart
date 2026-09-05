@@ -486,31 +486,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: AppColors.inkSecondary,
                       iconSize: 26,
                     ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (child, animation) {
-                        final inOffset = Offset(_slideDirection.toDouble(), 0);
-                        return SlideTransition(
-                          position: Tween<Offset>(
-                            begin: inOffset,
-                            end: Offset.zero,
-                          ).animate(CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                          )),
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Text(
-                        '${_focusedDay.year}年${_focusedDay.month}月',
-                        key: ValueKey(
-                            '${_focusedDay.year}-${_focusedDay.month}'),
-                        style: AppTheme.titleLarge.copyWith(
-                          color: context.themeColors.onSurface,
-                        ),
+                    Text(
+                      '${_focusedDay.year}年${_focusedDay.month}月',
+                      style: AppTheme.titleLarge.copyWith(
+                        color: context.themeColors.onSurface,
                       ),
                     ),
                     IconButton(
@@ -547,19 +526,15 @@ class _HomeScreenState extends State<HomeScreen> {
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 transitionBuilder: (child, animation) {
-                  final inOffset = Offset(_slideDirection * 0.3, 0);
                   return SlideTransition(
                     position: Tween<Offset>(
-                      begin: inOffset,
+                      begin: Offset(_slideDirection.toDouble(), 0),
                       end: Offset.zero,
                     ).animate(CurvedAnimation(
                       parent: animation,
                       curve: Curves.easeOutCubic,
                     )),
-                    child: FadeTransition(
-                      opacity: animation,
-                      child: child,
-                    ),
+                    child: child,
                   );
                 },
                 child: Container(
