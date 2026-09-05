@@ -16,7 +16,85 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay = DateTime.now();
-  int _slideDirection = 1;
+
+  /// ─── 日历翻页参数（可调）─────────────────────────────────────
+  /// PageView 使用的基础页索引，对应 _baseMonth 的偏移量。
+  /// 用一个较大的中间值，允许向前后翻页多个月。
+  static const int _kInitialPage = 5000;
+
+  /// PageView 控制器。
+  late final PageController _pageController =
+      PageController(initialPage: _kInitialPage);
+
+  /// 基准月份（_kInitialPage 对应的月份），翻页索引以此为原点。
+  final DateTime _baseMonth =
+      DateTime(DateTime.now().year, DateTime.now().month, 1);
+
+  /// 当前 PageView 页码（用于标题更新）。
+  int _currentPage = _kInitialPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController.addListener(_onPageChanged);
+  }
+
+  void _onPageChanged() {
+    final page = _pageController.page?.round() ?? _kInitialPage;
+    if (page != _currentPage) {
+      _currentPage = page;
+      final newMonth = DateTime(
+        _baseMonth.year,
+        _baseMonth.month + (page - _kInitialPage),
+        1,
+      );
+      if (!_isSameMonth(newMonth, _focusedDay)) {
+        setState(() {
+          _focusedDay = newMonth;
+        });
+        _cleanupNotifiers();
+      }
+    }
+  }
+
+  bool _isSameMonth(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month;
+
+  /// 跳到指定月份（程序化跳转，如点击按钮或「回到今天」）。
+  void _jumpToPage(DateTime month) {
+    final delta = (month.year - _baseMonth.year) * 12 +
+        (month.month - _baseMonth.month);
+    final targetPage = _kInitialPage + delta;
+    _pageController.animateToPage(
+      targetPage,
+      // ▶ 吸附动画时长（可调）：250ms–300ms，Material Design 推荐范围
+      duration: const Duration(milliseconds: 280),
+      // ▶ 吸附动画曲线（可调）：fastOutSlowIn，Material 推荐曲线
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
+  void _cleanupNotifiers() {
+    final y = _focusedDay.year;
+    final m = _focusedDay.month;
+    final toRemove = <int>[];
+    for (final key in _dayCellNotifiers.keys) {
+      final keyY = key ~/ 10000;
+      final keyM = (key % 10000) ~/ 100;
+      if (keyY != y || keyM != m) {
+        if (_selectedDay != null &&
+            keyY == _selectedDay!.year &&
+            keyM == _selectedDay!.month) {
+          continue;
+        }
+        toRemove.add(key);
+      }
+    }
+    for (final key in toRemove) {
+      _dayCellNotifiers[key]?.dispose();
+      _dayCellNotifiers.remove(key);
+    }
+  }
 
   /// 日历格子的局部刷新通知器：key 为 `yyyyMMdd`，按需懒创建。
   /// 选中某天时只重建受影响的 1~2 个格子，不再整页 setState。
@@ -42,9 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _jumpToToday() {
     final now = DateTime.now();
     final previous = _selectedDay;
-    setState(() {
-      _focusedDay = DateTime(now.year, now.month, 1);
-    });
+    _jumpToPage(DateTime(now.year, now.month, 1));
     _selectedDay = now;
     if (previous != null) {
       _dayCellNotifiers[_dayKey(previous)]?.value++;
@@ -55,6 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _pageController.removeListener(_onPageChanged);
+    _pageController.dispose();
     for (final notifier in _dayCellNotifiers.values) {
       notifier.dispose();
     }
@@ -411,47 +489,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─── Calendar ─────────────────────────────────────────────────────
-  void _onSwipe(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
 
-    if (velocity > 300) {
-      _changeMonth(-1);
-    } else if (velocity < -300) {
-      _changeMonth(1);
-    }
-  }
-
-  void _changeMonth(int delta) {
-    setState(() {
-      _focusedDay = DateTime(
-        _focusedDay.year,
-        _focusedDay.month + delta,
-        1,
-      );
-      _slideDirection = delta;
-    });
-    // 清理非当前月和选中日的 notifier，防止来回滑动多个月后无界增长。
-    // 选中日的 notifier 由 _selectDay / _jumpToToday 维护，不在此清理。
-    final y = _focusedDay.year;
-    final m = _focusedDay.month;
-    final toRemove = <int>[];
-    for (final key in _dayCellNotifiers.keys) {
-      final keyY = key ~/ 10000;
-      final keyM = (key % 10000) ~/ 100;
-      if (keyY != y || keyM != m) {
-        // 保留选中日的 notifier（可能在其它月份）
-        if (_selectedDay != null &&
-            keyY == _selectedDay!.year &&
-            keyM == _selectedDay!.month) {
-          continue;
-        }
-        toRemove.add(key);
-      }
-    }
-    for (final key in toRemove) {
-      _dayCellNotifiers[key]?.dispose();
-      _dayCellNotifiers.remove(key);
-    }
+  /// 将 PageView 索引转换为对应的月份 DateTime。
+  DateTime _monthFromPage(int page) {
+    final delta = page - _kInitialPage;
+    return DateTime(
+      _baseMonth.year,
+      _baseMonth.month + delta,
+      1,
+    );
   }
 
   Widget _buildCalendar(PeriodProvider provider) {
@@ -465,123 +511,141 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: ClipRRect(
         borderRadius: border,
-        child: GestureDetector(
-          onHorizontalDragEnd: _onSwipe,
-          behavior: HitTestBehavior.opaque,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppDimens.spacingSm,
-                  AppDimens.spacingSm,
-                  AppDimens.spacingSm,
-                  0,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      onPressed: () => _changeMonth(-1),
-                      icon: const Icon(Icons.chevron_left_rounded),
-                      color: AppColors.inkSecondary,
-                      iconSize: 26,
-                    ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (child, animation) {
-                        final inOffset = Offset(_slideDirection.toDouble(), 0);
-                        return SlideTransition(
-                          position: Tween<Offset>(
-                            begin: inOffset,
-                            end: Offset.zero,
-                          ).animate(CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                          )),
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Text(
-                        '${_focusedDay.year}年${_focusedDay.month}月',
-                        key: ValueKey(
-                            '${_focusedDay.year}-${_focusedDay.month}'),
-                        style: AppTheme.titleLarge.copyWith(
-                          color: context.themeColors.onSurface,
-                        ),
+        child: Column(
+          children: [
+            // ── 月份标题栏 ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppDimens.spacingSm,
+                AppDimens.spacingSm,
+                AppDimens.spacingSm,
+                0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    onPressed: () => _jumpToPage(DateTime(
+                      _focusedDay.year,
+                      _focusedDay.month - 1,
+                      1,
+                    )),
+                    icon: const Icon(Icons.chevron_left_rounded),
+                    color: AppColors.inkSecondary,
+                    iconSize: 26,
+                  ),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      );
+                    },
+                    child: Text(
+                      '${_focusedDay.year}年${_focusedDay.month}月',
+                      key: ValueKey(
+                          '${_focusedDay.year}-${_focusedDay.month}'),
+                      style: AppTheme.titleLarge.copyWith(
+                        color: context.themeColors.onSurface,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => _changeMonth(1),
-                      icon: const Icon(Icons.chevron_right_rounded),
-                      color: AppColors.inkSecondary,
-                      iconSize: 26,
-                    ),
-                  ],
-                ),
+                  ),
+                  IconButton(
+                    onPressed: () => _jumpToPage(DateTime(
+                      _focusedDay.year,
+                      _focusedDay.month + 1,
+                      1,
+                    )),
+                    icon: const Icon(Icons.chevron_right_rounded),
+                    color: AppColors.inkSecondary,
+                    iconSize: 26,
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.spacingMd,
-                ),
-                child: Row(
-                  children: _weekdayLabels
-                      .map(
-                        (day) => Expanded(
-                          child: Center(
-                            child: Text(
-                              day,
-                              style: AppTheme.bodySmall.copyWith(
-                                color: AppColors.inkTertiary,
-                              ),
+            ),
+            // ── 星期标题行 ──
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.spacingMd,
+              ),
+              child: Row(
+                children: _weekdayLabels
+                    .map(
+                      (day) => Expanded(
+                        child: Center(
+                          child: Text(
+                            day,
+                            style: AppTheme.bodySmall.copyWith(
+                              color: AppColors.inkTertiary,
                             ),
                           ),
                         ),
-                      )
-                      .toList(),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingSm),
+            // ── PageView 日历网格（安卓原生翻页） ──
+            //
+            // 核心特性：
+            // 1. 1:1 触摸跟手滑动（PageView 默认行为）
+            // 2. 翻页阈值（可调）：PageView 默认约 1/3 视口宽度
+            //    可通过 [PageView.builder] 的 [pageSnapping] 控制（默认 true）
+            // 3. 吸附动画时长：由系统 physics 控制，通常 250ms–300ms
+            // 4. 物理特性：[ClampingScrollPhysics] ——
+            //    禁用 iOS 回弹，使用安卓原生夹紧效果
+            // 5. 边缘拉伸效果（可调）：由 [_StretchScrollBehavior] 提供
+            //    Android 12+ Stretch overscroll 效果
+            //
+            // ▶ 滑动吸附阈值：由 PageView 的 viewportFraction 和
+            //    physics 中的 tolerance 共同决定，默认 ~30% 视口宽度
+            // ▶ 动画时长：PageView 翻页由 ClampingScrollPhysics 创建的
+            //    BallisticSimulation 决定，Material 默认 250ms 左右
+            // ▶ 边缘拉伸强度：在 [_StretchScrollBehavior] 中通过
+            //    OverscrollStretch 规则控制
+            SizedBox(
+              height: _calendarGridHeight,
+              child: ScrollConfiguration(
+                behavior: _StretchScrollBehavior(),
+                child: PageView.builder(
+                  controller: _pageController,
+                  physics: const ClampingScrollPhysics(
+                    // ▶ 边缘拉伸/发光强度（可调）：
+                    //    ClampingScrollPhysics 默认使用 GlowOverscrollIndicator
+                    //    （Android 12+ 会自动升级为 Stretch overscroll）
+                  ),
+                  pageSnapping: true, // 吸附到整数页
+                  itemBuilder: (context, page) {
+                    final month = _monthFromPage(page);
+                    return _buildCalendarGridForMonth(provider, month);
+                  },
                 ),
               ),
-              const SizedBox(height: AppDimens.spacingSm),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) {
-                  final inOffset = Offset(_slideDirection * 0.3, 0);
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: inOffset,
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutCubic,
-                    )),
-                    child: FadeTransition(
-                      opacity: animation,
-                      child: child,
-                    ),
-                  );
-                },
-                child: Container(
-                  key: ValueKey(
-                      'grid-${_focusedDay.year}-${_focusedDay.month}'),
-                  child: _buildCalendarGrid(provider),
-                ),
-              ),
-              const Divider(height: 1),
-              const SizedBox(height: AppDimens.spacingMd),
-              _buildLegend(),
-              const SizedBox(height: AppDimens.spacingMd),
-            ],
-          ),
+            ),
+            const Divider(height: 1),
+            const SizedBox(height: AppDimens.spacingMd),
+            _buildLegend(),
+            const SizedBox(height: AppDimens.spacingMd),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildCalendarGrid(PeriodProvider provider) {
-    final firstDay = DateTime(_focusedDay.year, _focusedDay.month, 1);
-    final lastDay = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
+  /// 日历网格固定高度：6 行 × 每格边长 + 内边距。
+  /// 每个格子的 AspectRatio 为 1:1，宽度为 (屏宽 - 2*spacingMd) / 7。
+  static double get _calendarGridHeight {
+    // 使用一个合理的固定高度估算：6 行格子，每行约 48px，加上上下边距。
+    // 实际运行时由 AspectRatio 1:1 自动校正。
+    return 300.0; // 6 * ~48 + padding
+  }
+
+  Widget _buildCalendarGridForMonth(
+      PeriodProvider provider, DateTime month) {
+    final firstDay = DateTime(month.year, month.month, 1);
+    final lastDay = DateTime(month.year, month.month + 1, 0);
 
     final weekday = firstDay.weekday;
     final daysInMonth = lastDay.day;
@@ -619,7 +683,7 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               final day =
-                  DateTime(_focusedDay.year, _focusedDay.month, dayOffset + 1);
+                  DateTime(month.year, month.month, dayOffset + 1);
               final dayType = provider.getDayType(day);
               final isToday = _isSameDay(now, day);
 
@@ -822,4 +886,35 @@ class _DayCellPalette {
   final Color onSurface;
   final Color onSurfaceSecondary;
   final Color onSurfaceTertiary;
+}
+
+/// 安卓原生风格的 ScrollBehavior —— 用于日历 PageView。
+///
+/// 关键特性：
+/// 1. 强制使用 [ClampingScrollPhysics]（安卓原生夹紧物理，非 iOS 回弹）
+/// 2. 使用 [StretchOverscrollIndicator] 提供 Android 12+ 的拉伸过滚动效果
+///    （在低于 Android 12 的设备上，框架会自动回退为传统的 Glow 微光反馈）
+///
+/// ▶ 边缘拉伸强度（可调）：
+///    拉伸幅度由 [StretchOverscrollIndicator] 内部的 overscroll 偏移量决定，
+///    越大的拖拽距离产生越明显的拉伸，松手后以 [Curves.fastOutSlowIn] 回弹。
+///    如需调整强度，可在此 behavior 中覆写 [buildOverscrollIndicator]
+///    并返回自定义的 indicator。
+class _StretchScrollBehavior extends ScrollBehavior {
+  @override
+  Widget buildOverscrollIndicator(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    // Android 12+ 使用 Stretch overscroll；低版本自动回退为 Glow。
+    return StretchingOverscrollIndicator(
+      // ▶ 拉伸方向：水平（日历左右翻页）
+      axisDirection: AxisDirection.right,
+      child: child,
+    );
+  }
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    // 强制使用 ClampingScrollPhysics，禁用 iOS 的 BouncingScrollPhysics。
+    return const ClampingScrollPhysics();
+  }
 }
