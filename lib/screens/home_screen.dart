@@ -762,10 +762,32 @@ class _HomeScreenState extends State<HomeScreen> {
               children: List<Widget>.generate(7, (col) {
                 final index = row * 7 + col;
                 final dayOffset = index - prevMonthDays;
-                if (dayOffset < 0 || dayOffset >= daysInMonth) {
-                  return const Expanded(child: SizedBox.shrink());
+
+                // ── 非本月日期：用上下月日期填充并置灰 ──
+                if (dayOffset < 0) {
+                  // 上个月末尾日期
+                  final prevDay = DateTime(
+                    month.year,
+                    month.month,
+                    dayOffset + 1, // dayOffset 为负，DateTime 会自动回退到上月
+                  );
+                  return Expanded(
+                    child: _buildOtherMonthCell(prevDay, palette),
+                  );
+                }
+                if (dayOffset >= daysInMonth) {
+                  // 下个月开头日期
+                  final nextDay = DateTime(
+                    month.year,
+                    month.month,
+                    dayOffset + 1, // 超出本月天数，DateTime 会自动前进到下月
+                  );
+                  return Expanded(
+                    child: _buildOtherMonthCell(nextDay, palette),
+                  );
                 }
 
+                // ── 本月日期 ──
                 final day =
                     DateTime(month.year, month.month, dayOffset + 1);
                 final dayType = provider.getDayType(day);
@@ -796,6 +818,25 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         }),
+      ),
+    );
+  }
+
+  /// 构建非本月日期格子（上月末尾 / 下月开头），置灰显示。
+  Widget _buildOtherMonthCell(DateTime day, _DayCellPalette palette) {
+    return Container(
+      margin: _kDayCellMargin,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '${day.day}',
+        style: TextStyle(
+          color: palette.onSurfaceTertiary.withValues(alpha: 0.4),
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+        ),
       ),
     );
   }
