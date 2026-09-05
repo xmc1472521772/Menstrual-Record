@@ -66,6 +66,7 @@ class AppStrings {
   static const String saveRecord = '保存记录';
   static const String recordSaved = '记录已保存';
   static const String saveFailed = '保存失败，请检查日期是否冲突';
+  static const String selectEndDate = '请选择结束日期';
   static const String savedNRecords = '已保存 {} 条记录';
   static const String saveFailed2 = '保存失败';
   static const String multiSelectCalendar = '多选日历';

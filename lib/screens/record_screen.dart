@@ -262,7 +262,9 @@ class _RecordScreenState extends State<RecordScreen> {
             width: double.infinity,
             height: 52,
             child: ElevatedButton(
-              onPressed: () => _saveRange(context.read<PeriodProvider>()),
+              onPressed: _endDate == null
+                  ? null
+                  : () => _saveRange(context.read<PeriodProvider>()),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: AppColors.white,
@@ -276,7 +278,11 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
                 textStyle: AppTheme.buttonLabel,
               ),
-              child: const Text(AppStrings.saveRecord),
+              child: Text(
+                _endDate == null
+                    ? AppStrings.selectEndDate
+                    : AppStrings.saveRecord,
+              ),
             ),
           ),
         ],
@@ -368,8 +374,9 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Future<void> _saveRange(PeriodProvider provider) async {
-    final end = _endDate ?? _startDate;
-    final success = await provider.savePeriodRecord(_startDate, end);
+    if (_endDate == null) return;
+    final success =
+        await provider.savePeriodRecord(_startDate, _endDate!);
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
