@@ -569,15 +569,19 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   /// 按钮点击切换月份（带平移动画）。
+  /// 即使上一个动画未结束也立即接管，从当前偏移继续。
   void _changeMonth(int delta) {
-    if (_isSettling) return;
     final screenWidth = MediaQuery.of(context).size.width;
     final targetOffset = delta > 0 ? -screenWidth : screenWidth;
+
+    // 立即停止正在进行的动画，从当前位置开始新的切换。
+    _animController.stop();
+    final startOffset = _offsetNotifier.value;
 
     _isSettling = true;
     _animController.value = 0;
     _animAnimation = Tween<double>(
-      begin: 0,
+      begin: startOffset,
       end: targetOffset,
     ).animate(
       CurvedAnimation(
@@ -609,26 +613,29 @@ class _HomeScreenState extends State<HomeScreen>
       );
     });
     _recomputeThreeMonths();
-    // 清理非当前月和选中日的 notifier，防止来回滑动多个月后无界增长。
-    final y = _focusedDay.year;
-    final m = _focusedDay.month;
-    final toRemove = <int>[];
-    for (final key in _dayCellNotifiers.keys) {
-      final keyY = key ~/ 10000;
-      final keyM = (key % 10000) ~/ 100;
-      if (keyY != y || keyM != m) {
-        if (_selectedDay != null &&
-            keyY == _selectedDay!.year &&
-            keyM == _selectedDay!.month) {
-          continue;
+    // notifier 清理延迟到下一帧，避免动画结束帧因同步遍历+dispose 卡顿。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final y = _focusedDay.year;
+      final m = _focusedDay.month;
+      final toRemove = <int>[];
+      for (final key in _dayCellNotifiers.keys) {
+        final keyY = key ~/ 10000;
+        final keyM = (key % 10000) ~/ 100;
+        if (keyY != y || keyM != m) {
+          if (_selectedDay != null &&
+              keyY == _selectedDay!.year &&
+              keyM == _selectedDay!.month) {
+            continue;
+          }
+          toRemove.add(key);
         }
-        toRemove.add(key);
       }
-    }
-    for (final key in toRemove) {
-      _dayCellNotifiers[key]?.dispose();
-      _dayCellNotifiers.remove(key);
-    }
+      for (final key in toRemove) {
+        _dayCellNotifiers[key]?.dispose();
+        _dayCellNotifiers.remove(key);
+      }
+    });
   }
 
   Widget _buildCalendar(PeriodProvider provider) {
