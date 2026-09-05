@@ -340,7 +340,9 @@ class SettingsScreen extends StatelessWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.exportSuccess)),
+          const SnackBar(
+            content: Text('数据导出成功（明文 JSON，请妥善保管）'),
+          ),
         );
       }
     } catch (e) {
@@ -554,6 +556,8 @@ class SettingsScreen extends StatelessWidget {
           },
         );
       },
-    );
+    ).then((_) {
+      textController.dispose();
+    });
   }
 }

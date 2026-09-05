@@ -47,8 +47,12 @@ class AppDateUtils {
         (date.isBefore(end) || isSameDay(date, end));
   }
 
+  /// Returns the number of days from [b] to [a].
+  ///
+  /// Positive when [a] is after [b], negative when before.
+  /// Callers that only need magnitude should use `.abs()` on the result.
   static int daysBetween(DateTime a, DateTime b) {
-    return a.difference(b).inDays.abs();
+    return a.difference(b).inDays;
   }
 
   static List<DateTime> getDaysInRange(DateTime start, DateTime end) {

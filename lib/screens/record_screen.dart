@@ -497,13 +497,16 @@ class _RecordScreenState extends State<RecordScreen> {
               ),
             )
           else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: records.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) =>
-                  _buildRecordRow(records[index], provider),
+            // 不使用 ListView.separated + shrinkWrap（shrinkWrap 会测量全部子项，
+            // 失去懒加载优势）。改为 Column + for 循环直接展开，
+            // 记录数量通常不超过几十条，成本可忽略。
+            Column(
+              children: [
+                for (int i = 0; i < records.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _buildRecordRow(records[i], provider),
+                ],
+              ],
             ),
         ],
       ),
@@ -511,10 +514,10 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Widget _buildRecordRow(PeriodRecord record, PeriodProvider provider) {
-    final start = DateFormat('yyyy-MM-dd').parse(record.startDate);
-    final end = record.endDate != null
-        ? DateFormat('yyyy-MM-dd').parse(record.endDate!)
-        : null;
+    // 直接使用 PeriodRecord 的 startDateTime / endDateTime getter，
+    // 避免重复手动解析日期字符串。
+    final start = record.startDateTime;
+    final end = record.endDateTime;
     final isOngoing = record.isOngoing;
 
     final rangeText = end != null

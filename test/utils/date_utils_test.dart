@@ -87,16 +87,16 @@ void main() {
     });
 
     group('daysBetween', () {
-      test('calculates correct days between dates', () {
-        final date1 = DateTime(2026, 7, 1);
-        final date2 = DateTime(2026, 7, 5);
+      test('returns positive days when a is after b', () {
+        final date1 = DateTime(2026, 7, 5); // a (later)
+        final date2 = DateTime(2026, 7, 1); // b (earlier)
         expect(AppDateUtils.daysBetween(date1, date2), 4);
       });
 
-      test('handles reverse order', () {
-        final date1 = DateTime(2026, 7, 5);
-        final date2 = DateTime(2026, 7, 1);
-        expect(AppDateUtils.daysBetween(date1, date2), 4);
+      test('returns negative days when a is before b', () {
+        final date1 = DateTime(2026, 7, 1); // a (earlier)
+        final date2 = DateTime(2026, 7, 5); // b (later)
+        expect(AppDateUtils.daysBetween(date1, date2), -4);
       });
 
       test('returns 0 for same date', () {

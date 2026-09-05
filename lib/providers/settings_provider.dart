@@ -44,32 +44,32 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> setCycleLength(int value) async {
-    _cycleLength = value;
     await _dao.setValue('avg_cycle_length', value.toString());
+    _cycleLength = value;
     notifyListeners();
   }
 
   Future<void> setPeriodLength(int value) async {
-    _periodLength = value;
     await _dao.setValue('avg_period_length', value.toString());
+    _periodLength = value;
     notifyListeners();
   }
 
   Future<void> setReminderDays(int value) async {
-    _reminderDays = value;
     await _dao.setValue('reminder_days', value.toString());
+    _reminderDays = value;
     notifyListeners();
   }
 
   Future<void> setReminderHour(int value) async {
-    _reminderHour = value;
     await _dao.setValue('reminder_hour', value.toString());
+    _reminderHour = value;
     notifyListeners();
   }
 
   Future<void> setAlgorithm(String value) async {
-    _algorithm = value;
     await _dao.setValue('prediction_algorithm', value);
+    _algorithm = value;
     notifyListeners();
   }
 }

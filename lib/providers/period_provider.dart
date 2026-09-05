@@ -132,10 +132,13 @@ class PeriodProvider with ChangeNotifier {
       }
       if (end.isBefore(cur)) continue;
 
-      // 经期通常 3~8 天，逐天展开的成本可忽略
-      while (!cur.isAfter(end)) {
+      // 经期通常 3~8 天，逐天展开的成本可忽略。
+      // 安全阀：防止异常数据（如 endDate 距 start_date 跨数年）导致超长循环。
+      int expanded = 0;
+      while (!cur.isAfter(end) && expanded < 10000) {
         _periodDayKeys.add(_dayKey(cur));
         cur = DateTime(cur.year, cur.month, cur.day + 1);
+        expanded++;
       }
     }
   }
@@ -164,7 +167,7 @@ class PeriodProvider with ChangeNotifier {
       if (daysPassed >= periodLength + 1) {
         final updated = record.copyWith(
           endDate: today.toIso8601String().split('T')[0],
-          periodLength: daysPassed,
+          periodLength: daysPassed + 1,
         );
         await _dao.update(updated);
         // 同步内存，避免下面可能的二次全表读取
@@ -256,7 +259,12 @@ class PeriodProvider with ChangeNotifier {
         } else if (record.endDate != null) {
           final rStart = record.startDateTime;
           final rEnd = record.endDateTime!;
-          if (AppDateUtils.isInRange(startDate, rStart, rEnd)) return false;
+          // 冲突检查用 [start, end) 区间：新开始日等于已有记录的结束日不算冲突，
+          // 因为前一次经期的结束日和下一次经期的开始日可以是同一天。
+          if ((startDate.isAfter(rStart) || AppDateUtils.isSameDay(startDate, rStart)) &&
+              startDate.isBefore(rEnd)) {
+            return false;
+          }
         }
       }
 
@@ -283,7 +291,7 @@ class PeriodProvider with ChangeNotifier {
       final endStr = endDate.toIso8601String().split('T')[0];
       // Calculate periodLength from the actual dates, not record.periodDays
       // (which uses DateTime.now() for ongoing records).
-      final periodLength = endDate.difference(record.startDateTime).inDays + 1;
+      final periodLength = (endDate.difference(record.startDateTime).inDays + 1).clamp(1, 999);
       final updated = record.copyWith(
         endDate: endStr,
         periodLength: periodLength,
@@ -306,7 +314,7 @@ class PeriodProvider with ChangeNotifier {
       final record = PeriodRecord(
         startDate: startDate.toIso8601String().split('T')[0],
         endDate: endDate.toIso8601String().split('T')[0],
-        periodLength: endDate.difference(startDate).inDays + 1,
+        periodLength: (endDate.difference(startDate).inDays + 1).clamp(1, 999),
       );
       final id = await _dao.insert(record);
       _records = [..._records, record.copyWith(id: id)];
@@ -328,7 +336,7 @@ class PeriodProvider with ChangeNotifier {
         return PeriodRecord(
           startDate: start.toIso8601String().split('T')[0],
           endDate: end.toIso8601String().split('T')[0],
-          periodLength: end.difference(start).inDays + 1,
+          periodLength: (end.difference(start).inDays + 1).clamp(1, 999),
         );
       }).toList();
 
@@ -406,16 +414,36 @@ class PeriodProvider with ChangeNotifier {
 
   Future<bool> importData(String jsonString, {bool overwrite = false}) async {
     try {
+      // 大小限制：防止恶意超大 JSON 导致 OOM
+      if (jsonString.length > 10 * 1024 * 1024) {
+        debugPrint('Import data too large (>10MB)');
+        return false;
+      }
       final jsonList = jsonDecode(jsonString) as List;
       final records = jsonList
           .map((json) => PeriodRecord.fromJson(json as Map<String, dynamic>))
           .toList();
 
+      // 校验日期格式，解析失败会抛 FormatException 被外层 catch
+      for (final record in records) {
+        DateTime.parse(record.startDate);
+        if (record.endDate != null) DateTime.parse(record.endDate!);
+      }
+
       if (overwrite) {
         // Use atomic replaceAll to avoid data loss on failure
         await _dao.replaceAll(records);
       } else {
-        await _dao.insertAll(records);
+        // 追加模式：按 startDate 去重，避免重复导入产生重叠记录
+        final existingStartDates = _records.map((r) => r.startDate).toSet();
+        final newRecords = records
+            .where((r) => !existingStartDates.contains(r.startDate))
+            .toList();
+        if (newRecords.isEmpty) {
+          // 全部重复，无需写库但仍刷新以保证状态一致
+          return true;
+        }
+        await _dao.insertAll(newRecords);
       }
 
       // 导入会整体改写数据集，走完整刷新
@@ -493,6 +521,8 @@ class PeriodProvider with ChangeNotifier {
   }
 
   /// Directly checks if a date is a safe day.
+  ///
+  /// 注意：此方法基于简化的日历法，仅供参考，不作为避孕指导。
   /// Caller must have already confirmed the date is not period/predicted/ovulation/fertile.
   bool _isSafeDayDirect(DateTime date) {
     if (_cycleData == null) return false;

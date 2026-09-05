@@ -430,6 +430,28 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       _slideDirection = delta;
     });
+    // 清理非当前月和选中日的 notifier，防止来回滑动多个月后无界增长。
+    // 选中日的 notifier 由 _selectDay / _jumpToToday 维护，不在此清理。
+    final y = _focusedDay.year;
+    final m = _focusedDay.month;
+    final toRemove = <int>[];
+    for (final key in _dayCellNotifiers.keys) {
+      final keyY = key ~/ 10000;
+      final keyM = (key % 10000) ~/ 100;
+      if (keyY != y || keyM != m) {
+        // 保留选中日的 notifier（可能在其它月份）
+        if (_selectedDay != null &&
+            keyY == _selectedDay!.year &&
+            keyM == _selectedDay!.month) {
+          continue;
+        }
+        toRemove.add(key);
+      }
+    }
+    for (final key in toRemove) {
+      _dayCellNotifiers[key]?.dispose();
+      _dayCellNotifiers.remove(key);
+    }
   }
 
   Widget _buildCalendar(PeriodProvider provider) {

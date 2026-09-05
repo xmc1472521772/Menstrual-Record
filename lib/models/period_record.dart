@@ -64,8 +64,12 @@ class PeriodRecord {
   }
 
   factory PeriodRecord.fromJson(Map<String, dynamic> json) {
+    final startDateStr = json['startDate'];
+    if (startDateStr == null || startDateStr is! String || startDateStr.isEmpty) {
+      throw const FormatException('缺少必填字段 startDate');
+    }
     return PeriodRecord(
-      startDate: json['startDate'] as String,
+      startDate: startDateStr,
       endDate: json['endDate'] as String?,
       cycleLength: json['cycleLength'] as int?,
       periodLength: json['periodLength'] as int?,

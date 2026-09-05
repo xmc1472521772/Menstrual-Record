@@ -18,14 +18,35 @@ class CycleData {
   /// Returns the number of days until the predicted next period.
   /// Returns `null` when [predictedNextPeriod] is null (no prediction available).
   /// Returns a negative integer when the predicted date has already passed.
+  ///
+  /// Uses date-only comparison (strips time-of-day) so that the result is
+  /// stable throughout the day regardless of the current hour.
   int? get daysUntilPredicted {
     if (predictedNextPeriod == null) return null;
-    return predictedNextPeriod!.difference(DateTime.now()).inDays;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final predicted = DateTime(
+      predictedNextPeriod!.year,
+      predictedNextPeriod!.month,
+      predictedNextPeriod!.day,
+    );
+    return predicted.difference(today).inDays;
   }
 
+  /// Returns the current cycle day (1-based).
+  ///
+  /// Uses date-only comparison (strips time-of-day) so that the result is
+  /// stable throughout the day regardless of the current hour.
   int get currentCycleDay {
     if (lastPeriodStart == null) return 0;
-    return DateTime.now().difference(lastPeriodStart!).inDays + 1;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(
+      lastPeriodStart!.year,
+      lastPeriodStart!.month,
+      lastPeriodStart!.day,
+    );
+    return today.difference(start).inDays + 1;
   }
 
   DateTime? get ovulationDay {

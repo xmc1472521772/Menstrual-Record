@@ -50,10 +50,12 @@ class _CycleChartState extends State<CycleChart> {
     if (_selectedRange == _TimeRange.all) return ascending;
 
     final now = DateTime.now();
+    // 使用月初作为截断点，避免 now.day 超出目标月天数导致的边界偏移
+    // （如 5月31日减3个月 = 2月31日 → 3月3日）。
     final cutoff = switch (_selectedRange) {
-      _TimeRange.threeMonths => DateTime(now.year, now.month - 3, now.day),
-      _TimeRange.sixMonths => DateTime(now.year, now.month - 6, now.day),
-      _TimeRange.oneYear => DateTime(now.year - 1, now.month, now.day),
+      _TimeRange.threeMonths => DateTime(now.year, now.month - 3, 1),
+      _TimeRange.sixMonths => DateTime(now.year, now.month - 6, 1),
+      _TimeRange.oneYear => DateTime(now.year - 1, now.month, 1),
       _TimeRange.all => DateTime(2000),
     };
 
@@ -832,10 +834,19 @@ class _FundChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FundChartPainter oldDelegate) {
+    // 所有颜色和状态属性都参与比较，确保主题切换（暗色模式）时重绘。
     return oldDelegate.data.length != data.length ||
         oldDelegate.lineColor != lineColor ||
+        oldDelegate.fillGradient != fillGradient ||
         oldDelegate.axisColor != axisColor ||
+        oldDelegate.textColor != textColor ||
+        oldDelegate.avgLineColor != avgLineColor ||
+        oldDelegate.highlightColor != highlightColor ||
         oldDelegate.selectedIdx != selectedIdx ||
+        oldDelegate.tooltipBg != tooltipBg ||
+        oldDelegate.tooltipBorder != tooltipBorder ||
+        oldDelegate.tooltipTextColor != tooltipTextColor ||
+        oldDelegate.tooltipSubColor != tooltipSubColor ||
         oldDelegate.pointPositions != pointPositions;
   }
 }

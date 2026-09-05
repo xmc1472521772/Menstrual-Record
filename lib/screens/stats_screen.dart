@@ -100,13 +100,8 @@ class StatsScreen extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.brandPrimary.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        // 与 home_screen 的状态卡片保持一致：不使用 boxShadow。
+        // 滚动时每帧重放高斯模糊栅格化会导致掉帧。
       ),
       child: Column(
         children: [
@@ -249,9 +244,10 @@ class StatsScreen extends StatelessWidget {
     final isSelected = settingsProvider.algorithm == value;
 
     return InkWell(
-      onTap: () {
-        settingsProvider.setAlgorithm(value);
-        periodProvider.setAlgorithm(value);
+      onTap: () async {
+        // 先持久化设置，成功后再重算预测，保证 DB 与内存一致
+        await settingsProvider.setAlgorithm(value);
+        await periodProvider.setAlgorithm(value);
       },
       borderRadius: BorderRadius.circular(AppDimens.radiusMd),
       child: Container(
@@ -429,14 +425,14 @@ class StatsScreen extends StatelessWidget {
                 ),
               )
             else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: periods.length,
-                itemBuilder: (context, index) {
-                  final period = periods[index];
-                  return _buildPeriodItem(context, period, index);
-                },
+              // 不使用 ListView.builder + shrinkWrap（shrinkWrap 会测量全部子项，
+              // 失去懒加载优势）。改为 Column + for 循环直接展开，
+              // 历史记录通常不超过几十条，成本可忽略。
+              Column(
+                children: [
+                  for (int i = 0; i < periods.length; i++)
+                    _buildPeriodItem(context, periods[i], i),
+                ],
               ),
           ],
         ),

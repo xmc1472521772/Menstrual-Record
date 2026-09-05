@@ -1,7 +1,7 @@
 name: yimaflutter
 description: "月事记 - 经期记录，本地存储，隐私安全"
 publish_to: 'none'
-version: 1.5.4+30
+version: 1.6.0+31
 
 environment:
   sdk: ^3.5.4
@@ -40,10 +40,3 @@ flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#F3E7E3"
   adaptive_icon_foreground: "assets/icon/app_icon.png"
-
-# 临时：本沙箱 GitHub 不可达，无法下载 bundled sqlite3，改用系统 sqlite3.dll 跑测试。
-# 验证完毕后删除整个 hooks 段，正式构建仍用默认 GitHub 下载。
-hooks:
-  user_defines:
-    sqlite3:
-      source: system

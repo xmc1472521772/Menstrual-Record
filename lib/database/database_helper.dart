@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -10,6 +11,7 @@ abstract class DatabaseProvider {
 class DatabaseHelper implements DatabaseProvider {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
+  static Completer<Database>? _initCompleter;
 
   factory DatabaseHelper() => _instance;
 
@@ -21,8 +23,17 @@ class DatabaseHelper implements DatabaseProvider {
   @override
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    if (_initCompleter != null) return _initCompleter!.future;
+    _initCompleter = Completer<Database>();
+    try {
+      _database = await _initDatabase();
+      _initCompleter!.complete(_database!);
+      return _database!;
+    } catch (e) {
+      _initCompleter!.completeError(e);
+      _initCompleter = null;
+      rethrow;
+    }
   }
 
   Future<Database> _initDatabase() async {
@@ -88,7 +99,8 @@ class DatabaseHelper implements DatabaseProvider {
 
   Future<void> close() async {
     final db = await database;
-    db.close();
+    await db.close();
     _database = null;
+    _initCompleter = null;
   }
 }
