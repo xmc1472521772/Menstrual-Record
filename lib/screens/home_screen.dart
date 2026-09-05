@@ -355,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: _buildHeroStat(
                     AppStrings.averageCycle,
-                    '${cycleData.averageCycleLength.round()} ${AppStrings.days}',
+                    '${cycleData.averageCycleLength.toStringAsFixed(1)} ${AppStrings.days}',
                   ),
                 ),
                 Container(
@@ -366,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: _buildHeroStat(
                     AppStrings.averagePeriod,
-                    '${cycleData.averagePeriodLength.round()} ${AppStrings.days}',
+                    '${cycleData.averagePeriodLength.toStringAsFixed(1)} ${AppStrings.days}',
                   ),
                 ),
               ],

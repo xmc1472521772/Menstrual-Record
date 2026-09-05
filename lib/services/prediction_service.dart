@@ -61,7 +61,7 @@ class PredictionService {
     double avgCycle;
     double avgPeriod;
 
-    if (algorithm == 'weighted' && cycleLengths.length >= 3) {
+    if (algorithm == 'weighted' && cycleLengths.length >= 2) {
       avgCycle = _calculateWeightedAverage(cycleLengths);
     } else if (cycleLengths.isNotEmpty) {
       avgCycle = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;

@@ -114,12 +114,12 @@ class StatsScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildStatCircle(
-                '${cycleData.averageCycleLength.round()}',
+                '${cycleData.averageCycleLength.toStringAsFixed(1)}',
                 AppStrings.avgCycleLabel,
                 AppStrings.days,
               ),
               _buildStatCircle(
-                '${cycleData.averagePeriodLength.round()}',
+                '${cycleData.averagePeriodLength.toStringAsFixed(1)}',
                 AppStrings.avgPeriodLabel,
                 AppStrings.days,
               ),
