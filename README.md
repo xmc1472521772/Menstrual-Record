@@ -2,6 +2,8 @@
 
 经期记录与周期追踪 Flutter 应用。所有数据本地存储于 SQLite，无网络请求、无后端、无数据分析。
 
+> 本项目仅面向 Android 端用户，不包含 iOS / macOS / Linux / Windows / Web 平台代码。
+
 ## 功能
 
 - 经期记录：手动开始/结束经期，查看历史记录
@@ -99,6 +101,6 @@ DAO 和 Provider 均支持构造函数注入 `DatabaseProvider`，便于单元�
 
 ## 版本
 
-当前版本：1.2.2+7
+当前版本：1.2.3+8
 
 格式：`major.minor.patch+build`

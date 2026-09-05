@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-月事记 (Yima) — a menstrual cycle tracking Flutter app. All data is stored locally in SQLite (`yima_period.db`); no network calls, no analytics, no remote backend. UI is hardcoded to Chinese (`zh_CN`).
+月事记 (Yima) — a menstrual cycle tracking Flutter app. All data is stored locally in SQLite (`yima_period.db`); no network calls, no analytics, no remote backend. UI is hardcoded to Chinese (`zh_CN`). **Android-only** — no iOS/macOS/Linux/Windows/Web platform code.
 
 ## Commands
 

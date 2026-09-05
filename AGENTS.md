@@ -1,6 +1,6 @@
 # AGENTS.md
 
-月事记 (Yima) — a menstrual cycle tracking Flutter app. All data is local SQLite (`yima_period.db`); no network, no backend. UI is hardcoded to Chinese (`zh_CN`).
+月事记 (Yima) — a menstrual cycle tracking Flutter app. All data is local SQLite (`yima_period.db`); no network, no backend. UI is hardcoded to Chinese (`zh_CN`). **Android-only** — no iOS/macOS/Linux/Windows/Web platform code.
 
 ## Commands
 

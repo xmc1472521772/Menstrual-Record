@@ -259,13 +259,17 @@ class _RecordScreenState extends State<RecordScreen> {
           const SizedBox(height: AppDimens.spacingLg),
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 52,
             child: ElevatedButton(
               onPressed: () => _saveRange(context.read<PeriodProvider>()),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: AppColors.white,
                 elevation: AppDimens.elevationNone,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.spacingLg,
+                  vertical: AppDimens.spacingXs,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 ),

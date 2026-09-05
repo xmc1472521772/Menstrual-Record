@@ -7,6 +7,7 @@ import '../providers/settings_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../widgets/cycle_chart.dart';
 
 class StatsScreen extends StatelessWidget {
   const StatsScreen({super.key});
@@ -31,6 +32,8 @@ class StatsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildOverviewCard(context, cycleData),
+                const SizedBox(height: AppDimens.spacingLg),
+                CycleChart(periods: cycleData.recentPeriods),
                 const SizedBox(height: AppDimens.spacingLg),
                 _buildAlgorithmSelector(context, settingsProvider, periodProvider),
                 const SizedBox(height: AppDimens.spacingLg),
