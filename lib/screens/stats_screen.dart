@@ -210,7 +210,7 @@ class StatsScreen extends StatelessWidget {
                 Expanded(
                   child: _buildAlgorithmOption(
                     context,
-                    'weighted',
+                    'adaptive',
                     AppStrings.weightedAverage,
                     AppStrings.weightedMoreAccurate,
                     settingsProvider,
@@ -302,6 +302,16 @@ class StatsScreen extends StatelessWidget {
   Widget _buildPredictionCard(BuildContext context, CycleData cycleData) {
     final predictedDate = cycleData.predictedNextPeriod;
     final daysUntil = cycleData.daysUntilPredicted;
+    final windowStart = cycleData.predictionWindowStart;
+    final windowEnd = cycleData.predictionWindowEnd;
+    final mode = cycleData.predictionMode;
+
+    final modeLabel = switch (mode) {
+      PredictionMode.baseline => '医学基线',
+      PredictionMode.wmaRegular => 'WMA-6 加权移动平均',
+      PredictionMode.wmaVolatile => 'WMA-3 + 剪切均值',
+      PredictionMode.simple => '简单平均',
+    };
 
     return Card(
       child: Padding(
@@ -309,11 +319,33 @@ class StatsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              AppStrings.predictedNextPeriod,
-              style: AppTheme.titleLarge.copyWith(
-                color: context.themeColors.onSurface,
-              ),
+            Row(
+              children: [
+                Text(
+                  AppStrings.predictedNextPeriod,
+                  style: AppTheme.titleLarge.copyWith(
+                    color: context.themeColors.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.spacingSm,
+                    vertical: AppDimens.spacingXs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoft,
+                    borderRadius:
+                        BorderRadius.circular(AppDimens.radiusFull),
+                  ),
+                  child: Text(
+                    modeLabel,
+                    style: AppTheme.labelMedium.copyWith(
+                      color: AppColors.brandDeep,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppDimens.spacingMd),
             if (predictedDate != null && daysUntil != null) ...[
@@ -329,6 +361,14 @@ class StatsScreen extends StatelessWidget {
                           color: AppColors.brandPrimary,
                         ),
                       ),
+                      const SizedBox(height: AppDimens.spacingXs),
+                      if (windowStart != null && windowEnd != null)
+                        Text(
+                          '预测窗口：${DateFormat('MM月dd日').format(windowStart)} ~ ${DateFormat('MM月dd日').format(windowEnd)}',
+                          style: AppTheme.bodySmall.copyWith(
+                            color: context.themeColors.onSurfaceSecondary,
+                          ),
+                        ),
                       const SizedBox(height: AppDimens.spacingXs),
                       Container(
                         padding: const EdgeInsets.symmetric(

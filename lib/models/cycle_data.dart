@@ -1,3 +1,15 @@
+/// 预测算法的运行模式标签，供 UI 展示。
+enum PredictionMode {
+  /// 医学基线（数据不足时的默认值）
+  baseline,
+  /// 自适应加权移动平均（规律用户）
+  wmaRegular,
+  /// 短窗口加权 + 剪切均值（波动大 / 检测到突变）
+  wmaVolatile,
+  /// 简单平均（全部历史算术平均）
+  simple,
+}
+
 class CycleData {
   final double averageCycleLength;
   final double averagePeriodLength;
@@ -5,6 +17,13 @@ class CycleData {
   final DateTime? lastPeriodStart;
   final DateTime? predictedNextPeriod;
   final List<PeriodSummary> recentPeriods;
+
+  /// 当前预测所使用的算法模式，用于 UI 展示。
+  final PredictionMode predictionMode;
+
+  /// 预测窗口的天数范围（不规律用户区间更宽）。
+  /// null 表示无法计算（数据不足）。
+  final int? predictionWindowDays;
 
   /// 计算时的「今天」，用于 daysUntilPredicted / currentCycleDay 的稳定取值。
   /// 避免每次 getter 调用 DateTime.now() 导致同一帧内可能不一致。
@@ -17,6 +36,8 @@ class CycleData {
     this.lastPeriodStart,
     this.predictedNextPeriod,
     required this.recentPeriods,
+    this.predictionMode = PredictionMode.simple,
+    this.predictionWindowDays,
     DateTime? today,
   }) : _today = today ?? DateTime.now();
 
@@ -68,6 +89,24 @@ class CycleData {
     if (ovulationDay == null) return null;
     // 易孕期结束：排卵期后4天
     return ovulationDay!.add(const Duration(days: 4));
+  }
+
+  /// 预测窗口的起始日期（predictedNextPeriod - windowDays/2）。
+  DateTime? get predictionWindowStart {
+    if (predictedNextPeriod == null || predictionWindowDays == null) {
+      return null;
+    }
+    return predictedNextPeriod!
+        .subtract(Duration(days: predictionWindowDays! ~/ 2));
+  }
+
+  /// 预测窗口的结束日期（predictedNextPeriod + windowDays/2）。
+  DateTime? get predictionWindowEnd {
+    if (predictedNextPeriod == null || predictionWindowDays == null) {
+      return null;
+    }
+    return predictedNextPeriod!
+        .add(Duration(days: predictionWindowDays! ~/ 2));
   }
 
   bool isOvulationDay(DateTime date) {

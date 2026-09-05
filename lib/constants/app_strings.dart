@@ -22,7 +22,7 @@ class AppStrings {
   static const String reminderDays = '提前提醒天数';
   static const String predictionAlgorithm = '预测算法';
   static const String simpleAverage = '简单平均法';
-  static const String weightedAverage = '加权移动平均法';
+  static const String weightedAverage = '自适应混合算法';
   static const String exportData = '导出数据';
   static const String importData = '导入数据';
   static const String dataManagement = '数据管理';
@@ -87,8 +87,8 @@ class AppStrings {
   static const String longest = '最长';
   static const String averageLabel = '平均';
   static const String basedOnAllHistory = '基于所有历史数据的平均值';
-  static const String weightedMoreAccurate = '近期周期数据权重更高，更准确';
-  static const String weightedDescription = '加权移动平均法：基于最近 4 个周期的数据，越近的周期权重越高（40%/30%/20%/10%），不足 4 个周期时按实际数量加权计算。';
+  static const String weightedMoreAccurate = '根据数据特征自动切换算法，更精准';
+  static const String weightedDescription = '自适应混合算法：自动检测周期规律性，规律用户用 WMA-6 加权移动平均，不规律或突变用户用 WMA-3 + 剪切均值，冷启动用医学基线 28 天。';
   static const String needMoreDataToPredict = '需要更多数据来预测';
   static const String daysLeft = '还有 {} 天';
   static const String today_ = '今天';

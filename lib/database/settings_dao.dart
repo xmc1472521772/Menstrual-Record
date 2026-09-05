@@ -60,7 +60,9 @@ class SettingsDao {
 
   Future<String> getPredictionAlgorithm() async {
     final value = await getValue('prediction_algorithm');
-    return value ?? 'simple';
+    // 兼容旧版：'weighted' 统一映射为 'adaptive'
+    if (value == 'weighted') return 'adaptive';
+    return value ?? 'adaptive';
   }
 
   /// 合并阈值（天数）。两次经期结束与开始间隔 <= 此值时触发合并逻辑。

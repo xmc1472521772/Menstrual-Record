@@ -11,7 +11,7 @@ class SettingsProvider with ChangeNotifier {
   int _periodLength = 5;
   int _reminderDays = 2;
   int _reminderHour = 9;
-  String _algorithm = 'simple';
+  String _algorithm = 'adaptive';
   int _mergeThreshold = 2;
 
   /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
