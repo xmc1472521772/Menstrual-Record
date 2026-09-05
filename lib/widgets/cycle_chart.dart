@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_theme.dart';
@@ -36,9 +35,6 @@ class _CycleChartState extends State<CycleChart> {
 
   /// 当前选中的数据点索引（点击切换）。null = 无选中。
   int? _selectedIdx;
-
-  /// 选中点气泡的布局信息（由 LayoutBuilder 计算后供 Widget 层渲染）。
-  _TooltipOverlay? _tooltipOverlay;
 
   /// 画布边距（必须与 Painter 中保持一致）。
   static const _leftPad = 4.0;
@@ -273,6 +269,11 @@ class _CycleChartState extends State<CycleChart> {
     final minVal = values.reduce(math.min);
     final maxVal = values.reduce(math.max);
 
+    // 气泡背景色：80% 不透明的白色（暗色模式用黑色）
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tooltipBg = (isDark ? Colors.black : Colors.white)
+        .withValues(alpha: 0.8);
+
     return Column(
       children: [
         LayoutBuilder(
@@ -293,59 +294,6 @@ class _CycleChartState extends State<CycleChart> {
               positions.add(Offset(x, y));
             }
 
-            // 选中点的气泡位置（Widget 层渲染，支持 BackdropFilter）
-            if (_selectedIdx != null && _selectedIdx! < n) {
-              final sp = positions[_selectedIdx!];
-              final period = data[_selectedIdx!];
-              final cycleDays = values[_selectedIdx!];
-              // 计算气泡的期望位置（与旧 Painter 逻辑一致）
-              final dateStr =
-                  '${period.startDate.year}.${period.startDate.month.toString().padLeft(2, '0')}.${period.startDate.day.toString().padLeft(2, '0')}';
-              final cycleStr = '$cycleDays 天';
-              // 用 TextPainter 测量宽度
-              final tp = TextPainter(
-                text: TextSpan(
-                  text: cycleStr,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-                textDirection: TextDirection.ltr,
-              )..layout();
-              final tp2 = TextPainter(
-                text: TextSpan(
-                  text: dateStr,
-                  style: const TextStyle(fontSize: 10),
-                ),
-                textDirection: TextDirection.ltr,
-              )..layout();
-              const padH = 10.0;
-              const padV = 8.0;
-              const gap = 2.0;
-              const arrowH = 6.0;
-              final bubbleW = math.max(tp.width, tp2.width) + padH * 2;
-              final bubbleH = tp.height + tp2.height + padV * 2 + gap;
-              double bx = sp.dx - bubbleW / 2;
-              double by = sp.dy - bubbleH - arrowH - 8;
-              final above = by >= 2;
-              if (!above) {
-                by = sp.dy + arrowH + 8;
-              }
-              bx = bx.clamp(2.0, chartWidth - bubbleW - 2);
-              // 存到 _tooltipOverlay
-              _tooltipOverlay = _TooltipOverlay(
-                bx: bx,
-                by: by,
-                bubbleW: bubbleW,
-                bubbleH: bubbleH,
-                arrowH: arrowH,
-                arrowX: sp.dx.clamp(bx + 8, bx + bubbleW - 8),
-                above: above,
-                dateStr: dateStr,
-                cycleStr: cycleStr,
-              );
-            } else {
-              _tooltipOverlay = null;
-            }
-
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (details) {
@@ -354,33 +302,23 @@ class _CycleChartState extends State<CycleChart> {
               child: SizedBox(
                 width: chartWidth,
                 height: 140,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    CustomPaint(
-                      painter: _FundChartPainter(
-                        data: data,
-                        lineColor: AppColors.brandPrimary,
-                        fillGradient: AppColors.brandPrimary,
-                        axisColor: context.themeColors.divider,
-                        textColor: context.themeColors.onSurfaceTertiary,
-                        avgLineColor:
-                            AppColors.brandPrimary.withValues(alpha: 0.25),
-                        highlightColor: AppColors.brandPrimary,
-                        selectedIdx: _selectedIdx,
-                        pointPositions: positions,
-                      ),
-                    ),
-                    // 气泡用 Widget 层渲染，支持 BackdropFilter 高斯模糊
-                    if (_tooltipOverlay != null)
-                      Positioned(
-                        left: _tooltipOverlay!.bx,
-                        top: _tooltipOverlay!.by,
-                        width: _tooltipOverlay!.bubbleW,
-                        height: _tooltipOverlay!.bubbleH,
-                        child: _buildTooltipWidget(context),
-                      ),
-                  ],
+                child: CustomPaint(
+                  painter: _FundChartPainter(
+                    data: data,
+                    lineColor: AppColors.brandPrimary,
+                    fillGradient: AppColors.brandPrimary,
+                    axisColor: context.themeColors.divider,
+                    textColor: context.themeColors.onSurfaceTertiary,
+                    avgLineColor:
+                        AppColors.brandPrimary.withValues(alpha: 0.25),
+                    highlightColor: AppColors.brandPrimary,
+                    selectedIdx: _selectedIdx,
+                    tooltipBg: tooltipBg,
+                    tooltipBorder: AppColors.brandPrimary,
+                    tooltipTextColor: context.themeColors.onSurface,
+                    tooltipSubColor: context.themeColors.onSurfaceSecondary,
+                    pointPositions: positions,
+                  ),
                 ),
               ),
             );
@@ -441,54 +379,6 @@ class _CycleChartState extends State<CycleChart> {
     return '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
   }
 
-  // ─── 气泡 Widget（BackdropFilter 高斯模糊背景）──────────
-  Widget _buildTooltipWidget(BuildContext context) {
-    final overlay = _tooltipOverlay!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: (isDark ? Colors.black : Colors.white)
-                .withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: AppColors.brandPrimary,
-              width: 1,
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 8,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                overlay.dateStr,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: context.themeColors.onSurfaceSecondary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                overlay.cycleStr,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: context.themeColors.onSurface,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // ─── 图例 ─────────────────────────────────────────────────
   Widget _buildLegend(BuildContext context, List<PeriodSummary> data) {
     final values = data.map((p) => p.cycleLength!).toList();
@@ -542,7 +432,7 @@ class _CycleChartState extends State<CycleChart> {
 /// - 折线平滑（贝塞尔），底部渐变填充
 /// - 仅在折线上方为极值点标数值
 /// - 最新点用大圆 + 光晕高亮
-/// - 选中点气泡由 Widget 层渲染（BackdropFilter 高斯模糊）
+/// - 选中点显示气泡 tooltip（日期 + 周期天数）
 class _FundChartPainter extends CustomPainter {
   final List<PeriodSummary> data;
   final Color lineColor;
@@ -555,6 +445,15 @@ class _FundChartPainter extends CustomPainter {
   /// 当前选中的数据点索引。
   final int? selectedIdx;
 
+  /// 气泡背景色。
+  final Color tooltipBg;
+  /// 气泡边框色。
+  final Color tooltipBorder;
+  /// 气泡主文字颜色。
+  final Color tooltipTextColor;
+  /// 气泡副文字颜色。
+  final Color tooltipSubColor;
+
   /// 预计算的数据点像素坐标（由外部 LayoutBuilder 计算）。
   final List<Offset> pointPositions;
   _FundChartPainter({
@@ -566,6 +465,10 @@ class _FundChartPainter extends CustomPainter {
     required this.avgLineColor,
     required this.highlightColor,
     this.selectedIdx,
+    required this.tooltipBg,
+    required this.tooltipBorder,
+    required this.tooltipTextColor,
+    required this.tooltipSubColor,
     required this.pointPositions,
   });
 
@@ -748,6 +651,142 @@ class _FundChartPainter extends CustomPainter {
       canvas.drawCircle(last, 4, dotPaint);
     }
 
+    // ─── 选中点气泡 tooltip ───
+    if (selectedIdx != null && selectedIdx! < n) {
+      _drawTooltip(
+        canvas,
+        size,
+        points[selectedIdx!],
+        data[selectedIdx!],
+        values[selectedIdx!],
+      );
+    }
+  }
+
+  /// 绘制气泡 tooltip：显示日期 + 周期天数。
+  void _drawTooltip(
+    Canvas canvas,
+    Size canvasSize,
+    Offset point,
+    PeriodSummary period,
+    int cycleDays,
+  ) {
+    final dateStr =
+        '${period.startDate.year}.${period.startDate.month.toString().padLeft(2, '0')}.${period.startDate.day.toString().padLeft(2, '0')}';
+    final cycleStr = '$cycleDays 天';
+
+    // 测量文字
+    final dateTp = TextPainter(
+      text: TextSpan(
+        text: dateStr,
+        style: TextStyle(
+          color: tooltipSubColor,
+          fontSize: 10,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final cycleTp = TextPainter(
+      text: TextSpan(
+        text: cycleStr,
+        style: TextStyle(
+          color: tooltipTextColor,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    // 气泡尺寸
+    const padH = 10.0;
+    const padV = 8.0;
+    const gap = 2.0;
+    final bubbleW = math.max(dateTp.width, cycleTp.width) + padH * 2;
+    final bubbleH = dateTp.height + cycleTp.height + padV * 2 + gap;
+
+    // 气泡位置：优先在数据点上方，空间不够时放下方
+    const arrowH = 6.0;
+    double bx = point.dx - bubbleW / 2;
+    double by = point.dy - bubbleH - arrowH - 8;
+
+    // 水平边界：不超出画布
+    bx = bx.clamp(2.0, canvasSize.width - bubbleW - 2);
+
+    // 垂直边界：上方不够则放下方
+    final above = by >= 2;
+    if (!above) {
+      by = point.dy + arrowH + 8;
+    }
+
+    // 气泡背景 + 边框
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(bx, by, bubbleW, bubbleH),
+      const Radius.circular(8),
+    );
+    final bgPaint = Paint()
+      ..color = tooltipBg
+      ..style = PaintingStyle.fill;
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.08)
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    // 阴影
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(bx + 1, by + 2, bubbleW, bubbleH),
+        const Radius.circular(8),
+      ),
+      shadowPaint,
+    );
+    // 背景
+    canvas.drawRRect(rrect, bgPaint);
+    // 边框
+    final borderPaint = Paint()
+      ..color = tooltipBorder
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    canvas.drawRRect(rrect, borderPaint);
+
+    // 小三角箭头
+    final arrowPaint = Paint()
+      ..color = tooltipBg
+      ..style = PaintingStyle.fill;
+    final borderArrowPaint = Paint()
+      ..color = tooltipBorder
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    // 箭头 x 对齐数据点 x（但限制在气泡范围内）
+    final arrowX = point.dx.clamp(bx + 8, bx + bubbleW - 8);
+    if (above) {
+      // 向下三角
+      final triPath = Path()
+        ..moveTo(arrowX - 4, by + bubbleH)
+        ..lineTo(arrowX + 4, by + bubbleH)
+        ..lineTo(arrowX, by + bubbleH + arrowH)
+        ..close();
+      canvas.drawPath(triPath, arrowPaint);
+      canvas.drawPath(triPath, borderArrowPaint);
+    } else {
+      // 向上三角
+      final triPath = Path()
+        ..moveTo(arrowX - 4, by)
+        ..lineTo(arrowX + 4, by)
+        ..lineTo(arrowX, by - arrowH)
+        ..close();
+      canvas.drawPath(triPath, arrowPaint);
+      canvas.drawPath(triPath, borderArrowPaint);
+    }
+
+    // 文字
+    final textCenter = bx + bubbleW / 2;
+    final dateY = above ? by + padV : by + padV;
+    final cycleY = dateY + dateTp.height + gap;
+
+    dateTp.paint(canvas, Offset(textCenter - dateTp.width / 2, dateY));
+    cycleTp.paint(canvas, Offset(textCenter - cycleTp.width / 2, cycleY));
   }
 
   List<Offset> _computePoints(
@@ -799,29 +838,4 @@ class _FundChartPainter extends CustomPainter {
         oldDelegate.selectedIdx != selectedIdx ||
         oldDelegate.pointPositions != pointPositions;
   }
-}
-
-/// 气泡布局信息（在 Widget 层渲染时使用）。
-class _TooltipOverlay {
-  final double bx;
-  final double by;
-  final double bubbleW;
-  final double bubbleH;
-  final double arrowH;
-  final double arrowX;
-  final bool above;
-  final String dateStr;
-  final String cycleStr;
-
-  const _TooltipOverlay({
-    required this.bx,
-    required this.by,
-    required this.bubbleW,
-    required this.bubbleH,
-    required this.arrowH,
-    required this.arrowX,
-    required this.above,
-    required this.dateStr,
-    required this.cycleStr,
-  });
 }
