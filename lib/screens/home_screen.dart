@@ -119,16 +119,19 @@ class _HomeScreenState extends State<HomeScreen> {
           final showFab =
               !_isCurrentMonth || (_selectedDay != null && !_isTodaySelected);
           if (!showFab) return const SizedBox.shrink();
-          return FloatingActionButton.small(
-            onPressed: _jumpToToday,
-            backgroundColor: AppColors.brandPrimary,
-            foregroundColor: AppColors.white,
-            elevation: AppDimens.elevationNone,
-            child: const Text(
-              '今',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 80),
+            child: FloatingActionButton.small(
+              onPressed: _jumpToToday,
+              backgroundColor: AppColors.brandPrimary,
+              foregroundColor: AppColors.white,
+              elevation: AppDimens.elevationLow,
+              child: const Text(
+                '今',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
               ),
             ),
           );
@@ -145,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
               AppDimens.spacingXl,
               AppDimens.spacingSm,
               AppDimens.spacingXl,
-              AppDimens.spacing2xl,
+              100,
             ),
             child: Column(
               children: [

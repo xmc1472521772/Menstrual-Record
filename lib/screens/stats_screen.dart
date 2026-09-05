@@ -27,7 +27,12 @@ class StatsScreen extends StatelessWidget {
           }
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppDimens.spacingLg),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimens.spacingLg,
+              AppDimens.spacingLg,
+              AppDimens.spacingLg,
+              100,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

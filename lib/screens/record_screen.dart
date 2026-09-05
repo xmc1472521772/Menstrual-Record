@@ -74,7 +74,7 @@ class _RecordScreenState extends State<RecordScreen> {
           AppDimens.spacingXl,
           AppDimens.spacingSm,
           AppDimens.spacingXl,
-          AppDimens.spacing2xl,
+          100,
         ),
         child: Column(
           children: [

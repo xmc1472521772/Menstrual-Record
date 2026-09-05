@@ -130,20 +130,20 @@ class _GlassNavBar extends StatelessWidget {
       minimum: const EdgeInsets.only(
         left: AppDimens.spacingXl,
         right: AppDimens.spacingXl,
-        bottom: AppDimens.spacingMd,
+        bottom: AppDimens.spacingSm,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppDimens.radiusFull),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             height: 64,
             decoration: BoxDecoration(
               color: (isDark ? Colors.black : Colors.white)
-                  .withValues(alpha: 0.72),
+                  .withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(AppDimens.radiusFull),
               border: Border.all(
-                color: themeColors.divider.withValues(alpha: 0.5),
+                color: themeColors.divider.withValues(alpha: 0.3),
                 width: 0.5,
               ),
             ),

@@ -22,7 +22,12 @@ class SettingsScreen extends StatelessWidget {
       body: Consumer2<PeriodProvider, SettingsProvider>(
         builder: (context, periodProvider, settingsProvider, child) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppDimens.spacingLg),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimens.spacingLg,
+              AppDimens.spacingLg,
+              AppDimens.spacingLg,
+              100,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
