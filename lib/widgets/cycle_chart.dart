@@ -9,7 +9,8 @@ import '../models/cycle_data.dart';
 /// 让用户直观看到周期的波动趋势。
 ///
 /// 支持时间范围筛选（近三个月 / 六个月 / 一年 / 全部）。
-/// 当数据点过多时，图表变为水平可滚动，避免标签堆叠遮挡。
+/// 图表始终填满可用宽度，通过智能标签间隔避免文字堆叠，
+/// 保证用户一览全局起伏变化。
 class CycleChart extends StatefulWidget {
   final List<PeriodSummary> periods;
 
@@ -33,10 +34,6 @@ enum _TimeRange {
 class _CycleChartState extends State<CycleChart> {
   _TimeRange _selectedRange = _TimeRange.all;
 
-  /// 每个数据点占据的最小水平像素宽度（含间距）。
-  /// 数据点数 × 此值 = 图表内容所需最小宽度。
-  static const double _minPointSpacing = 56.0;
-
   List<PeriodSummary> get _filteredData {
     // 只取有 cycleLength 的记录（第一条记录没有上一个周期可比较）
     final withCycle = widget.periods.where((p) => p.cycleLength != null).toList();
@@ -57,10 +54,8 @@ class _CycleChartState extends State<CycleChart> {
     };
 
     // 按经期开始日期筛选：只保留 cutoff 之后的记录。
-    // 但为了能计算出 cycleLength，至少需要保留 cutoff 前紧邻的一条记录
-    // 作为锚点（cycleLength 是当前记录与上一条记录起始日之差）。
-    // PredictionService 已经在构建 recentPeriods 时计算好了 cycleLength，
-    // 所以直接按 startDate 过滤即可，无需额外保留锚点。
+    // PredictionService 在构建 recentPeriods 时已计算好 cycleLength，
+    // 直接按 startDate 过滤即可。
     final filtered = <PeriodSummary>[];
     for (final p in ascending) {
       if (!p.startDate.isBefore(cutoff)) {
@@ -188,39 +183,23 @@ class _CycleChartState extends State<CycleChart> {
     );
   }
 
-  // ─── 图表区域（可水平滚动）─────────────────────────────────
+  // ─── 图表区域 ──────────────────────────────────────────────
+  /// 图表始终填满可用宽度，不使用水平滚动。
+  /// 数据点多时通过 [_CycleLineChartPainter] 内部的智能标签间隔
+  /// 自动跳过部分标签，避免文字堆叠，同时保证全局一览。
   Widget _buildChartArea(BuildContext context, List<PeriodSummary> data) {
-    // 计算图表内容所需的最小宽度：每个数据点至少 _minPointSpacing 像素。
-    // 若数据点少，宽度由父容器决定（填满屏幕）；若数据点多，宽度超出屏幕，
-    // 通过 SingleChildScrollView 水平滚动查看。
-    final screenWidth = MediaQuery.of(context).size.width;
-    // Card 内 padding 16×2 + 左右边距 36+12 ≈ 80
-    final availableWidth = screenWidth - 80;
-    final minContentWidth = data.length * _minPointSpacing;
-    final needsScroll = minContentWidth > availableWidth;
-
-    final chartWidth = needsScroll ? minContentWidth : availableWidth;
-    const chartHeight = 160.0;
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: needsScroll
-          ? const BouncingScrollPhysics()
-          : const NeverScrollableScrollPhysics(),
-      child: SizedBox(
-        width: chartWidth,
-        height: chartHeight,
-        child: CustomPaint(
-          painter: _CycleLineChartPainter(
-            data: data,
-            lineColor: AppColors.brandPrimary,
-            dotColor: AppColors.brandPrimary,
-            fillGradient: AppColors.brandPrimary,
-            axisColor: context.themeColors.divider,
-            textColor: context.themeColors.onSurfaceTertiary,
-            avgLineColor: AppColors.brandPrimary.withValues(alpha: 0.3),
-            needsScroll: needsScroll,
-          ),
+    return SizedBox(
+      width: double.infinity,
+      height: 180,
+      child: CustomPaint(
+        painter: _CycleLineChartPainter(
+          data: data,
+          lineColor: AppColors.brandPrimary,
+          dotColor: AppColors.brandPrimary,
+          fillGradient: AppColors.brandPrimary,
+          axisColor: context.themeColors.divider,
+          textColor: context.themeColors.onSurfaceTertiary,
+          avgLineColor: AppColors.brandPrimary.withValues(alpha: 0.3),
         ),
       ),
     );
@@ -280,9 +259,6 @@ class _CycleLineChartPainter extends CustomPainter {
   final Color axisColor;
   final Color textColor;
   final Color avgLineColor;
-  /// 是否处于滚动模式。为 true 时绘制完整 Y 轴及网格线（含左侧 padding）；
-  /// 为 false 时只绘制网格线，不画 Y 轴竖线和左侧标签（节省空间）。
-  final bool needsScroll;
 
   _CycleLineChartPainter({
     required this.data,
@@ -292,7 +268,6 @@ class _CycleLineChartPainter extends CustomPainter {
     required this.axisColor,
     required this.textColor,
     required this.avgLineColor,
-    required this.needsScroll,
   });
 
   @override
@@ -309,8 +284,8 @@ class _CycleLineChartPainter extends CustomPainter {
     final yMax = (maxVal + 2).clamp(maxVal.toDouble(), 60.0).toDouble();
     final yRange = yMax - yMin;
 
-    // 画布边距
-    final leftPad = needsScroll ? 36.0 : 4.0;
+    // 画布边距：左侧固定 36px 给 Y 轴标签，右侧 12px 留白
+    const leftPad = 36.0;
     const rightPad = 12.0;
     const topPad = 16.0;
     const bottomPad = 28.0;
@@ -332,28 +307,31 @@ class _CycleLineChartPainter extends CustomPainter {
         gridPaint,
       );
 
-      // Y 轴标签（仅在滚动模式或固定模式下都显示，但滚动模式有 leftPad 空间）
+      // Y 轴标签：右对齐到 leftPad - 4 的位置
       final val = (yMax - yRange * (i / 3)).round();
-      _drawText(
-        canvas,
-        '$val',
-        Offset(leftPad - 30, y - 8),
-        textColor,
-        10,
-      );
+      final yLabel = '$val';
+      final tp = TextPainter(
+        text: TextSpan(
+          text: yLabel,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 10,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(leftPad - tp.width - 4, y - tp.height / 2));
     }
 
-    // ─── Y 轴线（仅滚动模式绘制）───
-    if (needsScroll) {
-      final axisPaint = Paint()
-          ..color = axisColor
-          ..strokeWidth = 1;
-      canvas.drawLine(
-        Offset(leftPad, topPad),
-        Offset(leftPad, topPad + chartH),
-        axisPaint,
-      );
-    }
+    // ─── Y 轴线 ───
+    final axisPaint = Paint()
+        ..color = axisColor
+        ..strokeWidth = 1;
+    canvas.drawLine(
+      const Offset(leftPad, topPad),
+      Offset(leftPad, topPad + chartH),
+      axisPaint,
+    );
 
     // ─── 平均值虚线 ───
     final avgY = topPad + chartH * (1 - (avgVal - yMin) / yRange);
@@ -433,27 +411,32 @@ class _CycleLineChartPainter extends CustomPainter {
     }
 
     // ─── 数据点 + 数值标签 ───
-    // 数值标签智能间隔：相邻标签的水平间距至少需要 28 像素才不重叠。
-    // 当数据点间距小于此值时，按等间隔跳过显示。
-    final labelStep = _computeLabelStep(n, chartW);
+    // 智能间隔：数据点多时只显示首、尾、极值和等间隔标签，避免堆叠。
+    final valueLabelStep = _computeLabelStep(n, chartW, 28.0);
     final dotPaint = Paint()
       ..color = dotColor
       ..style = PaintingStyle.fill;
     final dotBorderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
+
+    // 首尾和极值索引
+    final minIdx = values.indexOf(minVal);
+    final maxIdx = values.indexOf(maxVal);
+    final importantIdxs = <int>{0, n - 1, minIdx, maxIdx};
+
     for (int i = 0; i < points.length; i++) {
       // 白底圆
       canvas.drawCircle(points[i], 5, dotBorderPaint);
       // 实心圆
       canvas.drawCircle(points[i], 3.5, dotPaint);
 
-      // 数值标签（按 labelStep 间隔显示）
-      if (i % labelStep == 0 || i == points.length - 1) {
-        _drawText(
+      // 数值标签：等间隔 + 首尾极值
+      if (i % valueLabelStep == 0 || importantIdxs.contains(i)) {
+        _drawCenteredText(
           canvas,
           '${values[i]}',
-          Offset(points[i].dx - 8, points[i].dy - 20),
+          Offset(points[i].dx, points[i].dy - 14),
           lineColor,
           10,
           bold: true,
@@ -461,15 +444,16 @@ class _CycleLineChartPainter extends CustomPainter {
       }
     }
 
-    // ─── X 轴标签（日期）──智能间隔 ───
+    // ─── X 轴标签（日期）──智能间隔 + 居中对齐 ───
+    final dateLabelStep = _computeLabelStep(n, chartW, 40.0);
     for (int i = 0; i < n; i++) {
-      if (i % labelStep == 0 || i == n - 1) {
+      if (i % dateLabelStep == 0 || i == n - 1) {
         final x = leftPad + (n == 1 ? chartW / 2 : chartW * i / (n - 1));
         final label = _formatDate(data[i].startDate);
-        _drawText(
+        _drawCenteredText(
           canvas,
           label,
-          Offset(x - 20, topPad + chartH + 8),
+          Offset(x, topPad + chartH + 12),
           textColor,
           9,
         );
@@ -479,16 +463,14 @@ class _CycleLineChartPainter extends CustomPainter {
 
   /// 计算标签显示间隔。
   ///
-  /// 每个标签约需 40 像素宽度（"MM/DD" ≈ 36px + 间距）。
-  /// 当数据点间距小于此值时，跳过部分标签，确保不堆叠。
+  /// 每个标签需要 [minSpacing] 像素的最小水平间距才不重叠。
+  /// 当数据点间距小于此值时，跳过部分标签。
   /// 最小 step 为 1（每个都显示），数据多时自动增大。
-  int _computeLabelStep(int n, double chartW) {
+  int _computeLabelStep(int n, double chartW, double minSpacing) {
     if (n <= 1) return 1;
     final pointSpacing = chartW / (n - 1);
-    const minLabelSpacing = 40.0;
-    if (pointSpacing >= minLabelSpacing) return 1;
-    final step = (minLabelSpacing / pointSpacing).ceil();
-    // 最多不超过 n（否则一个标签都不显示）
+    if (pointSpacing >= minSpacing) return 1;
+    final step = (minSpacing / pointSpacing).ceil();
     return step.clamp(1, n);
   }
 
@@ -496,34 +478,33 @@ class _CycleLineChartPainter extends CustomPainter {
     return '${date.month}/${date.day}';
   }
 
-  void _drawText(
+  /// 以 [center] 为中心绘制文字（水平 + 垂直居中）。
+  void _drawCenteredText(
     Canvas canvas,
     String text,
-    Offset offset,
+    Offset center,
     Color color,
     double fontSize, {
     bool bold = false,
   }) {
-    final textSpan = TextSpan(
-      text: text,
-      style: TextStyle(
-        color: color,
-        fontSize: fontSize,
-        fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
-      ),
-    );
     final tp = TextPainter(
-      text: textSpan,
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+        ),
+      ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, offset);
+    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 
   @override
   bool shouldRepaint(covariant _CycleLineChartPainter oldDelegate) {
     return oldDelegate.data.length != data.length ||
         oldDelegate.lineColor != lineColor ||
-        oldDelegate.axisColor != axisColor ||
-        oldDelegate.needsScroll != needsScroll;
+        oldDelegate.axisColor != axisColor;
   }
 }
