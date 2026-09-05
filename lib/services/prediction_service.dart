@@ -95,21 +95,24 @@ class PredictionService {
 
   /// 加权移动平均：最近的周期权重最高。
   ///
-  /// 使用线性递减权重（n, n-1, ..., 1）归一化后计算，
-  /// 确保任意数量的输入都有合理的权重分布。
+  /// 对 `values` 中每个元素赋予线性递减权重——
+  /// `values[n-1]`（最新）权重为 `n`，`values[n-2]` 权重为 `n-1`，
+  /// …，`values[0]`（最旧）权重为 `1`。
+  ///
+  /// 示例：values = [23, 17, 17, 33]（从旧到新）
+  /// → (23×1 + 17×2 + 17×3 + 33×4) / (1+2+3+4)
+  /// = (23 + 34 + 51 + 132) / 10 = 240 / 10 = **24.0**
   static double _calculateWeightedAverage(List<int> values) {
     final n = values.length;
     if (n == 0) return defaultCycleLength.toDouble();
 
-    // 线性递减权重：最近 n, 次近 n-1, ..., 最远 1
-    final weights = List<double>.generate(n, (i) => (n - i).toDouble());
-    final weightTotal = weights.fold<double>(0.0, (a, b) => a + b);
-
+    // values[0] 最旧 → 权重 1；values[n-1] 最新 → 权重 n
     double weightedSum = 0;
+    double weightTotal = 0;
     for (int i = 0; i < n; i++) {
-      // values[0] 最远，values[n-1] 最近
-      // weights[0] = n（最高，对应最近的 values[n-1-i]）
-      weightedSum += values[n - 1 - i] * weights[i];
+      final weight = (i + 1).toDouble();
+      weightedSum += values[i] * weight;
+      weightTotal += weight;
     }
 
     return weightedSum / weightTotal;
