@@ -694,30 +694,26 @@ class _HomeScreenState extends State<HomeScreen>
                   builder: (context, offset, _) {
                     return SizedBox(
                       width: screenWidth,
+                      // 用 Stack + Transform.translate 而非 Positioned，
+                      // 这样子项的固有高度能撑开 Stack。
                       child: Stack(
                         children: [
-                          // 上月：默认在 -screenWidth
-                          Positioned(
-                            left: -screenWidth + offset,
-                            top: 0,
+                          Transform.translate(
+                            offset: Offset(-screenWidth + offset, 0),
                             child: SizedBox(
                               width: screenWidth,
                               child: _buildMonthGrid(provider, _prevMonth),
                             ),
                           ),
-                          // 当前月：默认在 0
-                          Positioned(
-                            left: offset,
-                            top: 0,
+                          Transform.translate(
+                            offset: Offset(offset, 0),
                             child: SizedBox(
                               width: screenWidth,
                               child: _buildMonthGrid(provider, _currentMonth),
                             ),
                           ),
-                          // 下月：默认在 +screenWidth
-                          Positioned(
-                            left: screenWidth + offset,
-                            top: 0,
+                          Transform.translate(
+                            offset: Offset(screenWidth + offset, 0),
                             child: SizedBox(
                               width: screenWidth,
                               child: _buildMonthGrid(provider, _nextMonth),
