@@ -93,25 +93,36 @@ class PredictionService {
     );
   }
 
-  /// 加权移动平均：最近的周期权重最高。
+  /// 加权移动平均：取最近 [windowSize] 个周期，最近的权重最高。
   ///
-  /// 对 `values` 中每个元素赋予线性递减权重——
-  /// `values[n-1]`（最新）权重为 `n`，`values[n-2]` 权重为 `n-1`，
-  /// …，`values[0]`（最旧）权重为 `1`。
+  /// 这是一种**滑动窗口**算法——只用最近几个周期，而非全部历史。
+  /// 窗口内使用线性递减权重：最新权重为 `n`，次新为 `n-1`，…，最旧为 `1`。
   ///
-  /// 示例：values = [23, 17, 17, 33]（从旧到新）
-  /// → (23×1 + 17×2 + 17×3 + 33×4) / (1+2+3+4)
-  /// = (23 + 34 + 51 + 132) / 10 = 240 / 10 = **24.0**
+  /// 示例：全部周期 = [..., 38, 40, 33, 17, 17, 23]（从旧到新）
+  /// 取最近 6 个 → [38, 40, 33, 17, 17, 23]
+  /// → (38×1 + 40×2 + 33×3 + 17×4 + 17×5 + 23×6) / (1+2+3+4+5+6)
+  /// = (38 + 80 + 99 + 68 + 85 + 138) / 21 = 508 / 21 ≈ **24.2**
+  ///
+  /// 如果窗口内数据不足 2 个，回退到简单平均。
   static double _calculateWeightedAverage(List<int> values) {
-    final n = values.length;
-    if (n == 0) return defaultCycleLength.toDouble();
+    if (values.isEmpty) return defaultCycleLength.toDouble();
 
-    // values[0] 最旧 → 权重 1；values[n-1] 最新 → 权重 n
+    // 滑动窗口：只取最近 windowSize 个周期
+    const windowSize = 6;
+    final window = values.length > windowSize
+        ? values.sublist(values.length - windowSize)
+        : values;
+    final n = window.length;
+    if (n < 2) {
+      return window.first.toDouble();
+    }
+
+    // window[0] 最旧 → 权重 1；window[n-1] 最新 → 权重 n
     double weightedSum = 0;
     double weightTotal = 0;
     for (int i = 0; i < n; i++) {
       final weight = (i + 1).toDouble();
-      weightedSum += values[i] * weight;
+      weightedSum += window[i] * weight;
       weightTotal += weight;
     }
 
