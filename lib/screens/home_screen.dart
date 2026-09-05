@@ -717,12 +717,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 日历网格固定高度：6 行 × 每格边长 + 内边距。
+  /// 日历网格固定高度：6 行 × 每格边长。
   /// 每个格子的 AspectRatio 为 1:1，宽度为 (屏宽 - 2*spacingMd) / 7。
+  /// 固定 6 行保证不同月份间日历高度一致，不会因天数不同导致与
+  /// 下方预测信息区域的间隙忽大忽小。
   static double get _calendarGridHeight {
-    // 使用一个合理的固定高度估算：6 行格子，每行约 48px，加上上下边距。
-    // 实际运行时由 AspectRatio 1:1 自动校正。
-    return 300.0; // 6 * ~48 + padding
+    // 使用一个合理的固定高度估算：6 行格子，每行约 48px。
+    // 实际运行时由 AspectRatio 1:1 和 Expanded 自动校正。
+    return 300.0; // 6 * ~48
   }
 
   Widget _buildCalendarGridForMonth(
@@ -733,15 +735,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final weekday = firstDay.weekday;
     final daysInMonth = lastDay.day;
     final prevMonthDays = weekday - 1;
-    final totalCells = ((prevMonthDays + daysInMonth) / 7).ceil() * 7;
 
     final now = _today;
     final todayStart = DateTime(now.year, now.month, now.day);
 
-    // 用固定行数的 Column/Row 代替 shrinkWrap 的 GridView。
-    // shrinkWrap 的 GridView 每次布局都要测量全部子项，无法懒加载；
-    // 这里格子数量固定（最多 42 个），直接展开成行列更省。
-    final rows = totalCells ~/ 7;
+    // 固定 6 行（42 格）：不同月份天数不同会导致行数在 4~6 之间变化，
+    // 固定为 6 行可消除月份间日历高度差异，避免与下方预测信息间隙忽大忽小。
+    final rows = 6;
 
     // 主题相关的三个文字色在整个网格构建中只查询一次，再传给 42 个格子，
     // 避免每格重复做 Theme/ThemeExtension 查找（一次网格构建少 80+ 次）。
@@ -757,44 +757,46 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: List<Widget>.generate(rows, (row) {
-          return Row(
-            children: List<Widget>.generate(7, (col) {
-              final index = row * 7 + col;
-              final dayOffset = index - prevMonthDays;
-              if (dayOffset < 0 || dayOffset >= daysInMonth) {
-                return const Expanded(child: SizedBox.shrink());
-              }
+          return Expanded(
+            child: Row(
+              children: List<Widget>.generate(7, (col) {
+                final index = row * 7 + col;
+                final dayOffset = index - prevMonthDays;
+                if (dayOffset < 0 || dayOffset >= daysInMonth) {
+                  return const Expanded(child: SizedBox.shrink());
+                }
 
-              final day =
-                  DateTime(month.year, month.month, dayOffset + 1);
-              final dayType = provider.getDayType(day);
-              final isToday = _isSameDay(now, day);
+                final day =
+                    DateTime(month.year, month.month, dayOffset + 1);
+                final dayType = provider.getDayType(day);
+                final isToday = _isSameDay(now, day);
 
-              return Expanded(
-                child: AspectRatio(
-                  aspectRatio: 1.0,
-                  child: ValueListenableBuilder<int>(
-                    // 只在选中日期变化时重建格子，而不是整个页面
-                    valueListenable: _cellNotifierFor(AppDateUtils.dayKey(day)),
-                    builder: (context, _, __) {
-                      final isSelected = _isSameDay(_selectedDay, day);
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _selectDay(day),
-                        child: _buildDayCell(
-                          day,
-                          dayType,
-                          isSelected,
-                          isToday,
-                          todayStart,
-                          palette,
-                        ),
-                      );
-                    },
+                return Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: ValueListenableBuilder<int>(
+                      // 只在选中日期变化时重建格子，而不是整个页面
+                      valueListenable: _cellNotifierFor(AppDateUtils.dayKey(day)),
+                      builder: (context, _, __) {
+                        final isSelected = _isSameDay(_selectedDay, day);
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _selectDay(day),
+                          child: _buildDayCell(
+                            day,
+                            dayType,
+                            isSelected,
+                            isToday,
+                            todayStart,
+                            palette,
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              );
-            }),
+                );
+              }),
+            ),
           );
         }),
       ),
