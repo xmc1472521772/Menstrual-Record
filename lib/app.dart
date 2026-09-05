@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -139,71 +138,70 @@ class _GlassNavBar extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-        child: BackdropFilter(
-          // 性能说明：BackdropFilter 每帧都会对底层内容做高斯模糊栅格化。
-          // 在低端 Android 设备上（GPU 性能弱）可能导致掉帧。
-          // 如遇性能问题，可将此 BackdropFilter 替换为半透明纯色背景：
-          // color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.85)
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            height: 64,
-            decoration: BoxDecoration(
-              color: (isDark ? Colors.black : Colors.white)
-                  .withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-              border: Border.all(
-                color: themeColors.divider.withValues(alpha: 0.3),
-                width: 0.5,
-              ),
+        child: Container(
+          // 性能说明：此前使用 BackdropFilter 做高斯模糊，但 IndexedStack
+          // 会同时保活所有 4 个 tab 页面，BackdropFilter 每帧都要对整个屏幕
+          // 内容做高斯模糊栅格化。首页（PageView 翻页）和记录页（滚动列表）
+          // 的内容在交互时每帧都在变化，导致模糊成本暴增、帧率骤降。
+          // 统计页和设置页内容静态，GPU 可复用模糊结果故不卡顿。
+          // 替换为半透明纯色背景，彻底消除每帧模糊开销。
+          height: 64,
+          decoration: BoxDecoration(
+            color: (isDark ? Colors.black : Colors.white)
+                .withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+            border: Border.all(
+              color: themeColors.divider.withValues(alpha: 0.3),
+              width: 0.5,
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final itemW = constraints.maxWidth / n;
-                // 滑块宽度：单格的 72%
-                final sliderW = itemW * 0.72;
-                // 滑块 left = 当前格的起始 + (单格 - 滑块) / 2 居中
-                final sliderLeft =
-                    currentIndex * itemW + (itemW - sliderW) / 2;
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final itemW = constraints.maxWidth / n;
+              // 滑块宽度：单格的 72%
+              final sliderW = itemW * 0.72;
+              // 滑块 left = 当前格的起始 + (单格 - 滑块) / 2 居中
+              final sliderLeft =
+                  currentIndex * itemW + (itemW - sliderW) / 2;
 
-                return Stack(
-                  children: [
-                    // ─── 滑块指示器（AnimatedPositioned 精确定位）───
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeOutCubic,
-                      left: sliderLeft,
-                      top: 10,
-                      width: sliderW,
-                      height: 44,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.brandPrimary,
-                          borderRadius:
-                              BorderRadius.circular(AppDimens.radiusFull),
-                        ),
+              return Stack(
+                children: [
+                  // ─── 滑块指示器（AnimatedPositioned 精确定位）───
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    left: sliderLeft,
+                    top: 10,
+                    width: sliderW,
+                    height: 44,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.brandPrimary,
+                        borderRadius:
+                            BorderRadius.circular(AppDimens.radiusFull),
                       ),
                     ),
-                    // ─── 导航项 ───
-                    Row(
-                      children: List.generate(n, (i) {
-                        final item = _items[i];
-                        final selected = i == currentIndex;
-                        return Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => onTap(i),
-                            child: _NavItemView(
-                              item: item,
-                              selected: selected,
-                            ),
+                  ),
+                  // ─── 导航项 ───
+                  Row(
+                    children: List.generate(n, (i) {
+                      final item = _items[i];
+                      final selected = i == currentIndex;
+                      return Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onTap(i),
+                          child: _NavItemView(
+                            item: item,
+                            selected: selected,
                           ),
-                        );
-                      }),
-                    ),
-                  ],
-                );
-              },
-            ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
