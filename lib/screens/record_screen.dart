@@ -872,41 +872,45 @@ class _RecordScreenState extends State<RecordScreen> {
               child: const Text(AppStrings.cancel),
             ),
             ElevatedButton(
-              onPressed: () async {
-                // 构造更新后的记录
-                final startStr =
-                    editStart.toIso8601String().split('T')[0];
-                final endStr = isOngoing
-                    ? null
-                    : (editEnd != null
-                        ? editEnd!.toIso8601String().split('T')[0]
-                        : null);
-                final periodLength = (endStr != null)
-                    ? (editEnd!.difference(editStart).inDays + 1).clamp(1, 999)
-                    : null;
-                final updated = record.copyWith(
-                  startDate: startStr,
-                  endDate: endStr,
-                  periodLength: periodLength,
-                  clearEndDate: isOngoing,
-                  clearPeriodLength: isOngoing,
-                );
-                final success = await provider.updateRecord(updated);
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success
-                        ? AppStrings.recordUpdated
-                        : AppStrings.updateFailed),
-                    backgroundColor: success
-                        ? AppColors.brandPrimary
-                        : AppColors.error,
-                  ),
-                );
-              },
+              // 没有结束日期且不是进行中状态时禁用保存
+              onPressed: (editEnd != null || isOngoing)
+                  ? () async {
+                      // 构造更新后的记录
+                      final startStr =
+                          editStart.toIso8601String().split('T')[0];
+                      final endStr = isOngoing
+                          ? null
+                          : (editEnd != null
+                              ? editEnd!.toIso8601String().split('T')[0]
+                              : null);
+                      final periodLength = (endStr != null)
+                          ? (editEnd!.difference(editStart).inDays + 1)
+                              .clamp(1, 999)
+                          : null;
+                      final updated = record.copyWith(
+                        startDate: startStr,
+                        endDate: endStr,
+                        periodLength: periodLength,
+                        clearEndDate: isOngoing,
+                        clearPeriodLength: isOngoing,
+                      );
+                      final success = await provider.updateRecord(updated);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success
+                              ? AppStrings.recordUpdated
+                              : AppStrings.updateFailed),
+                          backgroundColor: success
+                              ? AppColors.brandPrimary
+                              : AppColors.error,
+                        ),
+                      );
+                    }
+                  : null,
               child: const Text(AppStrings.save),
             ),
           ],
