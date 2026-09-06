@@ -194,31 +194,33 @@ class StatsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppDimens.spacingMd),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _buildAlgorithmOption(
-                    context,
-                    'simple',
-                    AppStrings.simpleAverage,
-                    AppStrings.basedOnAllHistory,
-                    settingsProvider,
-                    periodProvider,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildAlgorithmOption(
+                      context,
+                      'simple',
+                      AppStrings.simpleAverage,
+                      AppStrings.basedOnAllHistory,
+                      settingsProvider,
+                      periodProvider,
+                    ),
                   ),
-                ),
-                const SizedBox(width: AppDimens.spacingMd),
-                Expanded(
-                  child: _buildAlgorithmOption(
-                    context,
-                    'adaptive',
-                    AppStrings.weightedAverage,
-                    AppStrings.weightedMoreAccurate,
-                    settingsProvider,
-                    periodProvider,
+                  const SizedBox(width: AppDimens.spacingMd),
+                  Expanded(
+                    child: _buildAlgorithmOption(
+                      context,
+                      'adaptive',
+                      AppStrings.weightedAverage,
+                      AppStrings.weightedMoreAccurate,
+                      settingsProvider,
+                      periodProvider,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: AppDimens.spacingSm),
             Text(
