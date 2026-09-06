@@ -195,6 +195,7 @@ class StatsScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppDimens.spacingMd),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
                   child: _buildAlgorithmOption(
