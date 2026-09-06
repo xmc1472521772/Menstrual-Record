@@ -80,6 +80,13 @@ class AppStrings {
   static const String endDateCannotBeBeforeStart = '结束日期不能早于开始日期';
   static const String clearEndDate = '清除结束日期';
   static const String clearEndDateHint = '设为进行中的经期';
+  static const String editConflictPrevOverlap = '修改后的开始日期与上一条记录重叠，请调整';
+  static const String editConflictNextOverlap = '修改后的结束日期与下一条记录重叠，请调整';
+  static const String editConflictStartAfterEnd = '开始日期不能晚于结束日期';
+  static const String editPeriodTooShort = '经期仅{}天，时长偏短，确认是否正确？';
+  static const String editPeriodTooLong = '经期{}天，时长偏长，确认是否正确？';
+  static const String editRangeConstraintPrev = '开始日期不能早于上一条记录的结束日期';
+  static const String editRangeConstraintNext = '结束日期不能晚于下一条记录的开始日期';
   static const String duration = '持续';
   static const String nRecords = '共 {} 条';
 
