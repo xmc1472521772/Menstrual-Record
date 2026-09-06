@@ -47,6 +47,18 @@ class AppColors {
   static const Color grey = Color(0xFFA39A90);
   static const Color transparent = Colors.transparent;
 
+  /// 根据日类型字符串返回对应颜色，供弹窗等处统一适配日历配色。
+  static Color dayTypeColor(String dayType) {
+    return switch (dayType) {
+      'period' => periodDay,
+      'predicted' => predictedDay,
+      'ovulation' => ovulationDay,
+      'fertile' => fertileBg,
+      'safe' => safeDay,
+      _ => transparent,
+    };
+  }
+
   // ─── Calendar Helpers ────────────────────────────────────────────
   static Color getPeriodColor(DateTime date) => periodDay;
 

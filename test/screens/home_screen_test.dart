@@ -9,6 +9,7 @@ import 'package:yimaflutter/database/database_helper.dart';
 import 'package:yimaflutter/database/period_dao.dart';
 import 'package:yimaflutter/database/settings_dao.dart';
 import 'package:yimaflutter/providers/period_provider.dart';
+import 'package:yimaflutter/providers/settings_provider.dart';
 import 'package:yimaflutter/screens/home_screen.dart';
 
 /// 首页（日历）在「无记录 / 有经期记录」两种形态下都能正常构建与滚动，
@@ -21,6 +22,7 @@ void main() {
   });
 
   late PeriodProvider provider;
+  late SettingsProvider settingsProvider;
   late _TestDatabaseProvider dbHelper;
 
   Future<void> buildHome(WidgetTester tester) async {
@@ -29,8 +31,11 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<PeriodProvider>.value(
-        value: provider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PeriodProvider>.value(value: provider),
+          ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
+        ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
@@ -44,7 +49,7 @@ void main() {
   setUp(() async {
     final db = await openDatabase(
       inMemoryDatabasePath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE period_records (
@@ -82,6 +87,10 @@ void main() {
     );
 
     dbHelper = _TestDatabaseProvider(db);
+    settingsProvider = SettingsProvider(
+      settingsDao: SettingsDao(dbHelper: dbHelper),
+    );
+    await settingsProvider.ensureLoaded();
     provider = PeriodProvider(
       periodDao: PeriodDao(dbHelper: dbHelper),
       settingsDao: SettingsDao(dbHelper: dbHelper),

@@ -53,5 +53,4 @@ flutter analyze
 
 ## Known Issues
 
-- `AppDateUtils` is defined in both `lib/utils/date_utils.dart` and `lib/providers/period_provider.dart` with identical methods. The local definition shadows the import.
 - Static text styles in `record_screen.dart` are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors.

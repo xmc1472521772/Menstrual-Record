@@ -28,7 +28,7 @@ void main() {
     // Create an in-memory database for each test
     final db = await openDatabase(
       inMemoryDatabasePath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE period_records (

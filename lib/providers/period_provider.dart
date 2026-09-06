@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
 import '../database/period_dao.dart';
@@ -73,6 +75,7 @@ class PeriodProvider with ChangeNotifier {
   CycleData? _cycleData;
   bool _isLoading = false;
   String _algorithm = 'simple';
+  String? _lastError;
 
   /// 日类型缓存。key 为整数 `yyyyMMdd`（见 [AppDateUtils.dayKey]），
   /// 相比字符串 key 可避免每次日历构建时 40+ 次字符串拼接与哈希。
@@ -97,6 +100,7 @@ class PeriodProvider with ChangeNotifier {
   CycleData? get cycleData => _cycleData;
   bool get isLoading => _isLoading;
   int get dataVersion => _dataVersion;
+  String? get lastError => _lastError;
 
   /// 是否存在进行中的经期。缓存以避免 UI 每次构建都遍历一遍记录列表。
   bool get hasOngoingPeriod => _hasOngoing;
@@ -112,8 +116,10 @@ class PeriodProvider with ChangeNotifier {
       if (_autoEndEnabled) {
         await _autoEndExpiredPeriods();
       }
+      _lastError = null;
     } catch (e) {
       debugPrint('Error loading records: $e');
+      _lastError = '加载数据失败：$e';
     }
 
     _isLoading = false;
@@ -146,7 +152,44 @@ class PeriodProvider with ChangeNotifier {
   void _commitMutation() {
     _recalculate();
     notifyListeners();
+    _autoBackup();
     _scheduleReminderIfNeeded();
+  }
+
+  /// 自动备份：将当前数据快照写入应用文档目录。
+  /// 只保留最近 5 份备份，超出时删除最旧的。
+  /// 异常静默处理 —— 备份失败不应影响正常使用。
+  Future<void> _autoBackup() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final backupDir = Directory('${dir.path}/backups');
+      if (!backupDir.existsSync()) {
+        backupDir.createSync(recursive: true);
+      }
+      final now = DateTime.now();
+      final fileName =
+          'auto_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.json';
+      final file = File('${backupDir.path}/$fileName');
+      final jsonData = await exportData();
+      await file.writeAsString(jsonData);
+
+      // 清理旧备份：只保留最近 5 份
+      final backups = backupDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('auto_backup_'))
+          .toList()
+        ..sort((a, b) => b.path.compareTo(a.path));
+      if (backups.length > 5) {
+        for (final old in backups.skip(5)) {
+          try {
+            old.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('Auto backup failed: $e');
+    }
   }
 
   /// 按 `start_date DESC` 重新排序，保持与 [PeriodDao.getAll] 一致的顺序。

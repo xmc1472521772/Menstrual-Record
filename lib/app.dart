@@ -51,11 +51,15 @@ class MyApp extends StatelessWidget {
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
+  /// 全局 key，供外部（如首页通知按钮）跳转到指定 tab。
+  static final GlobalKey<MainScreenState> globalKey =
+      GlobalKey<MainScreenState>();
+
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  State<MainScreen> createState() => MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
@@ -64,6 +68,11 @@ class _MainScreenState extends State<MainScreen> {
     StatsScreen(),
     SettingsScreen(),
   ];
+
+  /// 跳转到设置页（tab index = 3），供首页通知按钮等外部入口调用。
+  void jumpToSettings() {
+    setState(() => _currentIndex = 3);
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../app.dart';
+import '../models/period_record.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/cycle_data.dart';
@@ -186,7 +188,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              // 跳转到设置页的提醒设置区域
+              MainScreen.globalKey.currentState?.jumpToSettings();
+            },
             icon: const Icon(Icons.notifications_none_rounded, size: 22),
             color: AppColors.ink,
             tooltip: AppStrings.notificationTitle,
@@ -223,6 +228,35 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, _, __) {
           final provider = context.read<PeriodProvider>();
           final cycleData = provider.cycleData;
+
+          // 错误提示横幅
+          if (provider.lastError != null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppDimens.spacingXl),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        size: 48, color: AppColors.error),
+                    const SizedBox(height: AppDimens.spacingMd),
+                    Text(
+                      provider.lastError!,
+                      textAlign: TextAlign.center,
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppColors.error,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.spacingLg),
+                    ElevatedButton(
+                      onPressed: () => provider.loadRecords(),
+                      child: const Text('重试'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
@@ -802,6 +836,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () => _selectDay(day),
+                        onLongPress: () => _showDayDetail(context, day, dayType, provider),
                         child: _buildDayCell(
                           day,
                           dayType,
@@ -852,6 +887,135 @@ class _HomeScreenState extends State<HomeScreen> {
       _dayCellNotifiers[AppDateUtils.dayKey(previous)]?.value++;
     }
     _dayCellNotifiers[AppDateUtils.dayKey(day)]?.value++;
+  }
+
+  /// 长按日历日期显示详情弹窗。
+  void _showDayDetail(
+      BuildContext context, DateTime day, String dayType, PeriodProvider provider) {
+    final cycleData = provider.cycleData;
+
+    // 日类型中文标签
+    const typeLabels = {
+      'period': '经期',
+      'predicted': '预测经期',
+      'ovulation': '排卵日',
+      'fertile': '易孕期',
+      'safe': '安全期',
+      'normal': '普通日',
+    };
+    final typeLabel = typeLabels[dayType] ?? '普通日';
+    final typeColor = AppColors.dayTypeColor(dayType);
+
+    // 计算距下次经期天数
+    String? daysToNext;
+    if (cycleData != null && cycleData.predictedNextPeriod != null) {
+      final diff = cycleData.predictedNextPeriod!.difference(day).inDays;
+      if (diff > 0) {
+        daysToNext = '距下次经期还有 $diff 天';
+      } else if (diff == 0) {
+        daysToNext = '今天预测经期开始';
+      }
+    }
+
+    // 查找该日期所属的经期记录
+    PeriodRecord? matchedRecord;
+    for (final r in provider.records) {
+      if (!r.isOngoing && r.endDateTime != null) {
+        if (!day.isBefore(r.startDateTime) && !day.isAfter(r.endDateTime!)) {
+          matchedRecord = r;
+          break;
+        }
+      } else if (r.isOngoing) {
+        if (!day.isBefore(r.startDateTime) &&
+            !day.isAfter(DateTime.now())) {
+          matchedRecord = r;
+          break;
+        }
+      }
+    }
+
+    final themeColors = context.themeColors;
+    final secondaryColor = themeColors.onSurfaceSecondary;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          '${day.year}年${day.month}月${day.day}日',
+          style: AppTheme.titleMedium.copyWith(color: themeColors.onSurface),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: typeColor,
+                    shape: BoxShape.circle,
+                    border: typeColor == AppColors.transparent
+                        ? Border.all(color: themeColors.divider, width: 1)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(typeLabel,
+                    style: AppTheme.bodyMedium
+                        .copyWith(color: themeColors.onSurface)),
+              ],
+            ),
+            if (daysToNext != null) ...[
+              const SizedBox(height: 12),
+              Text(daysToNext,
+                  style:
+                      AppTheme.bodySmall.copyWith(color: secondaryColor)),
+            ],
+            if (matchedRecord != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                '经期记录：${matchedRecord.startDateTime.month}/${matchedRecord.startDateTime.day} - ${matchedRecord.isOngoing ? '进行中' : '${matchedRecord.endDateTime!.month}/${matchedRecord.endDateTime!.day}'}',
+                style:
+                    AppTheme.bodySmall.copyWith(color: secondaryColor),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '持续 ${matchedRecord.periodDays} 天',
+                style:
+                    AppTheme.bodySmall.copyWith(color: secondaryColor),
+              ),
+              if (matchedRecord.mood != null ||
+                  matchedRecord.symptoms != null) ...[
+                const SizedBox(height: 8),
+                if (matchedRecord.mood != null)
+                  Text('心情：${matchedRecord.mood}',
+                      style: TextStyle(
+                          fontSize: 16, color: themeColors.onSurface)),
+                if (matchedRecord.symptoms != null)
+                  Text('症状：${matchedRecord.symptoms}',
+                      style: AppTheme.bodySmall
+                          .copyWith(color: secondaryColor)),
+              ],
+              if (matchedRecord.notes != null &&
+                  matchedRecord.notes!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('备注：${matchedRecord.notes}',
+                    style: AppTheme.bodySmall
+                        .copyWith(color: secondaryColor)),
+              ],
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(AppStrings.confirm),
+          ),
+        ],
+      ),
+    );
   }
 
   bool _isSameDay(DateTime? a, DateTime? b) {

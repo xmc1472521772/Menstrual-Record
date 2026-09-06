@@ -8,6 +8,8 @@ import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
 import '../widgets/cycle_chart.dart';
+import '../widgets/period_length_chart.dart';
+import '../widgets/year_heatmap.dart';
 
 class StatsScreen extends StatelessWidget {
   const StatsScreen({super.key});
@@ -40,11 +42,15 @@ class StatsScreen extends StatelessWidget {
                 const SizedBox(height: AppDimens.spacingLg),
                 CycleChart(periods: cycleData.recentPeriods),
                 const SizedBox(height: AppDimens.spacingLg),
+                PeriodLengthChart(periods: cycleData.recentPeriods),
+                const SizedBox(height: AppDimens.spacingLg),
                 _buildAlgorithmSelector(context, settingsProvider, periodProvider),
                 const SizedBox(height: AppDimens.spacingLg),
                 _buildPredictionCard(context, cycleData),
                 const SizedBox(height: AppDimens.spacingLg),
                 _buildHistoryList(context, cycleData),
+                const SizedBox(height: AppDimens.spacingLg),
+                YearHeatmap(records: periodProvider.records),
               ],
             ),
           );

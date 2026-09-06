@@ -47,6 +47,8 @@ class SettingsScreen extends StatelessWidget {
                 _buildExportButton(context, periodProvider),
                 const SizedBox(height: AppDimens.spacingMd),
                 _buildImportButton(context, periodProvider),
+                const SizedBox(height: AppDimens.spacingMd),
+                _buildRestoreBackupButton(context, periodProvider),
               ],
             ),
           );
@@ -322,6 +324,23 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildRestoreBackupButton(
+      BuildContext context, PeriodProvider provider) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => _restoreBackup(context, provider),
+        icon: const Icon(Icons.history, size: 20),
+        label: const Text('恢复自动备份'),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimens.spacingLg,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _exportData(
       BuildContext context, PeriodProvider provider) async {
     try {
@@ -414,6 +433,88 @@ class SettingsScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(content: Text('导入失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreBackup(
+      BuildContext context, PeriodProvider provider) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final backupDir = Directory('${dir.path}/backups');
+      if (!backupDir.existsSync()) {
+        if (context.mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(content: Text('暂无自动备份')),
+          );
+        }
+        return;
+      }
+
+      final backups = backupDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('auto_backup_'))
+          .toList()
+        ..sort((a, b) => b.path.compareTo(a.path));
+
+      if (backups.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(content: Text('暂无自动备份')),
+          );
+        }
+        return;
+      }
+
+      // 显示备份列表供用户选择
+      if (!context.mounted) return;
+      final selected = await showDialog<File>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('选择备份'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: backups.length,
+              itemBuilder: (context, index) {
+                final file = backups[index];
+                final name = file.path.split('/').last;
+                return ListTile(
+                  leading: const Icon(Icons.backup_outlined, size: 20),
+                  title: Text(name.replaceAll('auto_backup_', '').replaceAll('.json', '')),
+                  onTap: () => Navigator.pop(ctx, file),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(AppStrings.cancel),
+            ),
+          ],
+        ),
+      );
+
+      if (selected == null) return;
+
+      final jsonString = await selected.readAsString();
+      final success = await provider.importData(jsonString, overwrite: true);
+
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(success ? '备份已恢复' : '恢复失败'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text('恢复失败: $e')),
         );
       }
     }

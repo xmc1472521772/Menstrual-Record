@@ -84,6 +84,5 @@ Standard `package:flutter_lints/flutter.yaml` via `analysis_options.yaml`. No cu
 
 ## Known Traps
 
-- **`AppDateUtils` is duplicated.** It exists in both `lib/utils/date_utils.dart` and `lib/providers/period_provider.dart` (local class at the bottom of the file). The local definition shadows the import. If you change date logic, you may need to change both or deduplicate them.
 - **`table_calendar`** has been removed from dependencies. The custom calendar is the only calendar implementation.
 - **Static text styles in `record_screen.dart`** are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors. They cannot be `const`.

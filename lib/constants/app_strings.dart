@@ -1,5 +1,10 @@
 class AppStrings {
   static const String appName = '月事记';
+
+  /// 占位符，用于含参数的字符串模板。
+  static const String nPlaceholder = '{}';
+  static const String nPlaceholder2 = '{}';
+
   static const String home = '首页';
   static const String record = '记录';
   static const String stats = '统计';
@@ -139,4 +144,18 @@ class AppStrings {
   static const String mergeAction = '续接上一段';
   static const String newPeriodAction = '开启新经期';
   static const String mergeSilentDone = '已续接上一段经期';
+
+  // ─── Misc UI strings ──────────────────────────────────────────────
+  static const String ongoing = '进行中';
+  static const String nRecordsCount = '共 $nPlaceholder 条';
+  static const String periodTooShort = '经期仅$nPlaceholder天，时长偏短，确认是否正确？';
+  static const String periodTooLong = '经期$nPlaceholder天，时长偏长，确认是否正确？';
+  static const String confirmWarning = '确认异常';
+  static const String deleteRecordLabel = '删除记录';
+  static const String retry = '重试';
+  static const String avgN = '平均 $nPlaceholder 天';
+  static const String predictionHintText = '当有足够的历史记录时，系统会根据实际记录计算平均值；当记录不足时，会使用以下默认值进行预测。';
+  static const String loadFailed = '加载数据失败';
+  static const String autoSelectHintText = '点击日期自动从该天起选中 $nPlaceholder 天，点相邻日期可逐天增减';
+  static const String selectedNDaysText = '已选 $nPlaceholder 天：$nPlaceholder2';
 }

@@ -19,7 +19,7 @@ class DatabaseHelper implements DatabaseProvider {
   DatabaseHelper._internal();
 
   /// Current database version. Increment when schema changes.
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
 
   @override
   Future<Database> get database async {
@@ -56,11 +56,12 @@ class DatabaseHelper implements DatabaseProvider {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Incrementally apply migrations as new versions are introduced.
-    //
+    if (oldVersion < 2) {
+      // Add index on start_date for faster range queries (getByDateRange)
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_period_start_date ON period_records (start_date)');
+    }
     // Example for future migrations:
-    //   if (oldVersion < 2) {
-    //     await db.execute('ALTER TABLE period_records ADD COLUMN flow TEXT');
-    //   }
     //   if (oldVersion < 3) {
     //     await db.execute('ALTER TABLE period_records ADD COLUMN tag TEXT');
     //   }
@@ -87,6 +88,10 @@ class DatabaseHelper implements DatabaseProvider {
         value TEXT NOT NULL
       )
     ''');
+
+    // Index on start_date for faster range queries
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_period_start_date ON period_records (start_date)');
   }
 
   Future<void> _seedSettings(Database db) async {

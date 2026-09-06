@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../database/settings_dao.dart';
 
@@ -16,6 +17,11 @@ class SettingsProvider with ChangeNotifier {
 
   /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
   Future<void>? _loadFuture;
+
+  /// 滑块防抖定时器：拖动过程中只更新内存值（UI 即时响应），
+  /// 松手后延迟写入数据库，避免每像素变化都触发一次 DB 写入。
+  Timer? _cycleLengthDebounce;
+  Timer? _periodLengthDebounce;
 
   int get cycleLength => _cycleLength;
   int get periodLength => _periodLength;
@@ -47,27 +53,31 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<bool> setCycleLength(int value) async {
-    try {
-      await _dao.setValue('avg_cycle_length', value.toString());
-      _cycleLength = value;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error setting cycle length: $e');
-      return false;
-    }
+    _cycleLength = value;
+    notifyListeners();
+    _cycleLengthDebounce?.cancel();
+    _cycleLengthDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        await _dao.setValue('avg_cycle_length', value.toString());
+      } catch (e) {
+        debugPrint('Error setting cycle length: $e');
+      }
+    });
+    return true;
   }
 
   Future<bool> setPeriodLength(int value) async {
-    try {
-      await _dao.setValue('avg_period_length', value.toString());
-      _periodLength = value;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error setting period length: $e');
-      return false;
-    }
+    _periodLength = value;
+    notifyListeners();
+    _periodLengthDebounce?.cancel();
+    _periodLengthDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        await _dao.setValue('avg_period_length', value.toString());
+      } catch (e) {
+        debugPrint('Error setting period length: $e');
+      }
+    });
+    return true;
   }
 
   Future<bool> setReminderDays(int value) async {

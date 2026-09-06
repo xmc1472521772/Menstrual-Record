@@ -18,15 +18,9 @@ class NotificationService {
   Future<void> initialize() async {
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
 
     const initSettings = InitializationSettings(
       android: androidSettings,
-      iOS: iosSettings,
     );
 
     await _notifications.initialize(initSettings);
@@ -57,16 +51,6 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
       await android.requestNotificationsPermission();
-    }
-    final ios = _notifications
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
-    if (ios != null) {
-      await ios.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
     }
   }
 
@@ -101,11 +85,8 @@ class NotificationService {
       priority: Priority.high,
     );
 
-    const iosDetails = DarwinNotificationDetails();
-
     const details = NotificationDetails(
       android: androidDetails,
-      iOS: iosDetails,
     );
 
     // 设置了 local location 后直接用 TZDateTime.local 构造正确时刻。
@@ -143,11 +124,8 @@ class NotificationService {
       priority: Priority.high,
     );
 
-    const iosDetails = DarwinNotificationDetails();
-
     const details = NotificationDetails(
       android: androidDetails,
-      iOS: iosDetails,
     );
 
     await _notifications.show(_reminderNotificationId, title, body, details);

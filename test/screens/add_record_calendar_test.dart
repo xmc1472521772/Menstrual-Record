@@ -9,6 +9,7 @@ import 'package:yimaflutter/database/database_helper.dart';
 import 'package:yimaflutter/database/period_dao.dart';
 import 'package:yimaflutter/database/settings_dao.dart';
 import 'package:yimaflutter/providers/period_provider.dart';
+import 'package:yimaflutter/screens/add_record_calendar_page.dart';
 import 'package:yimaflutter/screens/record_screen.dart';
 
 /// 日历打开后会自动滚动到当前月，整棵树里会出现多个 "15"。
@@ -78,7 +79,7 @@ void main() {
   setUp(() async {
     final db = await openDatabase(
       inMemoryDatabasePath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE period_records (
