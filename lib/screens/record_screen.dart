@@ -616,11 +616,29 @@ class _RecordScreenState extends State<RecordScreen> {
               color: AppColors.inkTertiary,
             ),
             onSelected: (value) {
-              if (value == 'delete') {
+              if (value == 'edit') {
+                _showEditDialog(record, provider);
+              } else if (value == 'delete') {
                 _showDeleteConfirmDialog(record, provider);
               }
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    const Icon(Icons.edit_calendar_rounded,
+                        color: AppColors.brandPrimary, size: 18),
+                    const SizedBox(width: AppDimens.spacingSm),
+                    Text(
+                      AppStrings.editRecord,
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: context.themeColors.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'delete',
                 child: Row(
@@ -640,6 +658,259 @@ class _RecordScreenState extends State<RecordScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditDialog(PeriodRecord record, PeriodProvider provider) {
+    DateTime editStart = record.startDateTime;
+    DateTime? editEnd = record.endDateTime;
+    bool isOngoing = record.isOngoing;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text(AppStrings.editRecordTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                AppStrings.editRecordHint,
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppColors.inkSecondary,
+                ),
+              ),
+              const SizedBox(height: AppDimens.spacingLg),
+              // 开始日期
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: editStart,
+                    firstDate: DateTime(editStart.year - 5),
+                    lastDate: DateTime(editStart.year + 1),
+                    locale: const Locale('zh', 'CN'),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme:
+                              Theme.of(context).colorScheme.copyWith(
+                                    primary: AppColors.brandPrimary,
+                                    onPrimary: AppColors.white,
+                                  ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      editStart = picked;
+                      // 如果结束日期早于新的开始日期，也调整结束日期
+                      if (editEnd != null && editEnd!.isBefore(editStart)) {
+                        editEnd = editStart;
+                      }
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppDimens.spacingMd,
+                    horizontal: AppDimens.spacingMd,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ctx.themeColors.surfaceTile,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        AppStrings.startDate,
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppColors.inkSecondary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${editStart.year}年${editStart.month}月${editStart.day}日',
+                        style: AppTheme.titleMedium.copyWith(
+                          color: ctx.themeColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: AppDimens.spacingSm),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: AppColors.inkTertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppDimens.spacingMd),
+              // 结束日期
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: editEnd ?? editStart,
+                    firstDate: editStart,
+                    lastDate: DateTime(editStart.year + 1),
+                    locale: const Locale('zh', 'CN'),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme:
+                              Theme.of(context).colorScheme.copyWith(
+                                    primary: AppColors.brandPrimary,
+                                    onPrimary: AppColors.white,
+                                  ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      editEnd = picked;
+                      isOngoing = false;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppDimens.spacingMd,
+                    horizontal: AppDimens.spacingMd,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ctx.themeColors.surfaceTile,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        AppStrings.endDate,
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppColors.inkSecondary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        isOngoing
+                            ? '进行中'
+                            : (editEnd != null
+                                ? '${editEnd!.year}年${editEnd!.month}月${editEnd!.day}日'
+                                : AppStrings.selectDate),
+                        style: AppTheme.titleMedium.copyWith(
+                          color: isOngoing || editEnd == null
+                              ? AppColors.inkTertiary
+                              : ctx.themeColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: AppDimens.spacingSm),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: AppColors.inkTertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // 清除结束日期按钮（仅当当前有结束日期时显示）
+              if (!isOngoing && editEnd != null) ...[
+                const SizedBox(height: AppDimens.spacingSm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setDialogState(() {
+                        editEnd = null;
+                        isOngoing = true;
+                      });
+                    },
+                    icon: const Icon(Icons.clear_rounded, size: 16),
+                    label: const Text(AppStrings.clearEndDate),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.inkSecondary,
+                      textStyle: AppTheme.labelMedium,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppDimens.spacingSm,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              // 进行中标签提示
+              if (isOngoing) ...[
+                const SizedBox(height: AppDimens.spacingSm),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.spacingMd,
+                    vertical: AppDimens.spacingXs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSurface,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                  ),
+                  child: Text(
+                    AppStrings.clearEndDateHint,
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppColors.brandPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(AppStrings.cancel),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // 构造更新后的记录
+                final startStr =
+                    editStart.toIso8601String().split('T')[0];
+                final endStr = isOngoing
+                    ? null
+                    : (editEnd != null
+                        ? editEnd!.toIso8601String().split('T')[0]
+                        : null);
+                final periodLength = (endStr != null)
+                    ? (editEnd!.difference(editStart).inDays + 1).clamp(1, 999)
+                    : null;
+                final updated = record.copyWith(
+                  startDate: startStr,
+                  endDate: endStr,
+                  periodLength: periodLength,
+                  clearEndDate: isOngoing,
+                  clearPeriodLength: isOngoing,
+                );
+                final success = await provider.updateRecord(updated);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success
+                        ? AppStrings.recordUpdated
+                        : AppStrings.updateFailed),
+                    backgroundColor: success
+                        ? AppColors.brandPrimary
+                        : AppColors.error,
+                  ),
+                );
+              },
+              child: const Text(AppStrings.save),
+            ),
+          ],
+        ),
       ),
     );
   }

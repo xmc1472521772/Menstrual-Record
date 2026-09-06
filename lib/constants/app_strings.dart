@@ -72,6 +72,14 @@ class AppStrings {
   static const String multiSelectCalendar = '多选日历';
   static const String ongoingTag = '进行中';
   static const String deleteRecord = '删除记录';
+  static const String editRecord = '编辑记录';
+  static const String editRecordTitle = '编辑经期记录';
+  static const String editRecordHint = '修改经期的起止日期';
+  static const String recordUpdated = '记录已更新';
+  static const String updateFailed = '更新失败，请检查日期是否冲突';
+  static const String endDateCannotBeBeforeStart = '结束日期不能早于开始日期';
+  static const String clearEndDate = '清除结束日期';
+  static const String clearEndDateHint = '设为进行中的经期';
   static const String duration = '持续';
   static const String nRecords = '共 {} 条';
 
