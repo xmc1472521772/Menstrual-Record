@@ -53,9 +53,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 ACTION_END_PERIOD -> handleEndPeriod(context, db, today)
                 ACTION_SET_FLOW -> {
                     val flowLevel = intent.getIntExtra(EXTRA_FLOW_LEVEL, 0)
-                    if (flowLevel > 0) {
-                        handleSetFlow(context, db, today, flowLevel)
-                    }
+                    handleSetFlow(context, db, today, flowLevel)
                 }
             }
 

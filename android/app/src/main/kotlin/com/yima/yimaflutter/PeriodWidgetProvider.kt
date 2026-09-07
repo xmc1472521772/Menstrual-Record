@@ -69,6 +69,7 @@ class PeriodWidgetProvider : AppWidgetProvider() {
 
             // 子文本显示当天经量状态
             val flowText = when (todayFlow) {
+                0 -> "今日经量：无"
                 1 -> "今日经量：少"
                 2 -> "今日经量：中"
                 3 -> "今日经量：多"
@@ -82,6 +83,22 @@ class PeriodWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.btn_end, View.VISIBLE)
 
             // 经量按钮：根据 todayFlow 高亮选中项
+            // 无 (0) → 浅灰粉 #E8D5D2
+            views.setInt(
+                R.id.btn_flow_none,
+                "setBackgroundResource",
+                if (todayFlow == 0) R.drawable.widget_flow_bg_selected_none
+                else R.drawable.widget_flow_bg_unselected
+            )
+            views.setTextColor(
+                R.id.btn_flow_none,
+                if (todayFlow == 0) 0xFFFFFFFF.toInt() else 0xFF6E665E.toInt()
+            )
+            views.setOnClickPendingIntent(
+                R.id.btn_flow_none,
+                buildBroadcastIntent(context, WidgetActionReceiver.ACTION_SET_FLOW, 0)
+            )
+
             // 少 (1) → 浅暖粉 #F0B4A8
             views.setInt(
                 R.id.btn_flow_light,
@@ -176,28 +193,29 @@ class PeriodWidgetProvider : AppWidgetProvider() {
     private fun buildBroadcastIntent(context: Context, action: String, flowLevel: Int): PendingIntent {
         val intent = Intent(context, WidgetActionReceiver::class.java).apply {
             this.action = action
-            if (flowLevel > 0) {
-                putExtra(WidgetActionReceiver.EXTRA_FLOW_LEVEL, flowLevel)
-            }
+            putExtra(WidgetActionReceiver.EXTRA_FLOW_LEVEL, flowLevel)
         }
+        // requestCode 必须唯一，否则同 action 的 PendingIntent 会互相覆盖
+        val requestCode = action.hashCode() xor flowLevel.hashCode()
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
-        return PendingIntent.getBroadcast(context, action.hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
     }
 
     /// 构建打开 App 的 Intent（仅标题区域使用）。
+    /// 使用 SINGLE_TOP 而非 CLEAR_TOP，避免重建 Activity 导致 App 似被重启。
     private fun buildOpenAppIntent(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
-        return PendingIntent.getActivity(context, 0, intent, flags)
+        return PendingIntent.getActivity(context, 1, intent, flags)
     }
 }
