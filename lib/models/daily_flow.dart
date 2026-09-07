@@ -29,4 +29,18 @@ class DailyFlow {
       flowLevel: map['flow_level'] as int,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'flowLevel': flowLevel,
+    };
+  }
+
+  factory DailyFlow.fromJson(Map<String, dynamic> json) {
+    return DailyFlow(
+      date: json['date'] as String,
+      flowLevel: (json['flowLevel'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

@@ -1,7 +1,7 @@
 name: yimaflutter
 description: "月事记 - 经期记录，本地存储，隐私安全"
 publish_to: 'none'
-version: 1.18.3+71
+version: 1.18.4+72
 
 environment:
   sdk: ^3.5.4

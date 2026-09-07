@@ -673,7 +673,14 @@ class PeriodProvider with ChangeNotifier {
 
   Future<String> exportData() async {
     final jsonList = _records.map((r) => r.toJson()).toList();
-    return jsonEncode(jsonList);
+    // 同时导出每日经量记录
+    final flows = await _flowDao.getAll();
+    final flowJsonList = flows.map((f) => f.toJson()).toList();
+    final result = {
+      'periods': jsonList,
+      'dailyFlows': flowJsonList,
+    };
+    return jsonEncode(result);
   }
 
   Future<bool> importData(String jsonString, {bool overwrite = false}) async {
@@ -683,8 +690,24 @@ class PeriodProvider with ChangeNotifier {
         debugPrint('Import data too large (>10MB)');
         return false;
       }
-      final jsonList = jsonDecode(jsonString) as List;
-      final records = jsonList
+
+      // 兼容旧版纯列表格式和新版对象格式
+      final decoded = jsonDecode(jsonString);
+      List periodJsonList;
+      List flowJsonList = [];
+      if (decoded is List) {
+        // 旧版格式：纯经期记录数组
+        periodJsonList = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        // 新版格式：{ periods: [...], dailyFlows: [...] }
+        periodJsonList = decoded['periods'] as List? ?? [];
+        flowJsonList = decoded['dailyFlows'] as List? ?? [];
+      } else {
+        debugPrint('Invalid import data format');
+        return false;
+      }
+
+      final records = periodJsonList
           .map((json) => PeriodRecord.fromJson(json as Map<String, dynamic>))
           .toList();
 
@@ -694,19 +717,23 @@ class PeriodProvider with ChangeNotifier {
         if (record.endDate != null) DateTime.parse(record.endDate!);
       }
 
+      // 解析每日经量数据
+      final flows = flowJsonList
+          .map((json) => DailyFlow.fromJson(json as Map<String, dynamic>))
+          .toList();
+
       if (overwrite) {
         // Use atomic replaceAll to avoid data loss on failure
         await _dao.replaceAll(records);
+        await _flowDao.replaceAll(flows);
       } else {
         // 追加模式：检测区间重叠，避免重复导入产生重叠记录
-        // 不只按 startDate 去重，而是检查日期区间是否与现有记录重叠
         bool hasOverlap(PeriodRecord r) {
           final rStart = r.startDateTime;
           final rEnd = r.endDateTime ?? rStart;
           for (final existing in _records) {
             final eStart = existing.startDateTime;
             final eEnd = existing.endDateTime ?? eStart;
-            // 区间 [rStart, rEnd] 与 [eStart, eEnd] 有交集
             if (rStart.isBefore(eEnd.add(const Duration(days: 1))) &&
                 rEnd.isAfter(eStart.subtract(const Duration(days: 1)))) {
               return true;
@@ -716,11 +743,13 @@ class PeriodProvider with ChangeNotifier {
         }
 
         final newRecords = records.where((r) => !hasOverlap(r)).toList();
-        if (newRecords.isEmpty) {
-          // 全部重复，无需写库但仍刷新以保证状态一致
-          return true;
+        if (newRecords.isNotEmpty) {
+          await _dao.insertAll(newRecords);
         }
-        await _dao.insertAll(newRecords);
+        // 每日经量使用 upsert 模式，重复日期自动覆盖
+        if (flows.isNotEmpty) {
+          await _flowDao.insertAll(flows);
+        }
       }
 
       // 导入会整体改写数据集，走完整刷新

@@ -71,4 +71,34 @@ class DailyFlowDao {
     final db = await _dbHelper.database;
     return await db.delete('daily_flows');
   }
+
+  /// 原子替换：先删全部再批量插入。
+  /// 用于导入覆盖模式。
+  Future<void> replaceAll(List<DailyFlow> flows) async {
+    final db = await _dbHelper.database;
+    await db.transaction((txn) async {
+      await txn.delete('daily_flows');
+      for (final f in flows) {
+        await txn.insert(
+          'daily_flows',
+          f.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  /// 批量插入（追加模式，遇到重复日期则替换）。
+  Future<void> insertAll(List<DailyFlow> flows) async {
+    final db = await _dbHelper.database;
+    await db.transaction((txn) async {
+      for (final f in flows) {
+        await txn.insert(
+          'daily_flows',
+          f.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
 }
