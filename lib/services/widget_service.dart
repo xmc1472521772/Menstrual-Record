@@ -39,6 +39,7 @@ class WidgetService {
     required CycleData? cycleData,
     required int userCycleLength,
     required int userPeriodLength,
+    int todayFlow = 0,
   }) async {
     try {
       final now = DateTime.now();
@@ -50,6 +51,7 @@ class WidgetService {
         today: today,
         userCycleLength: userCycleLength,
         userPeriodLength: userPeriodLength,
+        todayFlow: todayFlow,
       );
 
       await _channel.invokeMethod('updateWidget', {'data': jsonEncode(json)});
@@ -65,6 +67,7 @@ class WidgetService {
     required DateTime today,
     required int userCycleLength,
     required int userPeriodLength,
+    int todayFlow = 0,
   }) {
     PeriodRecord? ongoing;
     PeriodRecord? lastEnded;
@@ -122,6 +125,7 @@ class WidgetService {
       'averageCycle': averageCycle,
       'averagePeriod': averagePeriod,
       'cycleCount': cycleCount,
+      'todayFlow': todayFlow,
     };
   }
 }

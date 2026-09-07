@@ -23,6 +23,7 @@ object WidgetDataStore {
         const val AVERAGE_CYCLE = "averageCycle"    // 平均周期长度
         const val AVERAGE_PERIOD = "averagePeriod"  // 平均经期长度
         const val CYCLE_COUNT = "cycleCount"        // 总周期数
+        const val TODAY_FLOW = "todayFlow"          // 今天经量等级（0=未记录, 1=少, 2=中, 3=多）
     }
 
     fun saveWidgetData(context: Context, json: String) {
@@ -54,6 +55,7 @@ object WidgetDataStore {
             put(Keys.AVERAGE_CYCLE, 0)
             put(Keys.AVERAGE_PERIOD, 0)
             put(Keys.CYCLE_COUNT, 0)
+            put(Keys.TODAY_FLOW, 0)
         }
     }
 }

@@ -303,6 +303,20 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 }
             }
 
+            // 读取当天经量等级
+            var todayFlow = 0
+            if (hasOngoing) {
+                val todayStr = DATE_FMT.format(Calendar.getInstance().time)
+                val flowCursor = db.rawQuery(
+                    "SELECT flow_level FROM daily_flows WHERE date = ?",
+                    arrayOf(todayStr)
+                )
+                if (flowCursor.moveToFirst()) {
+                    todayFlow = flowCursor.getInt(0)
+                }
+                flowCursor.close()
+            }
+
             // 构建 JSON 并保存
             val json = org.json.JSONObject().apply {
                 put("hasOngoing", hasOngoing)
@@ -314,6 +328,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 put("averageCycle", avgCycle)
                 put("averagePeriod", avgPeriod)
                 put("cycleCount", cycleCount)
+                put("todayFlow", todayFlow)
             }
             WidgetDataStore.saveWidgetData(context, json.toString())
             Log.d(TAG, "Widget data updated: $json")

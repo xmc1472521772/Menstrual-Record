@@ -931,11 +931,15 @@ class PeriodProvider with ChangeNotifier {
     try {
       final cycleLen = _cycleData?.averageCycleLength.round() ?? 28;
       final periodLen = _cycleData?.averagePeriodLength.round() ?? 5;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final todayFlow = getFlowLevel(today) ?? 0;
       await WidgetService.instance.updateWidget(
         records: _records,
         cycleData: _cycleData,
         userCycleLength: cycleLen,
         userPeriodLength: periodLen,
+        todayFlow: todayFlow,
       );
     } catch (e) {
       debugPrint('Widget update error: $e');

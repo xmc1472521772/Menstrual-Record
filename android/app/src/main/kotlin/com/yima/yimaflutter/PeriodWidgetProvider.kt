@@ -60,32 +60,70 @@ class PeriodWidgetProvider : AppWidgetProvider() {
         val predictedDate = data.optString(WidgetDataStore.Keys.PREDICTED_DATE, "")
         val cycleCount = data.optInt(WidgetDataStore.Keys.CYCLE_COUNT, 0)
         val avgCycle = data.optInt(WidgetDataStore.Keys.AVERAGE_CYCLE, 0)
+        val todayFlow = data.optInt(WidgetDataStore.Keys.TODAY_FLOW, 0)
 
         if (hasOngoing) {
             // ── 经期进行中 ──
             views.setTextViewText(R.id.widget_status_text, "经期第 $periodDay 天")
             views.setTextColor(R.id.widget_status_text, 0xFFB4564F.toInt())
 
-            val subText = if (periodDay > 0 && avgCycle > 0) {
-                "平均经期 ${data.optInt(WidgetDataStore.Keys.AVERAGE_PERIOD, 0)} 天"
-            } else {
-                "点击下方结束经期"
+            // 子文本显示当天经量状态
+            val flowText = when (todayFlow) {
+                1 -> "今日经量：少"
+                2 -> "今日经量：中"
+                3 -> "今日经量：多"
+                else -> "点击下方记录经量"
             }
-            views.setTextViewText(R.id.widget_sub_text, subText)
+            views.setTextViewText(R.id.widget_sub_text, flowText)
 
             // 显示经量按钮和结束按钮
             views.setViewVisibility(R.id.widget_flow_buttons, View.VISIBLE)
             views.setViewVisibility(R.id.btn_start, View.GONE)
             views.setViewVisibility(R.id.btn_end, View.VISIBLE)
 
-            // 经量按钮 → 发送广播
+            // 经量按钮：根据 todayFlow 高亮选中项
+            // 少 (1) → 浅暖粉 #F0B4A8
+            views.setInt(
+                R.id.btn_flow_light,
+                "setBackgroundResource",
+                if (todayFlow == 1) R.drawable.widget_flow_bg_selected_light
+                else R.drawable.widget_flow_bg_unselected
+            )
+            views.setTextColor(
+                R.id.btn_flow_light,
+                if (todayFlow == 1) 0xFFFFFFFF.toInt() else 0xFF6E665E.toInt()
+            )
             views.setOnClickPendingIntent(
                 R.id.btn_flow_light,
                 buildBroadcastIntent(context, WidgetActionReceiver.ACTION_SET_FLOW, 1)
             )
+
+            // 中 (2) → 中暖红 #D97065
+            views.setInt(
+                R.id.btn_flow_normal,
+                "setBackgroundResource",
+                if (todayFlow == 2) R.drawable.widget_flow_bg_selected_normal
+                else R.drawable.widget_flow_bg_unselected
+            )
+            views.setTextColor(
+                R.id.btn_flow_normal,
+                if (todayFlow == 2) 0xFFFFFFFF.toInt() else 0xFF6E665E.toInt()
+            )
             views.setOnClickPendingIntent(
                 R.id.btn_flow_normal,
                 buildBroadcastIntent(context, WidgetActionReceiver.ACTION_SET_FLOW, 2)
+            )
+
+            // 多 (3) → 深酒红 #8E3F3A
+            views.setInt(
+                R.id.btn_flow_heavy,
+                "setBackgroundResource",
+                if (todayFlow == 3) R.drawable.widget_flow_bg_selected_heavy
+                else R.drawable.widget_flow_bg_unselected
+            )
+            views.setTextColor(
+                R.id.btn_flow_heavy,
+                if (todayFlow == 3) 0xFFFFFFFF.toInt() else 0xFF6E665E.toInt()
             )
             views.setOnClickPendingIntent(
                 R.id.btn_flow_heavy,
