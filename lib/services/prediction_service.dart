@@ -37,9 +37,6 @@ class PredictionService {
   /// 短窗口长度（突变 / 高波动时使用）
   static const int _shortWindowSize = 3;
 
-  /// 高规律阈值：标准差 ≤ 此值 → 规律用户
-  static const double _regularStdThreshold = 3.0;
-
   /// 高波动阈值：标准差 > 此值 → 不规律用户
   static const double _volatileStdThreshold = 5.0;
 
@@ -304,7 +301,6 @@ class PredictionService {
     if (values.length <= 2) return List.from(values);
 
     final sorted = List<int>.from(values)..sort();
-    final n = sorted.length;
 
     // Q1 和 Q3
     final q1 = _percentile(sorted, 0.25);

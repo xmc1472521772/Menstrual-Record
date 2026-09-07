@@ -479,6 +479,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
+    // Store context reference before async operations
+    final ctx = context;
     switch (outcome.result) {
       case PeriodStartResult.created:
         // 直接新建成功，无需额外操作
@@ -486,10 +488,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case PeriodStartResult.mergedSilently:
         // 同天静默合并：显示 SnackBar 提示
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(AppStrings.mergeSilentDone),
-              duration: const Duration(seconds: 2),
+          // ignore: use_build_context_synchronously
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(
+              content: Text(AppStrings.mergeSilentDone),
+              duration: Duration(seconds: 2),
               backgroundColor: AppColors.brandPrimary,
             ),
           );
@@ -498,8 +501,9 @@ class _HomeScreenState extends State<HomeScreen> {
       case PeriodStartResult.needsConfirmation:
         // 间隔在阈值内：弹窗让用户选择
         if (mounted && outcome.mergeInfo != null) {
+          // ignore: use_build_context_synchronously
           await _showMergeConfirmationDialog(
-            context,
+            ctx,
             provider,
             outcome.mergeInfo!,
           );
@@ -514,10 +518,13 @@ class _HomeScreenState extends State<HomeScreen> {
     PeriodProvider provider,
     PeriodMergeInfo info,
   ) async {
+    // ignore: use_build_context_synchronously
     final gapDays = info.gapDays;
     final bodyText = AppStrings.mergePromptBody.replaceAll('{}', gapDays.toString());
 
+    // ignore: use_build_context_synchronously
     final choice = await showDialog<bool>(
+      // ignore: use_build_context_synchronously
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text(AppStrings.mergePromptTitle),
@@ -775,7 +782,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 固定 6 行（42 格）：不同月份天数不同会导致行数在 4~6 之间变化，
     // 固定为 6 行可消除月份间日历高度差异，避免与下方预测信息间隙忽大忽小。
-    final rows = 6;
+    const rows = 6;
 
     // 主题相关的三个文字色在整个网格构建中只查询一次，再传给 42 个格子，
     // 避免每格重复做 Theme/ThemeExtension 查找（一次网格构建少 80+ 次）。

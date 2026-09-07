@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:yimaflutter/providers/period_provider.dart';
 import 'package:yimaflutter/providers/settings_provider.dart';
 import 'package:yimaflutter/database/period_dao.dart';
+import 'package:yimaflutter/database/daily_flow_dao.dart';
 import 'package:yimaflutter/database/settings_dao.dart';
 import 'package:yimaflutter/database/database_helper.dart';
 import 'package:yimaflutter/models/period_record.dart';
@@ -22,13 +23,14 @@ void main() {
   late SettingsProvider settingsProvider;
   late _TestDatabaseProvider dbHelper;
   late PeriodDao periodDao;
+  late DailyFlowDao dailyFlowDao;
   late SettingsDao settingsDao;
 
   setUp(() async {
     // Create an in-memory database for each test
     final db = await openDatabase(
       inMemoryDatabasePath,
-      version: 2,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE period_records (
@@ -37,6 +39,7 @@ void main() {
             end_date TEXT,
             cycle_length INTEGER,
             period_length INTEGER,
+            flow_level INTEGER,
             mood TEXT,
             notes TEXT,
             symptoms TEXT,
@@ -47,6 +50,13 @@ void main() {
           CREATE TABLE settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE daily_flows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            flow_level INTEGER NOT NULL DEFAULT 0
           )
         ''');
         // Seed default settings
@@ -71,10 +81,12 @@ void main() {
     // Create a test DatabaseProvider that returns our in-memory DB
     dbHelper = _TestDatabaseProvider(db);
     periodDao = PeriodDao(dbHelper: dbHelper);
+    dailyFlowDao = DailyFlowDao(dbHelper: dbHelper);
     settingsDao = SettingsDao(dbHelper: dbHelper);
 
     provider = PeriodProvider(
       periodDao: periodDao,
+      flowDao: dailyFlowDao,
       settingsDao: settingsDao,
       scheduleReminders: false,
       autoEndExpiredPeriods: false,

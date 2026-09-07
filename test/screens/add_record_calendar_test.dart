@@ -7,6 +7,7 @@ import 'package:yimaflutter/constants/app_strings.dart';
 import 'package:yimaflutter/constants/app_theme.dart';
 import 'package:yimaflutter/database/database_helper.dart';
 import 'package:yimaflutter/database/period_dao.dart';
+import 'package:yimaflutter/database/daily_flow_dao.dart';
 import 'package:yimaflutter/database/settings_dao.dart';
 import 'package:yimaflutter/providers/period_provider.dart';
 import 'package:yimaflutter/screens/add_record_calendar_page.dart';
@@ -79,7 +80,7 @@ void main() {
   setUp(() async {
     final db = await openDatabase(
       inMemoryDatabasePath,
-      version: 2,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE period_records (
@@ -88,6 +89,7 @@ void main() {
             end_date TEXT,
             cycle_length INTEGER,
             period_length INTEGER,
+            flow_level INTEGER,
             mood TEXT,
             notes TEXT,
             symptoms TEXT,
@@ -98,6 +100,13 @@ void main() {
           CREATE TABLE settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE daily_flows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            flow_level INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.insert('settings', {'key': 'avg_cycle_length', 'value': '28'});
@@ -119,6 +128,7 @@ void main() {
     dbHelper = _TestDatabaseProvider(db);
     provider = PeriodProvider(
       periodDao: PeriodDao(dbHelper: dbHelper),
+      flowDao: DailyFlowDao(dbHelper: dbHelper),
       settingsDao: SettingsDao(dbHelper: dbHelper),
       scheduleReminders: false,
       autoEndExpiredPeriods: false,
