@@ -8,6 +8,17 @@ import '../models/cycle_data.dart';
 String _formatDate(DateTime d) =>
     '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 
+/// 时间范围筛选项。
+enum _TimeRange {
+  threeMonths('近三月'),
+  sixMonths('近六月'),
+  oneYear('近一年'),
+  all('全部');
+
+  final String label;
+  const _TimeRange(this.label);
+}
+
 /// 经期天数趋势图 — 展示每次经期的持续天数变化趋势。
 ///
 /// 与 [CycleChart]（周期长度趋势）互补：
@@ -28,20 +39,34 @@ class _PeriodLengthChartState extends State<PeriodLengthChart> {
   /// 当前选中的数据点索引。
   int? _selectedIdx;
 
+  /// 当前选中的时间范围。
+  _TimeRange _selectedRange = _TimeRange.all;
+
   /// 画布边距（必须与 Painter 中保持一致）。
   static const _leftPad = 4.0;
   static const _rightPad = 4.0;
   static const _topPad = 14.0;
   static const _bottomPad = 6.0;
 
-  List<PeriodSummary> get _data {
-    // 按时间正序排列（最早 → 最新）
-    return widget.periods.toList();
+  List<PeriodSummary> get _filteredData {
+    final ascending = widget.periods.toList();
+
+    if (_selectedRange == _TimeRange.all) return ascending;
+
+    final now = DateTime.now();
+    final cutoff = switch (_selectedRange) {
+      _TimeRange.threeMonths => DateTime(now.year, now.month - 3, 1),
+      _TimeRange.sixMonths => DateTime(now.year, now.month - 6, 1),
+      _TimeRange.oneYear => DateTime(now.year - 1, now.month, 1),
+      _TimeRange.all => DateTime(2000),
+    };
+
+    return ascending.where((p) => !p.startDate.isBefore(cutoff)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = _data;
+    final data = _filteredData;
 
     return Card(
       child: Padding(
@@ -49,7 +74,7 @@ class _PeriodLengthChartState extends State<PeriodLengthChart> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── 标题行 ───
+            // ─── 标题行 + 筛选条（水平对齐）───
             Row(
               children: [
                 const Icon(
@@ -64,6 +89,8 @@ class _PeriodLengthChartState extends State<PeriodLengthChart> {
                     color: context.themeColors.onSurface,
                   ),
                 ),
+                const Spacer(),
+                _buildRangeChips(),
               ],
             ),
             const SizedBox(height: AppDimens.spacingLg),
@@ -82,6 +109,58 @@ class _PeriodLengthChartState extends State<PeriodLengthChart> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  // ─── 筛选条 ───────────────────────────────────────────────
+  Widget _buildRangeChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _TimeRange.values.map((range) {
+          final selected = range == _selectedRange;
+          return Padding(
+            padding: EdgeInsets.only(
+              right: range == _TimeRange.values.last
+                  ? 0
+                  : AppDimens.spacingSm,
+            ),
+            child: FilterChip(
+              label: Text(range.label),
+              selected: selected,
+              onSelected: (_) {
+                setState(() {
+                  _selectedRange = range;
+                  _selectedIdx = null;
+                });
+              },
+              selectedColor: AppColors.brandPrimary,
+              backgroundColor: context.themeColors.surfaceTile,
+              labelStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: selected
+                    ? AppColors.white
+                    : context.themeColors.onSurfaceSecondary,
+              ),
+              side: BorderSide(
+                color: selected
+                    ? AppColors.brandPrimary
+                    : context.themeColors.divider,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+              ),
+              showCheckmark: false,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.spacingXs,
+                vertical: 2,
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+          );
+        }).toList(),
       ),
     );
   }

@@ -72,7 +72,7 @@ class _CycleChartState extends State<CycleChart> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── 标题行 ───
+            // ─── 标题行 + 筛选条（水平对齐，节省纵向空间）───
             Row(
               children: [
                 const Icon(
@@ -87,12 +87,10 @@ class _CycleChartState extends State<CycleChart> {
                     color: context.themeColors.onSurface,
                   ),
                 ),
+                const Spacer(),
+                _buildRangeChips(),
               ],
             ),
-            const SizedBox(height: AppDimens.spacingMd),
-
-            // ─── 筛选条 ───
-            _buildRangeChips(),
             const SizedBox(height: AppDimens.spacingLg),
 
             if (data.isEmpty)
