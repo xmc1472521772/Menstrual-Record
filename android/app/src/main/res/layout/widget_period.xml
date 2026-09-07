@@ -4,20 +4,20 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="12dp"
+    android:padding="10dp"
     android:background="@drawable/widget_background">
 
-    <!-- 顶部：标题 + 状态 -->
+    <!-- 顶部：标题 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="6dp">
+        android:layout_marginBottom="4dp">
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
             android:src="@mipmap/ic_launcher"
             android:contentDescription="@string/widget_title" />
 
@@ -26,48 +26,48 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="4dp"
             android:text="@string/widget_title"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
-            android:textColor="#2A2622" />
+            android:textColor="#2A2622"
+            android:singleLine="true"
+            android:ellipsize="end" />
 
     </LinearLayout>
 
-    <!-- 中间：主要内容 -->
+    <!-- 中间：状态文字 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginBottom="4dp">
 
-        <!-- 左侧：大字状态 -->
-        <LinearLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/widget_status_text"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:text="经期第 1 天"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#B4564F"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:gravity="center" />
 
-            <TextView
-                android:id="@+id/widget_status_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="经期第 1 天"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:textColor="#B4564F" />
-
-            <TextView
-                android:id="@+id/widget_sub_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="点击下方结束经期"
-                android:textSize="11sp"
-                android:textColor="#6E665E"
-                android:layout_marginTop="2dp" />
-
-        </LinearLayout>
+        <TextView
+            android:id="@+id/widget_sub_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="点击下方记录经量"
+            android:textSize="10sp"
+            android:textColor="#6E665E"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:layout_marginTop="1dp" />
 
     </LinearLayout>
 
@@ -75,10 +75,9 @@
     <LinearLayout
         android:id="@+id/widget_flow_buttons"
         android:layout_width="match_parent"
-        android:layout_height="32dp"
+        android:layout_height="30dp"
         android:orientation="horizontal"
         android:visibility="gone"
-        android:layout_marginTop="2dp"
         android:layout_marginBottom="4dp">
 
         <Button
@@ -87,12 +86,13 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="无"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#6E665E"
             android:background="@drawable/widget_flow_bg_unselected"
-            android:layout_marginEnd="3dp"
+            android:layout_marginEnd="2dp"
             android:minWidth="0dp"
+            android:minHeight="0dp"
             android:padding="0dp" />
 
         <Button
@@ -101,13 +101,14 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="少"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#6E665E"
             android:background="@drawable/widget_flow_bg_unselected"
-            android:layout_marginStart="3dp"
-            android:layout_marginEnd="3dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
             android:minWidth="0dp"
+            android:minHeight="0dp"
             android:padding="0dp" />
 
         <Button
@@ -116,13 +117,14 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="中"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#6E665E"
             android:background="@drawable/widget_flow_bg_unselected"
-            android:layout_marginStart="3dp"
-            android:layout_marginEnd="3dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
             android:minWidth="0dp"
+            android:minHeight="0dp"
             android:padding="0dp" />
 
         <Button
@@ -131,12 +133,13 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="多"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#6E665E"
             android:background="@drawable/widget_flow_bg_unselected"
-            android:layout_marginStart="3dp"
+            android:layout_marginStart="2dp"
             android:minWidth="0dp"
+            android:minHeight="0dp"
             android:padding="0dp" />
 
     </LinearLayout>
@@ -145,30 +148,35 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="2dp">
+        android:orientation="horizontal">
 
         <Button
             android:id="@+id/btn_start"
             android:layout_width="0dp"
-            android:layout_height="32dp"
+            android:layout_height="30dp"
             android:layout_weight="1"
             android:text="开始经期"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textColor="#FFFFFF"
             android:background="@drawable/widget_btn_primary"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginEnd="3dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp" />
 
         <Button
             android:id="@+id/btn_end"
             android:layout_width="0dp"
-            android:layout_height="32dp"
+            android:layout_height="30dp"
             android:layout_weight="1"
             android:text="结束经期"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textColor="#8E3F3A"
             android:background="@drawable/widget_btn_secondary"
-            android:layout_marginStart="4dp" />
+            android:layout_marginStart="3dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp" />
 
     </LinearLayout>
 
