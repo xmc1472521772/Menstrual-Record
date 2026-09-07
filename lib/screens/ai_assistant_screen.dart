@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/ai_health_service.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
@@ -1523,13 +1524,37 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Flexible(
-                    child: Text(
-                      displayContent,
-                      style: AppTheme.bodyMedium.copyWith(
-                        color: isUser ? AppColors.white : themeColors.onSurface,
-                        height: 1.5,
-                      ),
-                    ),
+                    child: isUser
+                        ? Text(
+                            displayContent,
+                            style: AppTheme.bodyMedium.copyWith(
+                              color: AppColors.white,
+                              height: 1.5,
+                            ),
+                          )
+                        : MarkdownBody(
+                            data: displayContent,
+                            styleSheet: MarkdownStyleSheet(
+                              p: AppTheme.bodyMedium.copyWith(
+                                color: themeColors.onSurface,
+                                height: 1.5,
+                              ),
+                              strong: AppTheme.bodyMedium.copyWith(
+                                color: themeColors.onSurface,
+                                fontWeight: FontWeight.w700,
+                                height: 1.5,
+                              ),
+                              em: AppTheme.bodyMedium.copyWith(
+                                color: themeColors.onSurface,
+                                fontStyle: FontStyle.italic,
+                                height: 1.5,
+                              ),
+                              listBullet: AppTheme.bodyMedium.copyWith(
+                                color: themeColors.onSurface,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
                   ),
                   // 流式输出中且内容不为空时，显示闪烁光标
                   if (isStreaming) ...[
