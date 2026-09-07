@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -542,6 +543,48 @@ $dataText
   }
 
   // ═══════════════════════════════════════════════════════════════
+  //  流式问答
+  // ═══════════════════════════════════════════════════════════════
+
+  /// 基于用户经期数据进行流式问答。
+  ///
+  /// 返回一个 [Stream<String>]，逐块产出AI回答的文本片段。
+  /// 当流结束时，Stream 自动关闭。
+  static Stream<String> askQuestionStream({
+    required String question,
+    required List<PeriodRecord> records,
+    required CycleData cycleData,
+    required Map<int, int> dailyFlowMap,
+    required int userCycleLength,
+    required int userPeriodLength,
+    List<ChatMessage> chatHistory = const [],
+  }) async* {
+    final dataText = _buildUserDataText(
+      records, cycleData, dailyFlowMap, userCycleLength, userPeriodLength,
+    );
+
+    final systemPrompt = _buildQASystemPrompt(dataText);
+
+    // 构建消息列表（历史 + 当前问题）
+    final messages = <Map<String, String>>[
+      {'role': 'system', 'content': systemPrompt},
+    ];
+
+    // 加入历史对话（最多最近12条）
+    final recentHistory = chatHistory.length > 12
+        ? chatHistory.sublist(chatHistory.length - 12)
+        : chatHistory;
+    for (final msg in recentHistory) {
+      messages.add({'role': msg.role, 'content': msg.content});
+    }
+
+    // 当前问题
+    messages.add({'role': 'user', 'content': question});
+
+    yield* _callApiStream(messages);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   //  API调用
   // ═══════════════════════════════════════════════════════════════
 
@@ -593,6 +636,98 @@ $dataText
     }
 
     return content;
+  }
+
+  /// 调用智谱GLM API（流式SSE），逐块 yield 回答文本。
+  static Stream<String> _callApiStream(
+    List<Map<String, String>> messages,
+  ) async* {
+    if (_apiKey.isEmpty) {
+      throw Exception('API Key 未配置，请使用 --dart-define=GLM_API_KEY=xxx 编译');
+    }
+
+    final request = http.Request('POST', Uri.parse(_apiUrl));
+    request.headers['Content-Type'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $_apiKey';
+    request.headers['Accept'] = 'text/event-stream';
+    request.body = jsonEncode({
+      'model': _model,
+      'messages': messages,
+      'temperature': 0.3,
+      'max_tokens': 4096,
+      'stream': true,
+    });
+
+    final client = http.Client();
+    final response = await client.send(request)
+        .timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      client.close();
+      throw Exception('AI请求失败（HTTP ${response.statusCode}）');
+    }
+
+    // SSE 数据格式：以 data: 开头，每行一个 JSON chunk
+    // 最后一个 chunk 的 data: [DONE] 表示结束
+    var buffer = '';
+    await for (final chunk in response.stream.transform(
+      utf8.decoder,
+    )) {
+      buffer += chunk;
+
+      // 按行分割处理
+      while (buffer.contains('\n')) {
+        final newlineIndex = buffer.indexOf('\n');
+        final line = buffer.substring(0, newlineIndex).trim();
+        buffer = buffer.substring(newlineIndex + 1);
+
+        if (line.isEmpty) continue;
+        if (!line.startsWith('data:')) continue;
+
+        final data = line.substring(5).trim();
+        if (data == '[DONE]') {
+          client.close();
+          return;
+        }
+
+        try {
+          final json = jsonDecode(data) as Map<String, dynamic>;
+          final choices = json['choices'] as List?;
+          if (choices != null && choices.isNotEmpty) {
+            final delta = choices[0]['delta'] as Map<String, dynamic>?;
+            final content = delta?['content'] as String?;
+            if (content != null && content.isNotEmpty) {
+              yield content;
+            }
+          }
+        } catch (_) {
+          // 忽略无法解析的 chunk
+        }
+      }
+    }
+
+    // 处理 buffer 中可能残留的最后一行
+    final lastLine = buffer.trim();
+    if (lastLine.startsWith('data:')) {
+      final data = lastLine.substring(5).trim();
+      if (data.isNotEmpty && data != '[DONE]') {
+        try {
+          final json = jsonDecode(data) as Map<String, dynamic>;
+          final choices = json['choices'] as List?;
+          if (choices != null && choices.isNotEmpty) {
+            final delta = choices[0]['delta'] as Map<String, dynamic>?;
+            final content = delta?['content'] as String?;
+            if (content != null && content.isNotEmpty) {
+              yield content;
+            }
+          }
+        } catch (_) {
+          // 忽略
+        }
+      }
+    }
+
+    client.close();
   }
 
   // ═══════════════════════════════════════════════════════════════

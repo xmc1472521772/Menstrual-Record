@@ -28,8 +28,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   final List<ChatMessage> _chatHistory = [];
   final TextEditingController _chatController = TextEditingController();
   bool _isChatLoading = false;
-  String? _chatError;
   final ScrollController _chatScrollController = ScrollController();
+  // 流式回答的实时拼接buffer
+  final StringBuffer _streamingBuffer = StringBuffer();
 
   // ─── Tab 控制 ───
   int _currentTab = 0;
@@ -132,7 +133,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         _lastReportDataVersion != 0;
   }
 
-  // ─── 问答功能 ──────────────────────────────────────────────────
+  // ─── 问答功能（流式）────────────────────────────────────────
 
   Future<void> _sendChatMessage(String text) async {
     if (text.trim().isEmpty || _isChatLoading) return;
@@ -150,41 +151,73 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       timestamp: DateTime.now(),
     );
 
+    // 立即添加用户消息和空的AI回答消息
     setState(() {
       _chatHistory.add(userMessage);
+      _chatHistory.add(ChatMessage(
+        role: 'assistant',
+        content: '',
+        timestamp: DateTime.now(),
+      ));
       _isChatLoading = true;
-      _chatError = null;
+      _streamingBuffer.clear();
     });
 
     _chatController.clear();
     _scrollChatToBottom();
 
     try {
-      final response = await AIHealthService.askQuestion(
+      final stream = AIHealthService.askQuestionStream(
         question: text.trim(),
         records: provider.records,
         cycleData: provider.cycleData!,
         dailyFlowMap: provider.dailyFlowMap,
         userCycleLength: settings.cycleLength,
         userPeriodLength: settings.periodLength,
-        chatHistory: _chatHistory,
+        // 传不含最后空回答的历史
+        chatHistory: _chatHistory.sublist(0, _chatHistory.length - 1),
       );
+
+      await for (final chunk in stream) {
+        if (!mounted) break;
+        _streamingBuffer.write(chunk);
+        // 实时更新最后一条AI消息
+        setState(() {
+          final lastIndex = _chatHistory.length - 1;
+          _chatHistory[lastIndex] = ChatMessage(
+            role: 'assistant',
+            content: _streamingBuffer.toString(),
+            timestamp: DateTime.now(),
+          );
+        });
+        _scrollChatToBottom();
+      }
 
       if (mounted) {
         setState(() {
-          _chatHistory.add(ChatMessage(
-            role: 'assistant',
-            content: response,
-            timestamp: DateTime.now(),
-          ));
           _isChatLoading = false;
         });
-        _scrollChatToBottom();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _chatError = '$e';
+          // 如果有部分内容已经收到，保留它并添加错误标记
+          if (_streamingBuffer.isNotEmpty) {
+            final lastIndex = _chatHistory.length - 1;
+            _chatHistory[lastIndex] = ChatMessage(
+              role: 'assistant',
+              content: '${_streamingBuffer.toString()}\n\n⚠️ $e',
+              timestamp: DateTime.now(),
+            );
+          } else {
+            // 没收到任何内容，替换为错误提示
+            final lastIndex = _chatHistory.length - 1;
+            _chatHistory[lastIndex] = ChatMessage(
+              role: 'assistant',
+              content: '回答失败：$e',
+              timestamp: DateTime.now(),
+            );
+          }
           _isChatLoading = false;
         });
       }
@@ -1274,12 +1307,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   Widget _buildChatTab(BuildContext context) {
     final themeColors = context.themeColors;
+    // 判断是否为初始空状态（没有任何消息）
+    final isEmpty = _chatHistory.isEmpty;
 
     return Column(
       children: [
         // ─── 消息列表 ───
         Expanded(
-          child: _chatHistory.isEmpty
+          child: isEmpty
               ? _buildChatEmptyState(themeColors)
               : ListView.builder(
                   controller: _chatScrollController,
@@ -1289,30 +1324,20 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
                     AppDimens.spacingLg,
                     AppDimens.spacingSm,
                   ),
-                  itemCount: _chatHistory.length + (_isChatLoading ? 1 : 0),
+                  itemCount: _chatHistory.length,
                   itemBuilder: (context, index) {
-                    if (index == _chatHistory.length && _isChatLoading) {
-                      return _buildChatLoadingBubble(themeColors);
-                    }
                     final msg = _chatHistory[index];
-                    return _buildChatBubble(msg, themeColors);
+                    // 最后一条AI消息正在流式输出时显示打字光标
+                    final isStreaming = _isChatLoading &&
+                        index == _chatHistory.length - 1 &&
+                        msg.role == 'assistant';
+                    return _buildChatBubble(msg, themeColors,
+                        isStreaming: isStreaming);
                   },
                 ),
         ),
-        // ─── 错误提示 ───
-        if (_chatError != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppDimens.spacingLg,
-              vertical: AppDimens.spacingXs,
-            ),
-            child: Text(
-              AppStrings.aiChatError,
-              style: AppTheme.bodySmall.copyWith(color: AppColors.error),
-            ),
-          ),
         // ─── 快捷问题 ───
-        if (_chatHistory.isEmpty)
+        if (isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppDimens.spacingLg,
@@ -1427,8 +1452,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 
-  Widget _buildChatBubble(ChatMessage msg, var themeColors) {
+  Widget _buildChatBubble(ChatMessage msg, var themeColors,
+      {bool isStreaming = false}) {
     final isUser = msg.role == 'user';
+    final displayContent = msg.content;
+
+    // 流式输出中且内容为空时显示"正在思考…"指示器
+    final showThinking = isStreaming && displayContent.isEmpty;
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -1458,51 +1489,47 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
               ? null
               : Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
         ),
-        child: Text(
-          msg.content,
-          style: AppTheme.bodyMedium.copyWith(
-            color: isUser ? AppColors.white : themeColors.onSurface,
-            height: 1.5,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChatLoadingBubble(var themeColors) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: AppDimens.spacingMd),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingMd,
-          vertical: AppDimens.spacingMd,
-        ),
-        decoration: BoxDecoration(
-          color: themeColors.surfaceCard,
-          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-          border: Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.brandPrimary,
+        child: showThinking
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.brandPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: AppDimens.spacingSm),
+                  Text(
+                    AppStrings.aiChatThinking,
+                    style: AppTheme.bodySmall.copyWith(
+                      color: themeColors.onSurfaceTertiary,
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      displayContent,
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: isUser ? AppColors.white : themeColors.onSurface,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  // 流式输出中且内容不为空时，显示闪烁光标
+                  if (isStreaming) ...[
+                    const SizedBox(width: 2),
+                    _StreamingCursor(themeColors: themeColors),
+                  ],
+                ],
               ),
-            ),
-            const SizedBox(width: AppDimens.spacingSm),
-            Text(
-              AppStrings.aiChatThinking,
-              style: AppTheme.bodySmall.copyWith(
-                color: themeColors.onSurfaceTertiary,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1608,6 +1635,64 @@ class _ReportCard extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Streaming cursor (闪烁光标，流式输出时使用)
+// ═══════════════════════════════════════════════════════════════════
+
+class _StreamingCursor extends StatefulWidget {
+  final dynamic themeColors;
+
+  const _StreamingCursor({required this.themeColors});
+
+  @override
+  State<_StreamingCursor> createState() => _StreamingCursorState();
+}
+
+class _StreamingCursorState extends State<_StreamingCursor>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    )..repeat(reverse: true);
+    _opacity = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _opacity,
+      builder: (context, _) {
+        return Opacity(
+          opacity: _opacity.value,
+          child: Container(
+            width: 3,
+            height: 16,
+            margin: const EdgeInsets.only(bottom: 2),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+        );
+      },
     );
   }
 }
