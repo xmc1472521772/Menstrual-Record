@@ -6,6 +6,7 @@ import 'providers/settings_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/record_screen.dart';
 import 'screens/stats_screen.dart';
+import 'screens/ai_assistant_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/splash_screen.dart';
 import 'constants/app_colors.dart';
@@ -66,12 +67,13 @@ class MainScreenState extends State<MainScreen> {
     HomeScreen(),
     RecordScreen(),
     StatsScreen(),
+    AIAssistantScreen(),
     SettingsScreen(),
   ];
 
-  /// 跳转到设置页（tab index = 3），供首页通知按钮等外部入口调用。
+  /// 跳转到设置页（tab index = 4），供首页通知按钮等外部入口调用。
   void jumpToSettings() {
-    setState(() => _currentIndex = 3);
+    setState(() => _currentIndex = 4);
   }
 
   @override
@@ -124,6 +126,11 @@ class _GlassNavBar extends StatelessWidget {
       icon: Icons.bar_chart_outlined,
       activeIcon: Icons.bar_chart_rounded,
       label: AppStrings.stats,
+    ),
+    _NavItem(
+      icon: Icons.psychology_outlined,
+      activeIcon: Icons.psychology_rounded,
+      label: AppStrings.aiAssistant,
     ),
     _NavItem(
       icon: Icons.settings_outlined,

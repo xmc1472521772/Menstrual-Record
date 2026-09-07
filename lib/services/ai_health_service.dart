@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show sqrt;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/period_record.dart';
@@ -344,24 +345,45 @@ class AIHealthService {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
+    // 按时间正序排列，用于计算周期长度序列
+    final chronological = List<PeriodRecord>.from(records)
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    // 计算周期长度序列
+    final cycleLengths = <int>[];
+    for (int i = 1; i < chronological.length; i++) {
+      final diff = chronological[i].startDateTime
+          .difference(chronological[i - 1].startDateTime)
+          .inDays;
+      cycleLengths.add(diff);
+    }
+
+    // 计算经期天数序列
+    final periodDays = chronological.map((r) => r.periodDays).toList();
+
     final buffer = StringBuffer();
 
+    // ═══════════════════════════════════════════════════════════════
+    //  一、基本信息
+    // ═══════════════════════════════════════════════════════════════
     buffer.writeln('【个人基本信息与历史数据】');
     buffer.writeln('- 上一次月经来潮日期：${lastRecord.startDate}');
+    buffer.writeln('- 总记录条数：${records.length} 条');
+    buffer.writeln('- 总周期数：${cycleData.totalCycles} 个');
 
     if (cycleData.totalCycles > 0) {
       buffer.writeln(
         '- 历史平均周期长度：${cycleData.averageCycleLength.toStringAsFixed(1)} 天（用户设置值：$userCycleLength 天）',
       );
       buffer.writeln(
-        '- 经期持续天数：${cycleData.averagePeriodLength.toStringAsFixed(1)} 天（用户设置值：$userPeriodLength 天）',
+        '- 平均经期持续天数：${cycleData.averagePeriodLength.toStringAsFixed(1)} 天（用户设置值：$userPeriodLength 天）',
       );
     } else {
       buffer.writeln('- 历史平均周期长度：暂无足够数据（用户设置值：$userCycleLength 天）');
-      buffer.writeln('- 经期持续天数：暂无足够数据（用户设置值：$userPeriodLength 天）');
+      buffer.writeln('- 平均经期持续天数：暂无足够数据（用户设置值：$userPeriodLength 天）');
     }
 
-    buffer.write('- 本次记录/异常情况：');
+    buffer.write('- 当前状态：');
     if (lastRecord.isOngoing) {
       buffer.writeln('经期进行中（第${lastRecord.periodDays}天）');
     } else {
@@ -377,36 +399,90 @@ class AIHealthService {
       }
     }
 
-    buffer.writeln('- 历史经期记录（共 ${records.length} 条）：');
-    for (final record in sorted.take(10)) {
-      final start = record.startDate;
-      final end = record.endDate ?? '进行中';
-      final days = record.periodDays;
-      final flow = record.flowLevel != null
-          ? '经量${_flowLevelText(record.flowLevel!)}'
-          : '';
-      final mood = record.mood != null ? '，情绪：${record.mood}' : '';
-      final symptoms = record.symptoms != null ? '，症状：${record.symptoms}' : '';
-      final notes = record.notes != null && record.notes!.isNotEmpty
-          ? '，备注：${record.notes}'
-          : '';
-      buffer.writeln('  · $start ~ $end（$days 天）$flow$mood$symptoms$notes');
+    // ═══════════════════════════════════════════════════════════════
+    //  二、周期趋势分析
+    // ═══════════════════════════════════════════════════════════════
+    buffer.writeln('');
+    buffer.writeln('【周期趋势分析】');
+
+    if (cycleLengths.length >= 2) {
+      final minCycle = cycleLengths.reduce((a, b) => a < b ? a : b);
+      final maxCycle = cycleLengths.reduce((a, b) => a > b ? a : b);
+      final avgCycle = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
+
+      buffer.writeln('- 周期长度范围：最短 $minCycle 天，最长 $maxCycle 天');
+      buffer.writeln('- 周期长度波动：${maxCycle - minCycle} 天');
+
+      // 标准差计算（衡量规律性）
+      final variance = cycleLengths
+              .map((l) => (l - avgCycle) * (l - avgCycle))
+              .reduce((a, b) => a + b) /
+          cycleLengths.length;
+      final stdDev = sqrt(variance);
+      buffer.writeln('- 周期标准差：${stdDev.toStringAsFixed(1)} 天');
+      if (stdDev < 2) {
+        buffer.writeln('- 周期规律性评估：非常规律（标准差 < 2 天）');
+      } else if (stdDev < 5) {
+        buffer.writeln('- 周期规律性评估：基本规律（标准差 2-5 天）');
+      } else {
+        buffer.writeln('- 周期规律性评估：波动较大（标准差 > 5 天），建议关注');
+      }
+
+      buffer.writeln('- 历史周期长度序列：${cycleLengths.join('、')} 天');
+
+      // 近3次 vs 历史
+      if (cycleLengths.length >= 4) {
+        final recent3 = cycleLengths.sublist(cycleLengths.length - 3);
+        final recentAvg =
+            recent3.reduce((a, b) => a + b) / recent3.length;
+        final earlierAvg = cycleLengths
+                .sublist(0, cycleLengths.length - 3)
+                .reduce((a, b) => a + b) /
+            (cycleLengths.length - 3);
+        final trend = recentAvg - earlierAvg;
+        if (trend.abs() >= 2) {
+          buffer.writeln(
+            '- 近3次平均 ${recentAvg.toStringAsFixed(1)} 天 vs 历史 ${earlierAvg.toStringAsFixed(1)} 天，${trend > 0 ? "有延长趋势" : "有缩短趋势"}',
+          );
+        } else {
+          buffer.writeln(
+            '- 近3次平均 ${recentAvg.toStringAsFixed(1)} 天 vs 历史 ${earlierAvg.toStringAsFixed(1)} 天，趋势稳定',
+          );
+        }
+      }
+    } else {
+      buffer.writeln('- 周期趋势数据不足（需至少2个完整周期）');
     }
 
-    final cycleSorted = List<PeriodRecord>.from(records)
-      ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    final cycleLengths = <int>[];
-    for (int i = 1; i < cycleSorted.length; i++) {
-      final diff = cycleSorted[i].startDateTime
-          .difference(cycleSorted[i - 1].startDateTime)
-          .inDays;
-      cycleLengths.add(diff);
+    // ═══════════════════════════════════════════════════════════════
+    //  三、经期天数趋势分析
+    // ═══════════════════════════════════════════════════════════════
+    buffer.writeln('');
+    buffer.writeln('【经期天数趋势分析】');
+
+    if (periodDays.length >= 2) {
+      final minDays = periodDays.reduce((a, b) => a < b ? a : b);
+      final maxDays = periodDays.reduce((a, b) => a > b ? a : b);
+      final avgDays = periodDays.reduce((a, b) => a + b) / periodDays.length;
+      buffer.writeln('- 经期天数范围：最短 $minDays 天，最长 $maxDays 天');
+      buffer.writeln('- 平均经期天数：${avgDays.toStringAsFixed(1)} 天');
+      buffer.writeln('- 经期天数序列：${periodDays.join('、')} 天');
+
+      // 最近一次 vs 平均
+      final lastDays = periodDays.last;
+      final diff = lastDays - avgDays;
+      if (diff.abs() >= 2) {
+        buffer.writeln(
+          '- 最近一次经期 $lastDays 天 vs 平均 ${avgDays.toStringAsFixed(1)} 天，${diff > 0 ? "偏长" : "偏短"}',
+        );
+      }
     }
-    if (cycleLengths.isNotEmpty) {
-      buffer.writeln('- 历史周期长度序列：${cycleLengths.join('、')} 天');
-      final avg = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
-      buffer.writeln('- 平均周期：${avg.toStringAsFixed(1)} 天');
-    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  四、经量分析
+    // ═══════════════════════════════════════════════════════════════
+    buffer.writeln('');
+    buffer.writeln('【经量分析】');
 
     if (dailyFlowMap.isNotEmpty) {
       final flowValues = dailyFlowMap.values.where((v) => v > 0).toList();
@@ -416,8 +492,61 @@ class AIHealthService {
         buffer.writeln(
           '- 每日经量记录：共 ${flowValues.length} 天，平均经量等级 ${avgFlow.toStringAsFixed(1)}（0=无,1=少,2=中,3=多）',
         );
+
+        // 经量分布
+        final flow1 = flowValues.where((v) => v == 1).length;
+        final flow2 = flowValues.where((v) => v == 2).length;
+        final flow3 = flowValues.where((v) => v == 3).length;
+        buffer.writeln('- 经量分布：偏少 $flow1 天，正常 $flow2 天，偏多 $flow3 天');
+
+        // 最近一次经量
+        final lastFlowLevel = lastRecord.flowLevel;
+        if (lastFlowLevel != null) {
+          buffer.writeln('- 最近一次经量：${_flowLevelText(lastFlowLevel)}');
+        }
+      }
+    } else {
+      buffer.writeln('- 暂无每日经量记录');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  五、情绪与症状模式
+    // ═══════════════════════════════════════════════════════════════
+    buffer.writeln('');
+    buffer.writeln('【情绪与症状模式】');
+
+    final moodCount = <String, int>{};
+    final symptomCount = <String, int>{};
+    for (final r in records) {
+      if (r.mood != null && r.mood!.isNotEmpty) {
+        moodCount[r.mood!] = (moodCount[r.mood!] ?? 0) + 1;
+      }
+      if (r.symptoms != null && r.symptoms!.isNotEmpty) {
+        symptomCount[r.symptoms!] = (symptomCount[r.symptoms!] ?? 0) + 1;
       }
     }
+
+    if (moodCount.isNotEmpty) {
+      final sortedMoods = moodCount.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      buffer.writeln(
+        '- 情绪记录：${sortedMoods.map((e) => "${e.key}(${e.value}次)").join("、")}',
+      );
+    }
+
+    if (symptomCount.isNotEmpty) {
+      final sortedSymptoms = symptomCount.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      buffer.writeln(
+        '- 症状记录：${sortedSymptoms.map((e) => "${e.key}(${e.value}次)").join("、")}',
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  六、预测信息
+    // ═══════════════════════════════════════════════════════════════
+    buffer.writeln('');
+    buffer.writeln('【预测信息】');
 
     if (cycleData.predictedNextPeriod != null) {
       final predicted = cycleData.predictedNextPeriod!;
@@ -432,6 +561,56 @@ class AIHealthService {
           buffer.writeln('- 预测经期已逾期 ${-daysUntil} 天');
         }
       }
+
+      // 排卵期与易孕期
+      final ovulation = cycleData.ovulationDay;
+      final fertileStart = cycleData.fertileWindowStart;
+      final fertileEnd = cycleData.fertileWindowEnd;
+      if (ovulation != null) {
+        buffer.writeln('- 预测排卵日：${ovulation.toIso8601String().split('T')[0]}');
+      }
+      if (fertileStart != null && fertileEnd != null) {
+        buffer.writeln(
+          '- 易孕窗口：${fertileStart.toIso8601String().split('T')[0]} ~ ${fertileEnd.toIso8601String().split('T')[0]}',
+        );
+      }
+
+      // 当前周期日
+      final cycleDay = cycleData.currentCycleDay;
+      if (cycleDay > 0) {
+        buffer.writeln('- 当前周期第 $cycleDay 天');
+      }
+
+      // 预测窗口
+      final windowStart = cycleData.predictionWindowStart;
+      final windowEnd = cycleData.predictionWindowEnd;
+      if (windowStart != null && windowEnd != null && cycleData.predictionWindowDays != null) {
+        buffer.writeln(
+          '- 预测窗口：±${cycleData.predictionWindowDays! ~/ 2} 天（${windowStart.toIso8601String().split('T')[0]} ~ ${windowEnd.toIso8601String().split('T')[0]}）',
+        );
+      }
+    } else {
+      buffer.writeln('- 暂无足够数据进行预测');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  七、近期记录明细
+    // ═══════════════════════════════════════════════════════════════
+    buffer.writeln('');
+    buffer.writeln('【近期经期记录明细（最近10次）】');
+    for (final record in sorted.take(10)) {
+      final start = record.startDate;
+      final end = record.endDate ?? '进行中';
+      final days = record.periodDays;
+      final flow = record.flowLevel != null
+          ? '，经量${_flowLevelText(record.flowLevel!)}'
+          : '';
+      final mood = record.mood != null ? '，情绪：${record.mood}' : '';
+      final symptoms = record.symptoms != null ? '，症状：${record.symptoms}' : '';
+      final notes = record.notes != null && record.notes!.isNotEmpty
+          ? '，备注：${record.notes}'
+          : '';
+      buffer.writeln('  · $start ~ $end（$days 天）$flow$mood$symptoms$notes');
     }
 
     return buffer.toString();

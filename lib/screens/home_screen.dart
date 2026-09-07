@@ -9,7 +9,6 @@ import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
 import '../utils/date_utils.dart';
-import 'ai_assistant_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -273,8 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 昂贵绘制已在 _buildStatusHero 内扁平化处理，见其注释。
                 RepaintBoundary(child: _buildStatusHero(cycleData, provider)),
                 const SizedBox(height: AppDimens.spacingLg),
-                _buildAIAssistantCard(provider),
-                const SizedBox(height: AppDimens.spacingLg),
                 _buildQuickActions(provider),
                 const SizedBox(height: AppDimens.spacingLg),
                 // 日历与上方可独立重绘，互不影响；数据变化（添加经期）时
@@ -284,80 +281,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  // ─── AI Assistant entry card ───────────────────────────────────
-  Widget _buildAIAssistantCard(PeriodProvider provider) {
-    final hasData = provider.records.isNotEmpty && provider.cycleData != null;
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const AIAssistantScreen(),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingLg,
-          vertical: AppDimens.spacingMd,
-        ),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF6B5B95), Color(0xFF8B7AB8)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.white.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-              ),
-              child: const Icon(
-                Icons.psychology_rounded,
-                color: AppColors.white,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: AppDimens.spacingMd),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'AI健康助手',
-                    style: AppTheme.titleMedium.copyWith(
-                      color: AppColors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    hasData ? '基于您的数据生成健康分析报告' : '记录数据后即可使用',
-                    style: AppTheme.bodySmall.copyWith(
-                      color: AppColors.white.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.white.withValues(alpha: 0.7),
-              size: 24,
-            ),
-          ],
-        ),
       ),
     );
   }
