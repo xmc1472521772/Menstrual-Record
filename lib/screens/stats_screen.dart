@@ -11,8 +11,19 @@ import '../widgets/cycle_chart.dart';
 import '../widgets/period_length_chart.dart';
 import '../widgets/year_heatmap.dart';
 
-class StatsScreen extends StatelessWidget {
+class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
+
+  @override
+  State<StatsScreen> createState() => _StatsScreenState();
+}
+
+class _StatsScreenState extends State<StatsScreen> {
+  /// 每页显示的历史记录条数
+  static const int _pageSize = 5;
+
+  /// 当前显示的记录条数（页数 × _pageSize）
+  int _displayCount = _pageSize;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +37,12 @@ class StatsScreen extends StatelessWidget {
 
           if (cycleData == null || cycleData.totalCycles == 0) {
             return _buildEmptyState(context);
+          }
+
+          // 当数据量变化时（如导入/删除），确保 _displayCount 不越界
+          final totalPeriods = cycleData.recentPeriods.length;
+          if (_displayCount > totalPeriods) {
+            _displayCount = totalPeriods;
           }
 
           return SingleChildScrollView(
@@ -120,12 +137,12 @@ class StatsScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildStatCircle(
-                '${cycleData.averageCycleLength.toStringAsFixed(1)}',
+                cycleData.averageCycleLength.toStringAsFixed(1),
                 AppStrings.avgCycleLabel,
                 AppStrings.days,
               ),
               _buildStatCircle(
-                '${cycleData.averagePeriodLength.toStringAsFixed(1)}',
+                cycleData.averagePeriodLength.toStringAsFixed(1),
                 AppStrings.avgPeriodLabel,
                 AppStrings.days,
               ),
@@ -438,6 +455,8 @@ class StatsScreen extends StatelessWidget {
 
   Widget _buildHistoryList(BuildContext context, CycleData cycleData) {
     final periods = cycleData.recentPeriods;
+    final displayPeriods = periods.take(_displayCount).toList();
+    final hasMore = _displayCount < periods.length;
 
     return Card(
       child: Padding(
@@ -445,11 +464,22 @@ class StatsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              AppStrings.historyRecords,
-              style: AppTheme.titleLarge.copyWith(
-                color: context.themeColors.onSurface,
-              ),
+            Row(
+              children: [
+                Text(
+                  AppStrings.historyRecords,
+                  style: AppTheme.titleLarge.copyWith(
+                    color: context.themeColors.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  AppStrings.recordsCount.replaceAll('{}', '${periods.length}'),
+                  style: AppTheme.bodySmall.copyWith(
+                    color: context.themeColors.onSurfaceTertiary,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppDimens.spacingMd),
             if (periods.isEmpty)
@@ -473,17 +503,86 @@ class StatsScreen extends StatelessWidget {
                   ],
                 ),
               )
-            else
-              // 不使用 ListView.builder + shrinkWrap（shrinkWrap 会测量全部子项，
-              // 失去懒加载优势）。改为 Column + for 循环直接展开，
-              // 历史记录通常不超过几十条，成本可忽略。
+            else ...[
+              // 仅展开当前页的记录，避免数据过多时列表过长
               Column(
                 children: [
-                  for (int i = 0; i < periods.length; i++)
-                    _buildPeriodItem(context, periods[i], i),
+                  for (int i = 0; i < displayPeriods.length; i++)
+                    _buildPeriodItem(context, displayPeriods[i], i),
                 ],
               ),
+              if (hasMore || _displayCount > _pageSize)
+                const SizedBox(height: AppDimens.spacingSm),
+              if (hasMore)
+                _buildViewMoreButton(context, periods.length)
+              else if (_displayCount > _pageSize)
+                _buildCollapseButton(context),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewMoreButton(BuildContext context, int totalCount) {
+    final remaining = totalCount - _displayCount;
+    final nextBatch = remaining < _pageSize ? remaining : _pageSize;
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          setState(() {
+            _displayCount += nextBatch;
+          });
+        },
+        icon: const Icon(Icons.expand_more, size: 20),
+        label: Text(
+          '${AppStrings.viewMore} $nextBatch ${AppStrings.days}',
+          style: AppTheme.buttonLabel.copyWith(
+            color: AppColors.brandPrimary,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: AppColors.brandPrimary.withValues(alpha: 0.3),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          ),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimens.spacingMd,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCollapseButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          setState(() {
+            _displayCount = _pageSize;
+          });
+        },
+        icon: const Icon(Icons.expand_less, size: 20),
+        label: Text(
+          AppStrings.collapse,
+          style: AppTheme.buttonLabel.copyWith(
+            color: AppColors.brandPrimary,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: AppColors.brandPrimary.withValues(alpha: 0.3),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          ),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimens.spacingMd,
+          ),
         ),
       ),
     );
