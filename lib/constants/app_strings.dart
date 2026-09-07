@@ -173,4 +173,35 @@ class AppStrings {
   static const String loadFailed = '加载数据失败';
   static const String autoSelectHintText = '点击日期自动从该天起选中 $nPlaceholder 天，点相邻日期可逐天增减';
   static const String selectedNDaysText = '已选 $nPlaceholder 天：$nPlaceholder2';
+
+  // ─── AI Assistant ──────────────────────────────────────────────
+  static const String aiAssistant = 'AI助手';
+  static const String aiHealthReport = '健康报告';
+  static const String aiGenerateReport = '生成报告';
+  static const String aiRegenerateReport = '重新分析';
+  static const String aiNoDataTitle = '暂无数据可分析';
+  static const String aiNoDataSubtitle = '请先记录至少一次经期数据，AI助手将为您生成个性化健康分析报告';
+  static const String aiAnalyzing = '正在分析您的健康数据…';
+  static const String aiBasicInfo = '基本信息';
+  static const String aiCycleAssessment = '周期评估';
+  static const String aiCauseAnalysis = '症因排查';
+  static const String aiActionSuggestions = '行动建议';
+  static const String aiRedFlags = '就医预警';
+  static const String aiHealthAdvices = '健康建议';
+  static const String aiHealthScore = '健康评分';
+  static const String aiReportSummary = '报告摘要';
+  static const String aiReportTime = '报告生成时间';
+  static const String aiLastPeriodDate = '上次月经来潮日期';
+  static const String aiAvgCycleLength = '历史平均周期';
+  static const String aiAvgPeriodLength = '经期持续天数';
+  static const String aiCurrentStatus = '本次记录/异常情况';
+  static const String aiTotalRecords = '历史记录';
+  static const String aiObservation = '观察点';
+  static const String aiSuggestion = '建议';
+  static const String aiDisclaimer = '本报告基于您记录的本地数据生成，仅供参考，不构成医疗诊断。如有健康疑虑，请及时就医咨询专业医生。';
+  static const String aiNormalRange = '正常范围';
+  static const String aiDeviation = '偏差';
+  static const String aiDaysLate = '推迟';
+  static const String aiDaysEarly = '提前';
+  static const String aiOnTrack = '正常';
 }
