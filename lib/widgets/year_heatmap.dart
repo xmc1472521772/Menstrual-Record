@@ -7,9 +7,9 @@ import '../utils/date_utils.dart';
 /// 年度热力图 — GitHub 风格的日历活动图。
 ///
 /// 以周一为列起始，每列代表一周，每个格子代表一天。
-/// 经期日用品牌色填充，颜色深浅表示经期状态：
-/// - 深色：实际记录的经期日
-/// - 浅色：预测的经期日
+/// 经期日用品牌色填充，颜色深浅表示经量等级：
+/// - 无经量记录的经期日：中等深浅
+/// - 有经量记录的经期日：根据等级（0=无, 1=少, 2=中, 3=多）显示不同深浅
 /// - 透明：非经期日
 ///
 /// 月份标签显示在每列首行的上方，月份切换处标注月份缩写。
@@ -17,12 +17,16 @@ class YearHeatmap extends StatefulWidget {
   /// 所有经期记录（按时间正序排列）。
   final List<PeriodRecord> records;
 
+  /// 每日经量映射：`dayKey -> flowLevel`（0=无, 1=少, 2=中, 3=多）。
+  final Map<int, int> flowMap;
+
   /// 选中日期的回调（点击格子时触发）。
   final void Function(DateTime date)? onDateSelected;
 
   const YearHeatmap({
     super.key,
     required this.records,
+    this.flowMap = const {},
     this.onDateSelected,
   });
 
@@ -62,8 +66,9 @@ class _YearHeatmapState extends State<YearHeatmap> {
       var d = DateTime(start.year, start.month, start.day);
       while (!d.isAfter(end)) {
         if (d.year == _year) {
-          // 经量等级：null 视为 0（未设置，用中等深浅）
-          _periodDays[AppDateUtils.dayKey(d)] = r.flowLevel ?? 0;
+          // 优先使用每日经量记录中的等级，否则用 0（无记录）
+          final key = AppDateUtils.dayKey(d);
+          _periodDays[key] = widget.flowMap[key] ?? 0;
         }
         d = d.add(const Duration(days: 1));
       }
@@ -351,19 +356,22 @@ class _YearHeatmapState extends State<YearHeatmap> {
     Color? cellColor;
     if (isPeriodDay) {
       // 根据经量等级显示不同深浅
-      // flowLevel: 0=未设置（中等）, 1=偏少, 2=正常, 3=偏多
+      // flowLevel: 0=无（未记录，浅色）, 1=少, 2=中, 3=多
       switch (flowLevel) {
+        case 0:
+          cellColor = AppColors.brandPrimary.withValues(alpha: 0.3);
+          break;
         case 1:
-          cellColor = AppColors.brandPrimary.withValues(alpha: 0.4);
+          cellColor = AppColors.brandPrimary.withValues(alpha: 0.5);
+          break;
+        case 2:
+          cellColor = AppColors.brandPrimary.withValues(alpha: 0.75);
           break;
         case 3:
           cellColor = AppColors.brandPrimary;
           break;
-        case 2:
-        case 0:
         default:
-          cellColor = AppColors.brandPrimary.withValues(alpha: 0.7);
-          break;
+          cellColor = AppColors.brandPrimary.withValues(alpha: 0.3);
       }
     } else if (!isThisYear) {
       cellColor = Colors.transparent;
@@ -390,18 +398,19 @@ class _YearHeatmapState extends State<YearHeatmap> {
 
   Widget _buildLegend(BuildContext context) {
     final themeColors = context.themeColors;
-    // 3 个经量等级色块 + 非经期底色
+    // 4 个经量等级色块 + 非经期底色
     final legendColors = [
       themeColors.surfaceTile.withValues(alpha: 0.5),
-      AppColors.brandPrimary.withValues(alpha: 0.4), // 偏少
-      AppColors.brandPrimary.withValues(alpha: 0.7), // 正常
-      AppColors.brandPrimary, // 偏多
+      AppColors.brandPrimary.withValues(alpha: 0.3), // 无（未记录）
+      AppColors.brandPrimary.withValues(alpha: 0.5), // 少
+      AppColors.brandPrimary.withValues(alpha: 0.75), // 中
+      AppColors.brandPrimary, // 多
     ];
     final legendLabels = ['无', '少', '中', '多'];
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        for (int i = 0; i < legendColors.length; i++) ...[
+        for (int i = 1; i < legendColors.length; i++) ...[
           Container(
             width: 10,
             height: 10,
@@ -413,7 +422,7 @@ class _YearHeatmapState extends State<YearHeatmap> {
           ),
           const SizedBox(width: 2),
           Text(
-            legendLabels[i],
+            legendLabels[i - 1],
             style: TextStyle(
               fontSize: 9,
               color: themeColors.onSurfaceTertiary,

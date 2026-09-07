@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
+import '../models/daily_flow.dart';
 import '../database/period_dao.dart';
+import '../database/daily_flow_dao.dart';
 import '../database/settings_dao.dart';
 import '../services/prediction_service.dart';
 import '../services/notification_service.dart';
@@ -53,6 +55,7 @@ class PeriodStartOutcome {
 
 class PeriodProvider with ChangeNotifier {
   final PeriodDao _dao;
+  final DailyFlowDao _flowDao;
   final SettingsDao _settingsDao;
   final bool _scheduleReminders;
   final bool _autoEndEnabled;
@@ -63,10 +66,12 @@ class PeriodProvider with ChangeNotifier {
   /// auto-ending ongoing periods based on the real current date.
   PeriodProvider({
     PeriodDao? periodDao,
+    DailyFlowDao? flowDao,
     SettingsDao? settingsDao,
     bool scheduleReminders = true,
     bool autoEndExpiredPeriods = true,
   })  : _dao = periodDao ?? PeriodDao(),
+        _flowDao = flowDao ?? DailyFlowDao(),
         _settingsDao = settingsDao ?? SettingsDao(),
         _scheduleReminders = scheduleReminders,
         _autoEndEnabled = autoEndExpiredPeriods;
@@ -84,6 +89,9 @@ class PeriodProvider with ChangeNotifier {
   /// 经期日索引：`yyyyMMdd -> true`。
   /// 让 [isPeriodDay] 从 O(记录数) 降为 O(1)，日历构建时收益明显。
   final Set<int> _periodDayKeys = <int>{};
+
+  /// 每日经量索引：`yyyyMMdd -> flowLevel`（0=无, 1=少, 2=中, 3=多）。
+  final Map<int, int> _dailyFlowMap = <int, int>{};
 
   /// 单调递增的数据版本号。UI 可用 `Selector<PeriodProvider, int>` 监听它，
   /// 从而只在实际数据变化时重建，而不被其它 notifyListeners 波及。
@@ -105,6 +113,49 @@ class PeriodProvider with ChangeNotifier {
   /// 是否存在进行中的经期。缓存以避免 UI 每次构建都遍历一遍记录列表。
   bool get hasOngoingPeriod => _hasOngoing;
 
+  /// 获取某天的经量等级。返回 null 表示无记录。
+  int? getFlowLevel(DateTime date) {
+    return _dailyFlowMap[AppDateUtils.dayKey(date)];
+  }
+
+  /// 获取所有每日经量数据（只读视图）。
+  Map<int, int> get dailyFlowMap => Map.unmodifiable(_dailyFlowMap);
+
+  /// 异步加载每日经量数据到内存索引。
+  Future<void> _loadDailyFlows() async {
+    _dailyFlowMap.clear();
+    try {
+      final flows = await _flowDao.getAll();
+      for (final f in flows) {
+        final date = DateTime.tryParse(f.date);
+        if (date != null) {
+          _dailyFlowMap[AppDateUtils.dayKey(date)] = f.flowLevel;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading daily flows: $e');
+    }
+  }
+
+  /// 设置某天的经量等级。仅对经期中的日期有效。
+  Future<void> setDailyFlow(DateTime date, int flowLevel) async {
+    final dateStr = date.toIso8601String().split('T')[0];
+    final flow = DailyFlow(date: dateStr, flowLevel: flowLevel);
+    await _flowDao.upsert(flow);
+    _dailyFlowMap[AppDateUtils.dayKey(date)] = flowLevel;
+    _dataVersion++;
+    notifyListeners();
+  }
+
+  /// 清除某天的经量记录。
+  Future<void> clearDailyFlow(DateTime date) async {
+    final dateStr = date.toIso8601String().split('T')[0];
+    await _flowDao.delete(dateStr);
+    _dailyFlowMap.remove(AppDateUtils.dayKey(date));
+    _dataVersion++;
+    notifyListeners();
+  }
+
   Future<void> loadRecords() async {
     _isLoading = true;
     notifyListeners();
@@ -112,6 +163,7 @@ class PeriodProvider with ChangeNotifier {
     try {
       _algorithm = await _settingsDao.getPredictionAlgorithm();
       _records = await _dao.getAll();
+      _loadDailyFlows();
       _recalculate();
       if (_autoEndEnabled) {
         await _autoEndExpiredPeriods();

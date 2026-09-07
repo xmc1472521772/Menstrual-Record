@@ -67,7 +67,10 @@ class _StatsScreenState extends State<StatsScreen> {
                 const SizedBox(height: AppDimens.spacingLg),
                 _buildHistoryList(context, cycleData),
                 const SizedBox(height: AppDimens.spacingLg),
-                YearHeatmap(records: periodProvider.records),
+                YearHeatmap(
+                  records: periodProvider.records,
+                  flowMap: periodProvider.dailyFlowMap,
+                ),
               ],
             ),
           );

@@ -906,6 +906,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final typeLabel = typeLabels[dayType] ?? '普通日';
     final typeColor = AppColors.dayTypeColor(dayType);
 
+    // 是否为经期中的日期（可以记录经量）
+    final isPeriodDay = dayType == 'period';
+    // 当前经量等级
+    int? currentFlow = provider.getFlowLevel(day);
+
     // 计算距下次经期天数
     String? daysToNext;
     if (cycleData != null && cycleData.predictedNextPeriod != null) {
@@ -937,83 +942,157 @@ class _HomeScreenState extends State<HomeScreen> {
     final themeColors = context.themeColors;
     final secondaryColor = themeColors.onSurfaceSecondary;
 
+    // 经量选项：0=无, 1=少, 2=中, 3=多
+    const flowOptions = <(String, int)>[
+      ('无', 0),
+      ('少', 1),
+      ('中', 2),
+      ('多', 3),
+    ];
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          '${day.year}年${day.month}月${day.day}日',
-          style: AppTheme.titleMedium.copyWith(color: themeColors.onSurface),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: typeColor,
-                    shape: BoxShape.circle,
-                    border: typeColor == AppColors.transparent
-                        ? Border.all(color: themeColors.divider, width: 1)
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(typeLabel,
-                    style: AppTheme.bodyMedium
-                        .copyWith(color: themeColors.onSurface)),
-              ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: Text(
+              '${day.year}年${day.month}月${day.day}日',
+              style: AppTheme.titleMedium.copyWith(color: themeColors.onSurface),
             ),
-            if (daysToNext != null) ...[
-              const SizedBox(height: 12),
-              Text(daysToNext,
-                  style:
-                      AppTheme.bodySmall.copyWith(color: secondaryColor)),
-            ],
-            if (matchedRecord != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                '经期记录：${matchedRecord.startDateTime.month}/${matchedRecord.startDateTime.day} - ${matchedRecord.isOngoing ? '进行中' : '${matchedRecord.endDateTime!.month}/${matchedRecord.endDateTime!.day}'}',
-                style:
-                    AppTheme.bodySmall.copyWith(color: secondaryColor),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: typeColor,
+                          shape: BoxShape.circle,
+                          border: typeColor == AppColors.transparent
+                              ? Border.all(color: themeColors.divider, width: 1)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(typeLabel,
+                          style: AppTheme.bodyMedium
+                              .copyWith(color: themeColors.onSurface)),
+                    ],
+                  ),
+                  if (daysToNext != null) ...[
+                    const SizedBox(height: 12),
+                    Text(daysToNext,
+                        style:
+                            AppTheme.bodySmall.copyWith(color: secondaryColor)),
+                  ],
+                  if (matchedRecord != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      '经期记录：${matchedRecord.startDateTime.month}/${matchedRecord.startDateTime.day} - ${matchedRecord.isOngoing ? '进行中' : '${matchedRecord.endDateTime!.month}/${matchedRecord.endDateTime!.day}'}',
+                      style:
+                          AppTheme.bodySmall.copyWith(color: secondaryColor),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '持续 ${matchedRecord.periodDays} 天',
+                      style:
+                          AppTheme.bodySmall.copyWith(color: secondaryColor),
+                    ),
+                    if (matchedRecord.mood != null ||
+                        matchedRecord.symptoms != null) ...[
+                      const SizedBox(height: 8),
+                      if (matchedRecord.mood != null)
+                        Text('心情：${matchedRecord.mood}',
+                            style: TextStyle(
+                                fontSize: 16, color: themeColors.onSurface)),
+                      if (matchedRecord.symptoms != null)
+                        Text('症状：${matchedRecord.symptoms}',
+                            style: AppTheme.bodySmall
+                                .copyWith(color: secondaryColor)),
+                    ],
+                    if (matchedRecord.notes != null &&
+                        matchedRecord.notes!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('备注：${matchedRecord.notes}',
+                          style: AppTheme.bodySmall
+                              .copyWith(color: secondaryColor)),
+                    ],
+                  ],
+                  // ── 经量记录（仅经期中可记录）──
+                  if (isPeriodDay) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      '经量',
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: themeColors.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: flowOptions.map((item) {
+                        final label = item.$1;
+                        final level = item.$2;
+                        final isSelected = currentFlow == level;
+                        return GestureDetector(
+                          onTap: () async {
+                            await provider.setDailyFlow(day, level);
+                            setDialogState(() {
+                              currentFlow = level;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.brandPrimary.withValues(alpha: 0.12)
+                                  : themeColors.surfaceTile,
+                              borderRadius:
+                                  BorderRadius.circular(AppDimens.radiusFull),
+                              border: isSelected
+                                  ? Border.all(
+                                      color: AppColors.brandPrimary, width: 1.5)
+                                  : Border.all(
+                                      color: themeColors.divider
+                                          .withValues(alpha: 0.3),
+                                      width: 0.5),
+                            ),
+                            child: Text(
+                              label,
+                              style: AppTheme.bodySmall.copyWith(
+                                color: isSelected
+                                    ? AppColors.brandPrimary
+                                    : themeColors.onSurfaceSecondary,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '持续 ${matchedRecord.periodDays} 天',
-                style:
-                    AppTheme.bodySmall.copyWith(color: secondaryColor),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(AppStrings.confirm),
               ),
-              if (matchedRecord.mood != null ||
-                  matchedRecord.symptoms != null) ...[
-                const SizedBox(height: 8),
-                if (matchedRecord.mood != null)
-                  Text('心情：${matchedRecord.mood}',
-                      style: TextStyle(
-                          fontSize: 16, color: themeColors.onSurface)),
-                if (matchedRecord.symptoms != null)
-                  Text('症状：${matchedRecord.symptoms}',
-                      style: AppTheme.bodySmall
-                          .copyWith(color: secondaryColor)),
-              ],
-              if (matchedRecord.notes != null &&
-                  matchedRecord.notes!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text('备注：${matchedRecord.notes}',
-                    style: AppTheme.bodySmall
-                        .copyWith(color: secondaryColor)),
-              ],
             ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(AppStrings.confirm),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
