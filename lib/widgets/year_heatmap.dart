@@ -355,23 +355,23 @@ class _YearHeatmapState extends State<YearHeatmap> {
 
     Color? cellColor;
     if (isPeriodDay) {
-      // 根据经量等级显示不同深浅
-      // flowLevel: 0=无（未记录，浅色）, 1=少, 2=中, 3=多
+      // 根据经量等级显示不同颜色（使用独立色相，避免仅透明度差异难以辨认）
+      // flowLevel: 0=无（未记录）, 1=少, 2=中, 3=多
       switch (flowLevel) {
         case 0:
-          cellColor = AppColors.brandPrimary.withValues(alpha: 0.3);
+          cellColor = AppColors.flowNone;
           break;
         case 1:
-          cellColor = AppColors.brandPrimary.withValues(alpha: 0.5);
+          cellColor = AppColors.flowLight;
           break;
         case 2:
-          cellColor = AppColors.brandPrimary.withValues(alpha: 0.75);
+          cellColor = AppColors.flowNormal;
           break;
         case 3:
-          cellColor = AppColors.brandPrimary;
+          cellColor = AppColors.flowHeavy;
           break;
         default:
-          cellColor = AppColors.brandPrimary.withValues(alpha: 0.3);
+          cellColor = AppColors.flowNone;
       }
     } else if (!isThisYear) {
       cellColor = Colors.transparent;
@@ -398,19 +398,18 @@ class _YearHeatmapState extends State<YearHeatmap> {
 
   Widget _buildLegend(BuildContext context) {
     final themeColors = context.themeColors;
-    // 4 个经量等级色块 + 非经期底色
+    // 4 个经量等级色块，使用不同色相/明度区分
     final legendColors = [
-      themeColors.surfaceTile.withValues(alpha: 0.5),
-      AppColors.brandPrimary.withValues(alpha: 0.3), // 无（未记录）
-      AppColors.brandPrimary.withValues(alpha: 0.5), // 少
-      AppColors.brandPrimary.withValues(alpha: 0.75), // 中
-      AppColors.brandPrimary, // 多
+      AppColors.flowNone,   // 无（未记录）
+      AppColors.flowLight,  // 少
+      AppColors.flowNormal, // 中
+      AppColors.flowHeavy,  // 多
     ];
     final legendLabels = ['无', '少', '中', '多'];
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        for (int i = 1; i < legendColors.length; i++) ...[
+        for (int i = 0; i < legendColors.length; i++) ...[
           Container(
             width: 10,
             height: 10,
@@ -422,7 +421,7 @@ class _YearHeatmapState extends State<YearHeatmap> {
           ),
           const SizedBox(width: 2),
           Text(
-            legendLabels[i - 1],
+            legendLabels[i],
             style: TextStyle(
               fontSize: 9,
               color: themeColors.onSurfaceTertiary,

@@ -38,6 +38,13 @@ class AppColors {
   static const Color safeDay = Color(0xFFE2DDD2);
   static const Color todayHighlight = Color(0xFFEFE4E0);
 
+  // ─── Flow Level Colors (热力图经量等级) ───────────────────────────
+  // 使用不同色相/明度区分四档经量，避免单纯透明度差异难以辨认。
+  static const Color flowNone = Color(0xFFE8D5D2);   // 无（未记录）：浅灰粉
+  static const Color flowLight = Color(0xFFF0B4A8);  // 少：浅暖粉
+  static const Color flowNormal = Color(0xFFD97065); // 中：中暖红
+  static const Color flowHeavy = Color(0xFF8E3F3A);  // 多：深酒红
+
   // ─── Commonly Used ───────────────────────────────────────────────
   static const Color white = Colors.white;
   static final Color white90 = Colors.white.withValues(alpha: 0.9);
