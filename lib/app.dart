@@ -20,50 +20,41 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
-    // 注册桌面小组件操作回调（使用 setter 以触发暂存操作的重放）
-    WidgetService.instance.widgetActionCallback = (action, flowLevel) {
-      // 延迟到下一帧执行，确保 Provider 已创建
+    // 注册小组件数据变更回调
+    // 当小组件按钮直接操作数据库后，原生端会发送 dataChanged 通知
+    WidgetService.instance.onDataChanged = () {
+      // 延迟到下一帧，确保 Provider 已创建
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final provider = context.read<PeriodProvider>();
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-
-        debugPrint('[MyApp] widget action received: $action, flow: $flowLevel');
-
-        switch (action) {
-          case 'start_period':
-            if (!provider.hasOngoingPeriod) {
-              provider.startPeriodWithMerge(today);
-            }
-            break;
-          case 'end_period':
-            if (provider.hasOngoingPeriod) {
-              provider.endPeriod(today);
-            }
-            break;
-          case 'set_flow':
-            if (provider.hasOngoingPeriod && flowLevel != null) {
-              provider.setDailyFlow(today, flowLevel);
-            }
-            break;
-          case 'open_app':
-            // App 已通过 Intent 打开，无需额外操作
-            break;
-        }
+        debugPrint('[MyApp] widget data changed, reloading...');
+        context.read<PeriodProvider>().loadRecords();
       });
     };
   }
 
   @override
   void dispose() {
-    WidgetService.instance.widgetActionCallback = null;
+    WidgetsBinding.instance.removeObserver(this);
+    WidgetService.instance.onDataChanged = null;
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // App 从后台恢复前台时，可能小组件操作修改了数据库，需要刷新
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) {
+        debugPrint('[MyApp] App resumed, reloading data...');
+        context.read<PeriodProvider>().loadRecords();
+      }
+    }
   }
 
   @override

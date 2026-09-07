@@ -6,12 +6,11 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Build
+import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import org.json.JSONObject
-import java.util.Calendar
 
 /// 经期桌面小组件 Provider。
 ///
@@ -22,22 +21,14 @@ import java.util.Calendar
 /// - 点击标题区域打开 App
 ///
 /// 数据来源：通过 [WidgetDataStore] 读取 SharedPreferences 中的 JSON。
-/// 按钮操作通过 Intent action 转发给 [MainActivity]，由 Flutter 端处理。
+/// 按钮操作通过广播 Intent 发送给 [WidgetActionReceiver]，
+/// 由原生端直接操作 SQLite 数据库，不依赖 Flutter 引擎。
 class PeriodWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        // ── Intent Actions ──────────────────────────────────────────
-        const val ACTION_START_PERIOD = "com.yima.yimaflutter.ACTION_START_PERIOD"
-        const val ACTION_END_PERIOD = "com.yima.yimaflutter.ACTION_END_PERIOD"
-        const val ACTION_SET_FLOW = "com.yima.yimaflutter.ACTION_SET_FLOW"
-        const val ACTION_REFRESH_WIDGET = "com.yima.yimaflutter.ACTION_REFRESH_WIDGET"
-        const val ACTION_OPEN_APP = "com.yima.yimaflutter.ACTION_OPEN_APP"
-
-        // ── Intent Extras ───────────────────────────────────────────
-        const val EXTRA_FLOW_LEVEL = "flow_level"
+        private const val TAG = "PeriodWidgetProvider"
 
         /// 更新所有已添加的小组件。
-        /// Flutter 端数据变更后通过 MethodChannel 调用此方法。
         fun updateAllWidgets(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, PeriodWidgetProvider::class.java)
@@ -52,25 +43,8 @@ class PeriodWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        // 为每个小组件实例更新 UI
         for (widgetId in appWidgetIds) {
             updateWidget(context, appWidgetManager, widgetId)
-        }
-    }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-
-        when (intent.action) {
-            ACTION_REFRESH_WIDGET -> {
-                // 收到刷新广播，更新所有小组件
-                val appWidgetManager = AppWidgetManager.getInstance(context)
-                val componentName = ComponentName(context, PeriodWidgetProvider::class.java)
-                val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-                for (widgetId in widgetIds) {
-                    updateWidget(context, appWidgetManager, widgetId)
-                }
-            }
         }
     }
 
@@ -92,7 +66,6 @@ class PeriodWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_status_text, "经期第 $periodDay 天")
             views.setTextColor(R.id.widget_status_text, 0xFFB4564F.toInt())
 
-            // 子文本
             val subText = if (periodDay > 0 && avgCycle > 0) {
                 "平均经期 ${data.optInt(WidgetDataStore.Keys.AVERAGE_PERIOD, 0)} 天"
             } else {
@@ -105,24 +78,24 @@ class PeriodWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.btn_start, View.GONE)
             views.setViewVisibility(R.id.btn_end, View.VISIBLE)
 
-            // 经量按钮
+            // 经量按钮 → 发送广播
             views.setOnClickPendingIntent(
                 R.id.btn_flow_light,
-                buildActionIntent(context, ACTION_SET_FLOW, 1)
+                buildBroadcastIntent(context, WidgetActionReceiver.ACTION_SET_FLOW, 1)
             )
             views.setOnClickPendingIntent(
                 R.id.btn_flow_normal,
-                buildActionIntent(context, ACTION_SET_FLOW, 2)
+                buildBroadcastIntent(context, WidgetActionReceiver.ACTION_SET_FLOW, 2)
             )
             views.setOnClickPendingIntent(
                 R.id.btn_flow_heavy,
-                buildActionIntent(context, ACTION_SET_FLOW, 3)
+                buildBroadcastIntent(context, WidgetActionReceiver.ACTION_SET_FLOW, 3)
             )
 
-            // 结束经期按钮
+            // 结束经期按钮 → 发送广播
             views.setOnClickPendingIntent(
                 R.id.btn_end,
-                buildActionIntent(context, ACTION_END_PERIOD, 0)
+                buildBroadcastIntent(context, WidgetActionReceiver.ACTION_END_PERIOD, 0)
             )
         } else {
             // ── 非经期 ──
@@ -144,10 +117,10 @@ class PeriodWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_sub_text, "等待下次经期预测")
             }
 
-            // 开始经期按钮
+            // 开始经期按钮 → 发送广播
             views.setOnClickPendingIntent(
                 R.id.btn_start,
-                buildActionIntent(context, ACTION_START_PERIOD, 0)
+                buildBroadcastIntent(context, WidgetActionReceiver.ACTION_START_PERIOD, 0)
             )
         }
 
@@ -160,13 +133,13 @@ class PeriodWidgetProvider : AppWidgetProvider() {
         appWidgetManager.updateAppWidget(widgetId, views)
     }
 
-    /// 构建操作 Intent，发送到 MainActivity 处理。
-    private fun buildActionIntent(context: Context, action: String, flowLevel: Int): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
+    /// 构建广播 PendingIntent，发送给 WidgetActionReceiver。
+    /// 使用广播而非 Activity 启动，这样不需要打开 App 即可执行操作。
+    private fun buildBroadcastIntent(context: Context, action: String, flowLevel: Int): PendingIntent {
+        val intent = Intent(context, WidgetActionReceiver::class.java).apply {
             this.action = action
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             if (flowLevel > 0) {
-                putExtra(EXTRA_FLOW_LEVEL, flowLevel)
+                putExtra(WidgetActionReceiver.EXTRA_FLOW_LEVEL, flowLevel)
             }
         }
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -174,10 +147,10 @@ class PeriodWidgetProvider : AppWidgetProvider() {
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
-        return PendingIntent.getActivity(context, action.hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, action.hashCode(), intent, flags)
     }
 
-    /// 构建打开 App 的 Intent。
+    /// 构建打开 App 的 Intent（仅标题区域使用）。
     private fun buildOpenAppIntent(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
