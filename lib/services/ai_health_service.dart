@@ -1,208 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' show sqrt;
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
 
-/// 将字符串映射为IconData。
-IconData _iconFromString(String str, AdviceType type) {
-  final s = str.toLowerCase();
-  if (s.contains('period') || s.contains('cycle')) {
-    return Icons.calendar_today_rounded;
-  }
-  if (s.contains('flow') || s.contains('water')) {
-    return Icons.water_drop_rounded;
-  }
-  if (s.contains('warning') || s.contains('hospital') || s.contains('flag')) {
-    return Icons.local_hospital_rounded;
-  }
-  if (s.contains('caution')) {
-    return Icons.warning_amber_rounded;
-  }
-  if (s.contains('check') || s.contains('success')) {
-    return Icons.check_circle_outline_rounded;
-  }
-  if (s.contains('timer') || s.contains('time')) {
-    return Icons.timer_outlined;
-  }
-  if (s.contains('event')) {
-    return Icons.event_available_rounded;
-  }
-  // 默认图标按type区分
-  return switch (type) {
-    AdviceType.info => Icons.info_outline_rounded,
-    AdviceType.caution => Icons.warning_amber_rounded,
-    AdviceType.warning => Icons.error_outline_rounded,
-  };
-}
-
-/// 将 AdviceType 映射回字符串关键词（用于 toJson 序列化）。
-String _iconToString(IconData icon) {
-  if (icon == Icons.calendar_today_rounded) return 'period';
-  if (icon == Icons.water_drop_rounded) return 'flow';
-  if (icon == Icons.local_hospital_rounded) return 'flag';
-  if (icon == Icons.warning_amber_rounded) return 'caution';
-  if (icon == Icons.check_circle_outline_rounded) return 'check';
-  if (icon == Icons.timer_outlined) return 'timer';
-  if (icon == Icons.event_available_rounded) return 'event';
-  return 'info';
-}
-
 // ═══════════════════════════════════════════════════════════════
 //  数据模型
 // ═══════════════════════════════════════════════════════════════
-
-/// AI健康分析报告中的单条建议项。
-class HealthAdvice {
-  final IconData icon;
-  final String title;
-  final String content;
-  final AdviceType type;
-
-  const HealthAdvice({
-    required this.icon,
-    required this.title,
-    required this.content,
-    required this.type,
-  });
-
-  factory HealthAdvice.fromJson(Map<String, dynamic> json) {
-    final typeStr = json['type'] as String? ?? 'info';
-    final type = switch (typeStr) {
-      'warning' => AdviceType.warning,
-      'caution' => AdviceType.caution,
-      _ => AdviceType.info,
-    };
-    final iconStr = json['icon'] as String? ?? 'info';
-    final icon = _iconFromString(iconStr, type);
-    return HealthAdvice(
-      icon: icon,
-      title: json['title'] as String? ?? '',
-      content: json['content'] as String? ?? '',
-      type: type,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'icon': _iconToString(icon),
-        'title': title,
-        'content': content,
-        'type': type.name,
-      };
-}
-
-/// 建议类型，用于卡片配色区分。
-enum AdviceType {
-  info,
-  caution,
-  warning,
-}
-
-/// 红旗症状（需立即就医）。
-class RedFlagSymptom {
-  final String symptom;
-  final String description;
-  final bool userMatched;
-
-  const RedFlagSymptom({
-    required this.symptom,
-    required this.description,
-    this.userMatched = false,
-  });
-
-  factory RedFlagSymptom.fromJson(Map<String, dynamic> json) {
-    return RedFlagSymptom(
-      symptom: json['symptom'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      userMatched: json['userMatched'] as bool? ?? false,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'symptom': symptom,
-        'description': description,
-        'userMatched': userMatched,
-      };
-}
-
-/// 周期评估结果。
-class CycleAssessment {
-  final bool isNormal;
-  final String explanation;
-  final String normalRange;
-  final int deviationDays;
-
-  const CycleAssessment({
-    required this.isNormal,
-    required this.explanation,
-    required this.normalRange,
-    required this.deviationDays,
-  });
-
-  factory CycleAssessment.fromJson(Map<String, dynamic> json) {
-    return CycleAssessment(
-      isNormal: json['isNormal'] as bool? ?? true,
-      explanation: json['explanation'] as String? ?? '',
-      normalRange: json['normalRange'] as String? ?? '正常周期范围：21-35天',
-      deviationDays: (json['deviationDays'] as num?)?.toInt() ?? 0,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'isNormal': isNormal,
-        'explanation': explanation,
-        'normalRange': normalRange,
-        'deviationDays': deviationDays,
-      };
-}
-
-/// 因素排查项。
-class CauseFactor {
-  final String factor;
-  final String explanation;
-
-  const CauseFactor({
-    required this.factor,
-    required this.explanation,
-  });
-
-  factory CauseFactor.fromJson(Map<String, dynamic> json) {
-    return CauseFactor(
-      factor: json['factor'] as String? ?? '',
-      explanation: json['explanation'] as String? ?? '',
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'factor': factor,
-        'explanation': explanation,
-      };
-}
-
-/// 行动建议项。
-class ActionSuggestion {
-  final String observation;
-  final String suggestion;
-
-  const ActionSuggestion({
-    required this.observation,
-    required this.suggestion,
-  });
-
-  factory ActionSuggestion.fromJson(Map<String, dynamic> json) {
-    return ActionSuggestion(
-      observation: json['observation'] as String? ?? '',
-      suggestion: json['suggestion'] as String? ?? '',
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'observation': observation,
-        'suggestion': suggestion,
-      };
-}
 
 /// 问答消息项。
 class ChatMessage {
@@ -217,81 +22,239 @@ class ChatMessage {
   });
 }
 
-/// 完整的AI健康报告。
+/// 统计数据项（键值对形式，用于周期趋势等区域展示）。
+class StatItem {
+  final String label;
+  final String value;
+
+  const StatItem({
+    required this.label,
+    required this.value,
+  });
+
+  factory StatItem.fromJson(Map<String, dynamic> json) {
+    return StatItem(
+      label: json['label'] as String? ?? '',
+      value: json['value'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'label': label,
+        'value': value,
+      };
+}
+
+/// 趋势变化项（用于症状趋势、与过去相比等区域）。
+class TrendItem {
+  final String name;
+  final String status;
+  final String detail;
+
+  const TrendItem({
+    required this.name,
+    required this.status,
+    required this.detail,
+  });
+
+  factory TrendItem.fromJson(Map<String, dynamic> json) {
+    return TrendItem(
+      name: json['name'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      detail: json['detail'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'status': status,
+        'detail': detail,
+      };
+}
+
+/// 关注项（用于"值得关注的地方"区域）。
+class AttentionItem {
+  final String title;
+  final String detail;
+  final String evidence;
+
+  const AttentionItem({
+    required this.title,
+    required this.detail,
+    required this.evidence,
+  });
+
+  factory AttentionItem.fromJson(Map<String, dynamic> json) {
+    return AttentionItem(
+      title: json['title'] as String? ?? '',
+      detail: json['detail'] as String? ?? '',
+      evidence: json['evidence'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'detail': detail,
+        'evidence': evidence,
+      };
+}
+
+/// 下一周期建议项。
+class NextCycleSuggestion {
+  final String title;
+  final String detail;
+
+  const NextCycleSuggestion({
+    required this.title,
+    required this.detail,
+  });
+
+  factory NextCycleSuggestion.fromJson(Map<String, dynamic> json) {
+    return NextCycleSuggestion(
+      title: json['title'] as String? ?? '',
+      detail: json['detail'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'detail': detail,
+      };
+}
+
+/// 就医提醒项。
+class MedicalReminder {
+  final String condition;
+  final String detail;
+  final bool userMatched;
+
+  const MedicalReminder({
+    required this.condition,
+    required this.detail,
+    this.userMatched = false,
+  });
+
+  factory MedicalReminder.fromJson(Map<String, dynamic> json) {
+    return MedicalReminder(
+      condition: json['condition'] as String? ?? '',
+      detail: json['detail'] as String? ?? '',
+      userMatched: json['userMatched'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'condition': condition,
+        'detail': detail,
+        'userMatched': userMatched,
+      };
+}
+
+/// 完整的AI健康报告（7 部分结构）。
 class HealthReport {
   final DateTime generatedAt;
-  final Map<String, String> basicInfo;
-  final CycleAssessment cycleAssessment;
-  final List<CauseFactor> causeFactors;
-  final List<ActionSuggestion> actionSuggestions;
-  final List<RedFlagSymptom> redFlags;
-  final List<HealthAdvice> advices;
+
+  /// 1. 本周期概览
+  final String currentOverview;
+
+  /// 2. 周期趋势 — 统计数据项
+  final List<StatItem> cycleStats;
+  /// 2. 周期趋势 — 趋势描述
+  final String cycleTrendSummary;
+
+  /// 3. 症状趋势
+  final List<TrendItem> symptomTrends;
+
+  /// 4. 与过去相比
+  final List<TrendItem> comparisonTrends;
+
+  /// 5. 值得关注的地方
+  final List<AttentionItem> attentions;
+
+  /// 6. 下一周期建议
+  final List<NextCycleSuggestion> nextCycleSuggestions;
+
+  /// 7. 就医提醒
+  final List<MedicalReminder> medicalReminders;
+
+  /// 总结
+  final String conclusion;
+
+  /// 健康评分（0-100）
   final int healthScore;
-  final String summary;
 
   const HealthReport({
     required this.generatedAt,
-    required this.basicInfo,
-    required this.cycleAssessment,
-    required this.causeFactors,
-    required this.actionSuggestions,
-    required this.redFlags,
-    required this.advices,
+    required this.currentOverview,
+    required this.cycleStats,
+    required this.cycleTrendSummary,
+    required this.symptomTrends,
+    required this.comparisonTrends,
+    required this.attentions,
+    required this.nextCycleSuggestions,
+    required this.medicalReminders,
+    required this.conclusion,
     required this.healthScore,
-    required this.summary,
   });
 
   factory HealthReport.fromJson(Map<String, dynamic> json) {
-    final basicInfoRaw = json['basicInfo'] as Map<String, dynamic>? ?? {};
-    final basicInfo = basicInfoRaw.map(
-      (k, v) => MapEntry(k, v?.toString() ?? '-'),
-    );
-
-    final causesRaw = json['causeFactors'] as List? ?? [];
-    final causes = causesRaw
-        .map((e) => CauseFactor.fromJson(e as Map<String, dynamic>))
+    final cycleStatsRaw = json['cycleStats'] as List? ?? [];
+    final cycleStats = cycleStatsRaw
+        .map((e) => StatItem.fromJson(e as Map<String, dynamic>))
         .toList();
 
-    final actionsRaw = json['actionSuggestions'] as List? ?? [];
-    final actions = actionsRaw
-        .map((e) => ActionSuggestion.fromJson(e as Map<String, dynamic>))
+    final symptomTrendsRaw = json['symptomTrends'] as List? ?? [];
+    final symptomTrends = symptomTrendsRaw
+        .map((e) => TrendItem.fromJson(e as Map<String, dynamic>))
         .toList();
 
-    final flagsRaw = json['redFlags'] as List? ?? [];
-    final flags = flagsRaw
-        .map((e) => RedFlagSymptom.fromJson(e as Map<String, dynamic>))
+    final comparisonTrendsRaw = json['comparisonTrends'] as List? ?? [];
+    final comparisonTrends = comparisonTrendsRaw
+        .map((e) => TrendItem.fromJson(e as Map<String, dynamic>))
         .toList();
 
-    final advicesRaw = json['advices'] as List? ?? [];
-    final advices = advicesRaw
-        .map((e) => HealthAdvice.fromJson(e as Map<String, dynamic>))
+    final attentionsRaw = json['attentions'] as List? ?? [];
+    final attentions = attentionsRaw
+        .map((e) => AttentionItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final nextCycleRaw = json['nextCycleSuggestions'] as List? ?? [];
+    final nextCycleSuggestions = nextCycleRaw
+        .map((e) => NextCycleSuggestion.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final medicalRaw = json['medicalReminders'] as List? ?? [];
+    final medicalReminders = medicalRaw
+        .map((e) => MedicalReminder.fromJson(e as Map<String, dynamic>))
         .toList();
 
     return HealthReport(
       generatedAt: DateTime.now(),
-      basicInfo: basicInfo,
-      cycleAssessment: CycleAssessment.fromJson(
-        json['cycleAssessment'] as Map<String, dynamic>? ?? {},
-      ),
-      causeFactors: causes,
-      actionSuggestions: actions,
-      redFlags: flags,
-      advices: advices,
+      currentOverview: json['currentOverview'] as String? ?? '',
+      cycleStats: cycleStats,
+      cycleTrendSummary: json['cycleTrendSummary'] as String? ?? '',
+      symptomTrends: symptomTrends,
+      comparisonTrends: comparisonTrends,
+      attentions: attentions,
+      nextCycleSuggestions: nextCycleSuggestions,
+      medicalReminders: medicalReminders,
+      conclusion: json['conclusion'] as String? ?? '',
       healthScore: (json['healthScore'] as num?)?.toInt() ?? 75,
-      summary: json['summary'] as String? ?? '',
     );
   }
 
   Map<String, dynamic> toJson() => {
         'generatedAt': generatedAt.toIso8601String(),
-        'basicInfo': basicInfo,
-        'cycleAssessment': cycleAssessment.toJson(),
-        'causeFactors': causeFactors.map((e) => e.toJson()).toList(),
-        'actionSuggestions': actionSuggestions.map((e) => e.toJson()).toList(),
-        'redFlags': redFlags.map((e) => e.toJson()).toList(),
-        'advices': advices.map((e) => e.toJson()).toList(),
+        'currentOverview': currentOverview,
+        'cycleStats': cycleStats.map((e) => e.toJson()).toList(),
+        'cycleTrendSummary': cycleTrendSummary,
+        'symptomTrends': symptomTrends.map((e) => e.toJson()).toList(),
+        'comparisonTrends': comparisonTrends.map((e) => e.toJson()).toList(),
+        'attentions': attentions.map((e) => e.toJson()).toList(),
+        'nextCycleSuggestions':
+            nextCycleSuggestions.map((e) => e.toJson()).toList(),
+        'medicalReminders': medicalReminders.map((e) => e.toJson()).toList(),
+        'conclusion': conclusion,
         'healthScore': healthScore,
-        'summary': summary,
       };
 }
 
@@ -726,67 +689,247 @@ class AIHealthService {
 
   /// 构建健康报告的系统提示词。
   static String _buildSystemPrompt() {
-    return '''你是一位妇产科与女性健康领域的专业助手。请根据用户提供的个人生理周期数据，进行客观、严谨的数据分析与健康提示。
+    return '''你是一名专业、谨慎、友好的经期健康数据分析助手。
 
-【分析要求】
+你的任务是：根据用户提供的全部经期相关历史数据，生成一份清晰、个性化、易理解的经期记录分析报告。
 
-1. 周期评估：基于数据分析本次周期是否在正常波动范围内（说明正常范围）。
-2. 症因排查：列出导致当前状况（如推迟/疼痛/流量异常）的 3-4 个常见生活或生理因素。
-3. 行动建议：提供接下来的观察点（如需记录哪些指标）以及日常调理建议。
-4. 就医预警：明确指出出现哪些"红旗症状"（如剧烈腹痛、异常出血等）时必须立即就医。
+你只能根据用户实际提供的数据进行分析，不得虚构、补充或猜测用户没有记录的信息。
 
-注意：语言请保持客观、体贴、条理清晰，不要夸大风险，也不要给出绝对化的医疗诊断结论。
+一、你的分析目标
 
-【就医预警个性化要求】
-在redFlags中，如果用户当前数据已符合某个红旗症状的条件，请将该症状的userMatched字段设为true，并在description中标注"⚠️ 您当前已符合此症状"。例如：
-- 如果用户当前经期持续超过10天，"经期超长"的userMatched设为true
-- 如果用户经量均值>2.5（偏多），"经量异常增多"的userMatched设为true
-- 如果用户周期推迟超过35天，"停经后出血"的userMatched设为true
-未匹配的症状userMatched设为false。
+请综合分析用户的历史经期数据，包括但不限于：
+
+月经开始日期、结束日期
+经期持续天数
+月经周期长度
+每个周期之间的变化
+周期规律性
+经量记录
+痛经、腹痛、腰酸、头痛、疲劳等经期相关症状
+PMS/经前症状
+情绪变化
+睡眠情况
+排卵相关记录（如有）
+体重、基础体温、运动、饮食等关联数据（如有）
+用户备注
+用户曾经记录的异常情况
+
+分析时优先使用长期趋势，同时关注近期变化。
+
+二、分析原则
+
+1. 先描述数据，再进行解释
+先客观总结用户的数据特点，例如：
+- 最近几个月平均周期是多少天
+- 周期是否稳定
+- 经期平均持续多少天
+- 与历史平均值相比，近期是否发生明显变化
+- 哪些症状最常出现
+- 哪些指标变化最明显
+不要一上来直接下结论。
+
+2. 重视趋势，而不是单次异常
+一次与平时不同的记录，不应直接判断为异常。
+如果存在变化，应尽量结合多个周期进行分析，并说明：
+- 这是短期波动还是持续变化
+- 变化幅度有多大
+- 数据是否足够支持这一判断
+当数据量不足时，应明确说明"目前记录较少，暂时难以判断长期规律"。
+
+3. 不进行疾病诊断
+你不是医生，不得根据经期数据直接诊断疾病。
+不得使用类似：
+- "你患有……"
+- "这说明你得了……"
+- "你一定是……"
+- "你的激素水平异常"
+- "你存在某种疾病"
+等确定性医疗结论。
+可以使用：
+- "从记录来看……"
+- "可能与……有关"
+- "这一变化值得继续观察"
+- "如果这种情况持续出现，可以考虑咨询医生"
+- "仅凭经期记录无法判断具体原因"
+
+4. 不要过度解读
+只有在数据能够支持的情况下才进行推断。
+例如：
+如果周期波动明显，可以描述为："过去几次周期长度存在一定波动。"
+而不是直接解释为："你的激素水平不稳定。"
+如果用户记录了疼痛，可以描述："痛经在多个周期中都有记录。"
+而不是直接判断："你的疼痛属于某种疾病。"
+
+三、报告结构
+
+请按照以下结构生成报告，每一部分都严格对应JSON中的字段：
+
+1. 本周期概览（currentOverview字段）
+简要总结最近一次经期：
+- 周期长度
+- 经期持续时间
+- 经量（如果有）
+- 主要症状
+- 与用户历史平均水平相比是否有明显变化
+使用简洁、自然的语言。
+
+2. 周期趋势（cycleStats数组 + cycleTrendSummary字段）
+分析过去若干周期，cycleStats为数组，每项包含label和value：
+- 平均周期长度（label:"平均周期", value:"XX天"）
+- 最短周期（label:"最短周期", value:"XX天"）
+- 最长周期（label:"最长周期", value:"XX天"）
+- 周期波动范围（label:"波动范围", value:"XX天"）
+- 平均经期天数（label:"平均经期", value:"XX天"）
+- 周期规律性（label:"规律性", value:"非常规律/基本规律/波动较大"）
+cycleTrendSummary为文字描述，帮助用户理解这些数字意味着什么，以及最近是否出现变化趋势。
+如果数据不足，cycleStats可以只有少量项或为空，cycleTrendSummary应说明数据不足。
+
+3. 症状趋势（symptomTrends数组）
+总结用户最常出现的症状，每项包含name、status、detail：
+- name: 症状名称（如"痛经""腹胀""腰酸""乳房胀痛""头痛""疲劳""情绪波动""睡眠变化"等）
+- status: 出现频率或趋势（如"经常出现""偶尔出现""近期增加""近期减少""稳定"）
+- detail: 具体描述
+指出哪些症状较稳定，哪些症状近期有所增加或减少。
+如果用户没有症状记录，symptomTrends为空数组。
+
+4. 与过去相比（comparisonTrends数组）
+重点回答"最近和以前相比，有什么变化？"，每项包含name、status、detail：
+- name: 对比维度（如"周期长度""经期天数""症状""经量""周期稳定性"）
+- status: 变化状态（如"变长""变短""稳定""增加""减少""无明显变化"）
+- detail: 具体描述
+如果没有明显变化，也应该明确告诉用户"目前没有发现明显变化，整体与过去记录较为接近。"
+
+5. 值得关注的地方（attentions数组）
+列出用户可能值得继续观察的变化，每项包含title、detail、evidence：
+- title: 关注点名称
+- detail: 具体描述
+- evidence: 依据说明
+注意：
+- 不要把正常波动直接称为异常
+- 不要制造焦虑
+- 每一个提醒都要尽量说明依据
+- 当数据不足时，要明确说明数据不足
+
+6. 下一周期建议（nextCycleSuggestions数组）
+根据用户实际数据给出个性化记录建议，每项包含title、detail：
+- title: 建议标题
+- detail: 具体建议内容
+建议必须与用户数据相关，不要输出千篇一律的健康建议。
+
+7. 就医提醒（medicalReminders数组）
+只有当用户记录中出现值得进一步关注的情况时才给出就医建议，每项包含condition、detail、userMatched：
+- condition: 需关注的情况
+- detail: 温和的就医建议
+- userMatched: 布尔值，用户当前数据是否已符合该情况
+不要仅凭一次轻微变化就建议就医。
+
+四、语言风格
+
+整体风格：温和、专业、清晰、有关怀感、不制造焦虑、不使用过度医学化的语言、不说教、不夸大风险。
+报告应该像一个"懂数据、懂经期、但不会替医生下诊断"的健康助手。
+优先使用用户容易理解的自然语言。
+
+五、数据不足时的处理
+
+如果用户数据不足：
+- 不要强行分析
+- 明确告诉用户目前可以分析什么
+- 明确哪些结论暂时无法得出
+- 不得虚构统计数据
+
+六、统计要求
+
+在有足够数据时，尽可能计算并使用：
+- 平均值
+- 中位数（必要时）
+- 最小值
+- 最大值
+- 波动范围
+- 与历史平均值的差异
+- 最近3个周期与更长期平均值的差异
+涉及百分比或变化幅度时，必须基于实际数据计算，不得估算。
+如果数据量太少，不要输出没有意义的统计结果。
+
+七、时间范围
+
+分析时同时关注：
+- 最近一个周期：用于解释当前情况
+- 最近3个周期：用于观察近期趋势
+- 更长历史数据：用于判断个人基线和长期变化
+如果不同时间范围得到的结论不同，应优先说明这种差异。
+
+八、结论要求
+
+报告最后给出一个简短的总结（conclusion字段），用2～4句话回答：
+- 目前整体情况怎么样
+- 最近最明显的变化是什么
+- 用户接下来最值得关注什么
+总结必须基于已有数据，不要重复整篇报告。
+
+九、安全边界
+
+严格遵守以下要求：
+- 不诊断疾病。
+- 不推测用户的激素水平、卵巢功能、子宫状况等无法从记录直接得出的医学结论。
+- 不把排卵日期、受孕概率等信息描述成确定事实，除非数据本身足以支持。
+- 不向用户保证"正常""没问题"之类绝对医疗结论。
+- 不因为数据异常就制造恐慌。
+- 当存在明显异常且持续发生时，应建议用户考虑咨询专业医生。
+- 如果用户数据与结论冲突，以数据为准。
+- 如果无法确定原因，要明确说明"不确定原因"，不要编造解释。
+
+十、最终输出要求
+
+最终报告要做到："数据准确 + 趋势清晰 + 个性化 + 易懂 + 有行动建议 + 医疗表达谨慎"。
+不要单纯把数据重新排列，而是要帮助用户理解："我的经期过去怎么样 → 最近发生了什么变化 → 这意味着什么 → 我接下来可以关注什么。"
 
 请以JSON格式输出分析报告，严格遵循以下结构（不要输出JSON以外的任何文本）：
 
 ```json
 {
-  "summary": "报告摘要文本，2-3句话概括整体健康状况",
   "healthScore": 75,
-  "basicInfo": {
-    "lastPeriodDate": "上次月经来潮日期",
-    "avgCycleLength": "历史平均周期长度描述",
-    "avgPeriodLength": "经期持续天数描述",
-    "currentStatus": "本次记录/异常情况描述",
-    "totalRecords": "历史记录条数"
-  },
-  "cycleAssessment": {
-    "isNormal": true,
-    "explanation": "周期评估详细说明",
-    "normalRange": "正常周期范围说明",
-    "deviationDays": 0
-  },
-  "causeFactors": [
-    {"factor": "因素名称", "explanation": "详细解释"}
+  "currentOverview": "本周期概览文本",
+  "cycleStats": [
+    {"label": "平均周期", "value": "28天"},
+    {"label": "最短周期", "value": "26天"},
+    {"label": "最长周期", "value": "30天"},
+    {"label": "波动范围", "value": "4天"},
+    {"label": "平均经期", "value": "5天"},
+    {"label": "规律性", "value": "非常规律"}
   ],
-  "actionSuggestions": [
-    {"observation": "观察点", "suggestion": "建议内容"}
+  "cycleTrendSummary": "周期趋势文字描述",
+  "symptomTrends": [
+    {"name": "痛经", "status": "经常出现", "detail": "在多个周期中都有记录"}
   ],
-  "redFlags": [
-    {"symptom": "红旗症状名称", "description": "详细说明何时需立即就医", "userMatched": false}
+  "comparisonTrends": [
+    {"name": "周期长度", "status": "稳定", "detail": "与过去相比无明显变化"}
   ],
-  "advices": [
-    {"icon": "info", "title": "建议标题", "content": "建议内容", "type": "info"}
-  ]
+  "attentions": [
+    {"title": "关注点", "detail": "描述", "evidence": "依据"}
+  ],
+  "nextCycleSuggestions": [
+    {"title": "建议标题", "detail": "具体建议"}
+  ],
+  "medicalReminders": [
+    {"condition": "需关注的情况", "detail": "就医建议", "userMatched": false}
+  ],
+  "conclusion": "总结文本，2-4句话"
 }
 ```
 
 字段说明：
 - healthScore: 0-100的整数，基于周期规律性、经量、经期天数综合评分
-- cycleAssessment.isNormal: 布尔值，本次周期是否正常
-- cycleAssessment.deviationDays: 整数，正=推迟天数，负=提前天数，0=正常
-- redFlags中的userMatched: 布尔值，用户当前数据是否已符合该症状
-- advices中的type只能是"info"（正常提示）、"caution"（需关注）、"warning"（预警）三种之一
-- advices中的icon可使用"info"、"caution"、"warning"、"period"、"flow"、"cycle"等关键词
-- causeFactors列出3-4个因素
-- redFlags至少列出4个红旗症状''';
+- currentOverview: 文本，本周期概览
+- cycleStats: 数组，每项含label和value
+- cycleTrendSummary: 文本，周期趋势解读
+- symptomTrends: 数组，每项含name、status、detail
+- comparisonTrends: 数组，每项含name、status、detail
+- attentions: 数组，每项含title、detail、evidence
+- nextCycleSuggestions: 数组，每项含title、detail
+- medicalReminders: 数组，每项含condition、detail、userMatched
+- conclusion: 文本，2-4句话总结
+
+当数据不足时，对应数组可以为空，文本字段应说明数据不足。''';
   }
 
   /// 构建用户消息。
@@ -800,7 +943,7 @@ $dataText
 
   /// 构建问答模式的系统提示词。
   static String _buildQASystemPrompt(String dataText) {
-    return '''你是一位妇产科与女性健康领域的专业助手，正在与用户进行一对一的问答对话。
+    return '''你是一名专业、谨慎、友好的经期健康数据分析助手，正在与用户进行一对一的问答对话。
 
 以下是用户的完整个人生理周期数据（包含全部经期记录、每日经量明细、情绪、症状、备注等所有字段）：
 
@@ -815,9 +958,10 @@ $dataText
 1. 仅回答与经期、月经周期、女性生殖健康相关的问题。
 2. 如果用户的问题与经期健康完全无关（如天气、美食、科技等），请礼貌地说明你只能回答经期健康相关问题，并引导用户提问。
 3. 回答要结合用户的实际数据进行分析，给出个性化建议。引用具体数据时请标明日期和数值。
-4. 语言保持客观、体贴、条理清晰，不要夸大风险，不要给出绝对化的医疗诊断结论。
-5. 回答控制在200-400字以内，条理清晰。
-6. 如涉及红旗症状（剧烈腹痛、异常出血等），提醒用户及时就医。''';
+4. 你不是医生，不得根据经期数据直接诊断疾病。不得使用"你患有""你得了"等确定性医疗结论。
+5. 语言保持温和、专业、清晰、有关怀感，不要夸大风险，不要给出绝对化的医疗诊断结论。
+6. 回答控制在200-400字以内，条理清晰。
+7. 如涉及红旗症状（剧烈腹痛、异常出血等），提醒用户及时就医。''';
   }
 
   // ═══════════════════════════════════════════════════════════════

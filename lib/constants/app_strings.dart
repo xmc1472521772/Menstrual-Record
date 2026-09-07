@@ -184,25 +184,22 @@ class AppStrings {
   static const String aiAnalyzing1 = '正在整理经期数据…';
   static const String aiAnalyzing2 = '正在分析周期规律…';
   static const String aiAnalyzing3 = '正在生成健康建议…';
-  static const String aiCycleAssessment = '周期评估';
-  static const String aiCauseAnalysis = '症因排查';
-  static const String aiActionSuggestions = '行动建议';
-  static const String aiRedFlags = '就医预警';
-  static const String aiHealthAdvices = '健康建议';
+  // 报告 7 部分标题
+  static const String aiSectionCurrentOverview = '本周期概览';
+  static const String aiSectionCycleTrend = '周期趋势';
+  static const String aiSectionSymptomTrend = '症状趋势';
+  static const String aiSectionComparison = '与过去相比';
+  static const String aiSectionAttentions = '值得关注的地方';
+  static const String aiSectionNextCycleSuggestions = '下一周期建议';
+  static const String aiSectionMedicalReminders = '就医提醒';
+  static const String aiSectionConclusion = '总结';
   static const String aiHealthScore = '健康评分';
-  static const String aiReportSummary = '报告摘要';
   static const String aiReportTime = '报告生成时间';
-  static const String aiObservation = '观察点';
-  static const String aiSuggestion = '建议';
+  static const String aiEvidence = '依据';
   static const String aiDisclaimer = '本报告由智谱GLM-4大模型基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。';
-  static const String aiNormalRange = '正常范围';
-  static const String aiDeviation = '偏差';
-  static const String aiDaysLate = '推迟';
-  static const String aiDaysEarly = '提前';
-  static const String aiOnTrack = '正常';
   static const String aiDataUpdatedHint = '经期数据已更新，建议重新生成报告';
   static const String aiApiKeyNotConfigured = 'API Key 未配置，请联系开发者';
-  static const String aiYouMatched = '您当前已符合此症状';
+  static const String aiYouMatched = '您当前已符合此情况';
 
   // ─── AI Chat ───────────────────────────────────────────────────
   static const String aiChatTitle = '经期问答';
