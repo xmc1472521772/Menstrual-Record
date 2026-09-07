@@ -6,13 +6,13 @@ import '../utils/date_utils.dart';
 
 /// 年度热力图 — GitHub 风格的日历活动图。
 ///
-/// 以周一为列起始，每列代表一周，每个格子代表一天。
+/// 横向滚动布局：每列代表一周，每个格子代表一天。
 /// 经期日用品牌色填充，颜色深浅表示经量等级：
-/// - 无经量记录的经期日：中等深浅
-/// - 有经量记录的经期日：根据等级（0=无, 1=少, 2=中, 3=多）显示不同深浅
-/// - 透明：非经期日
+/// - 无经量记录的经期日：浅灰粉
+/// - 有经量记录的经期日：根据等级（0=无, 1=少, 2=中, 3=多）显示不同颜色
+/// - 灰色：非经期日
 ///
-/// 月份标签显示在每列首行的上方，月份切换处标注月份缩写。
+/// 月份标签固定在顶部，月份分界处有竖线。
 class YearHeatmap extends StatefulWidget {
   /// 所有经期记录（按时间正序排列）。
   final List<PeriodRecord> records;
@@ -38,9 +38,19 @@ class _YearHeatmapState extends State<YearHeatmap> {
   /// 当前显示的年份。
   late int _year;
 
-  /// 经期日索引：`yyyyMMdd -> flowLevel`，用于 O(1) 判断某天是否为经期及其经量。
-  /// flowLevel: 1=偏少, 2=正常, 3=偏多, 0=未设置（默认中等）
+  /// 经期日索引：`yyyyMMdd -> flowLevel`。
   late Map<int, int> _periodDays;
+
+  /// 格子尺寸（px）。
+  static const double _cellSize = 13.0;
+  static const double _cellGap = 2.0;
+  static const double _cellStep = _cellSize + _cellGap;
+
+  /// 左侧星期标签宽度。
+  static const double _labelWidth = 20.0;
+
+  /// 月份标签高度。
+  static const double _monthLabelHeight = 18.0;
 
   @override
   void initState() {
@@ -52,7 +62,8 @@ class _YearHeatmapState extends State<YearHeatmap> {
   @override
   void didUpdateWidget(covariant YearHeatmap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.records != widget.records) {
+    if (oldWidget.records != widget.records ||
+        oldWidget.flowMap != widget.flowMap) {
       _rebuildIndex();
     }
   }
@@ -66,7 +77,6 @@ class _YearHeatmapState extends State<YearHeatmap> {
       var d = DateTime(start.year, start.month, start.day);
       while (!d.isAfter(end)) {
         if (d.year == _year) {
-          // 优先使用每日经量记录中的等级，否则用 0（无记录）
           final key = AppDateUtils.dayKey(d);
           _periodDays[key] = widget.flowMap[key] ?? 0;
         }
@@ -106,7 +116,6 @@ class _YearHeatmapState extends State<YearHeatmap> {
                   ),
                 ),
                 const Spacer(),
-                // 年份切换
                 _buildYearSelector(),
               ],
             ),
@@ -115,7 +124,7 @@ class _YearHeatmapState extends State<YearHeatmap> {
             _buildSummary(),
             const SizedBox(height: AppDimens.spacingLg),
             // ─── 热力图 ───
-            _buildHeatmapGrid(context),
+            _buildHeatmap(context),
             const SizedBox(height: AppDimens.spacingSm),
             // ─── 图例 ───
             _buildLegend(context),
@@ -158,14 +167,11 @@ class _YearHeatmapState extends State<YearHeatmap> {
   }
 
   Widget _buildSummary() {
-    // 统计今年经期天数
     final periodDayCount = _periodDays.length;
-    // 统计经期次数
     int periodCount = 0;
     for (final r in widget.records) {
       final start = r.startDateTime;
       final end = r.endDateTime ?? DateTime.now();
-      // 经期与今年有重叠
       if ((start.year == _year) ||
           (end.year == _year) ||
           (start.year < _year && end.year > _year)) {
@@ -174,14 +180,14 @@ class _YearHeatmapState extends State<YearHeatmap> {
     }
     return Row(
       children: [
-        _summaryChip('$_year年', '$periodCount 次', '经期'),
+        _summaryChip('$periodCount', '次经期'),
         const SizedBox(width: AppDimens.spacingMd),
-        _summaryChip('$_year年', '$periodDayCount 天', '经期日'),
+        _summaryChip('$periodDayCount', '天经期日'),
       ],
     );
   }
 
-  Widget _summaryChip(String prefix, String value, String label) {
+  Widget _summaryChip(String value, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppDimens.spacingMd,
@@ -212,139 +218,175 @@ class _YearHeatmapState extends State<YearHeatmap> {
     );
   }
 
-  Widget _buildHeatmapGrid(BuildContext context) {
-    // 计算该年第一天是星期几（周一=1）
+  /// ─── 核心构建：横向滚动热力图 ───
+
+  /// 计算该年的起始日期（1月1日所在周的周一）和总周数。
+  ({DateTime startDate, int totalWeeks}) _computeYearLayout() {
     final jan1 = DateTime(_year, 1, 1);
-    // DateTime.weekday: 周一=1, 周日=7
-    final firstWeekday = jan1.weekday;
-    // 从1月1日之前的周一开始，补齐前置空格
+    final firstWeekday = jan1.weekday; // 周一=1, 周日=7
     final startDate = jan1.subtract(Duration(days: firstWeekday - 1));
 
-    // 计算该年最后一天
     final dec31 = DateTime(_year, 12, 31);
     final lastWeekday = dec31.weekday;
-    // 补齐到周日
     final endDate = dec31.add(Duration(days: 7 - lastWeekday));
 
-    // 总天数
     final totalDays = endDate.difference(startDate).inDays + 1;
-    // 总周数
     final totalWeeks = (totalDays / 7).ceil();
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    return (startDate: startDate, totalWeeks: totalWeeks);
+  }
 
-    // 月份标签：每列对应一周，如果该周包含某月第一天则标注月份
-    final monthLabels = <int, String>{};
+  /// 计算月份标签：返回每周对应的月份（如果该周包含某月1号则标记）。
+  /// 同时返回每月1号所在的 week 索引，用于画月份分隔线。
+  ({Map<int, int> weekMonths, List<int> monthStartWeeks}) _computeMonthLabels(
+      DateTime startDate, int totalWeeks) {
+    final weekMonths = <int, int>{};
+    final monthStartWeeks = <int>[];
+
     for (int week = 0; week < totalWeeks; week++) {
       final weekStart = startDate.add(Duration(days: week * 7));
-      // 检查这周是否包含某月的1号
       for (int day = 0; day < 7; day++) {
         final d = weekStart.add(Duration(days: day));
-        if (d.day == 1) {
-          monthLabels[week] = '${d.month}月';
+        if (d.day == 1 && d.year == _year) {
+          weekMonths[week] = d.month;
+          // 月份分隔线画在标签所在周的左侧
+          if (week > 0) monthStartWeeks.add(week);
           break;
         }
       }
     }
+    return (weekMonths: weekMonths, monthStartWeeks: monthStartWeeks);
+  }
 
-    // 星期标签
-    const weekdayLabels = ['一', '三', '五'];
+  Widget _buildHeatmap(BuildContext context) {
+    final layout = _computeYearLayout();
+    final startDate = layout.startDate;
+    final totalWeeks = layout.totalWeeks;
+    final labelData = _computeMonthLabels(startDate, totalWeeks);
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
     final themeColors = context.themeColors;
+    final gridWidth = totalWeeks * _cellStep;
+    const gridHeight = 7 * _cellStep;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final availableWidth = constraints.maxWidth;
-        // 左侧 weekday 标签宽度
-        const labelWidth = 16.0;
-        final gridWidth = availableWidth - labelWidth;
-        final cellSize = gridWidth / totalWeeks;
-        final cellHeight = cellSize.clamp(6.0, 14.0);
-        final gridHeight = cellHeight * 7;
-
-        return Column(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: _labelWidth + gridWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 月份标签行
+            // ── 月份标签行 ──
             SizedBox(
-              height: 14,
-              child: Padding(
-                padding: const EdgeInsets.only(left: labelWidth),
-                child: Row(
-                  children: [
-                    for (int week = 0; week < totalWeeks; week++)
-                      SizedBox(
-                        width: cellSize,
-                        child: Text(
-                          monthLabels[week] ?? '',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: themeColors.onSurfaceTertiary,
+              height: _monthLabelHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(width: _labelWidth),
+                  SizedBox(
+                    width: gridWidth,
+                    child: Stack(
+                      children: [
+                        // 月份文字
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _MonthLabelPainter(
+                              weekMonths: labelData.weekMonths,
+                              monthStartWeeks: labelData.monthStartWeeks,
+                              cellStep: _cellStep,
+                              textColor: themeColors.onSurfaceTertiary,
+                            ),
                           ),
-                          overflow: TextOverflow.clip,
-                          maxLines: 1,
                         ),
-                      ),
-                  ],
-                ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 2),
-            // 热力图主体
+            // ── 热力图主体 ──
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 星期标签
+                // 左侧星期标签（固定不滚动）
                 SizedBox(
-                  width: labelWidth,
+                  width: _labelWidth,
                   height: gridHeight,
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: weekdayLabels
-                        .map((label) => Text(
-                              label,
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: themeColors.onSurfaceTertiary,
-                              ),
-                            ))
-                        .toList(),
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildWeekdayLabel('一', themeColors.onSurfaceTertiary),
+                      const SizedBox(),
+                      _buildWeekdayLabel('三', themeColors.onSurfaceTertiary),
+                      const SizedBox(),
+                      _buildWeekdayLabel('五', themeColors.onSurfaceTertiary),
+                      const SizedBox(),
+                      _buildWeekdayLabel('日', themeColors.onSurfaceTertiary),
+                    ],
                   ),
                 ),
                 // 格子网格
                 SizedBox(
                   width: gridWidth,
                   height: gridHeight,
-                  child: Row(
+                  child: Stack(
                     children: [
-                      for (int week = 0; week < totalWeeks; week++)
-                        Expanded(
-                          child: Column(
-                            children: [
-                              for (int day = 0; day < 7; day++)
-                                _buildCell(
-                                  startDate.add(Duration(days: week * 7 + day)),
-                                  cellHeight,
-                                  themeColors,
-                                  today,
-                                ),
-                            ],
-                          ),
+                      // 月份分隔线
+                      CustomPaint(
+                        painter: _MonthDividerPainter(
+                          monthStartWeeks: labelData.monthStartWeeks,
+                          cellStep: _cellStep,
+                          gridHeight: gridHeight,
+                          dividerColor: themeColors.divider,
                         ),
+                        size: Size(gridWidth, gridHeight),
+                      ),
+                      // 格子
+                      Row(
+                        children: [
+                          for (int week = 0; week < totalWeeks; week++)
+                            SizedBox(
+                              width: _cellStep,
+                              child: Column(
+                                children: [
+                                  for (int day = 0; day < 7; day++)
+                                    _buildCell(
+                                      startDate.add(
+                                          Duration(days: week * 7 + day)),
+                                      themeColors,
+                                      today,
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
           ],
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeekdayLabel(String label, Color color) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 9,
+        color: color,
+      ),
     );
   }
 
   Widget _buildCell(
     DateTime date,
-    double cellHeight,
     AppThemeColors themeColors,
     DateTime today,
   ) {
@@ -353,10 +395,8 @@ class _YearHeatmapState extends State<YearHeatmap> {
     final isPeriodDay = flowLevel != null;
     final isFuture = date.isAfter(today);
 
-    Color? cellColor;
+    Color cellColor;
     if (isPeriodDay) {
-      // 根据经量等级显示不同颜色（使用独立色相，避免仅透明度差异难以辨认）
-      // flowLevel: 0=无（未记录）, 1=少, 2=中, 3=多
       switch (flowLevel) {
         case 0:
           cellColor = AppColors.flowNone;
@@ -374,63 +414,147 @@ class _YearHeatmapState extends State<YearHeatmap> {
           cellColor = AppColors.flowNone;
       }
     } else if (!isThisYear) {
+      // 非本年日期（补齐格子）：完全透明
       cellColor = Colors.transparent;
     } else {
-      cellColor = themeColors.surfaceTile.withValues(alpha: isFuture ? 0.3 : 0.5);
+      // 非经期日：灰色底
+      cellColor = themeColors.surfaceTile.withValues(alpha: isFuture ? 0.25 : 0.5);
     }
 
-    final cellWidget = GestureDetector(
+    return GestureDetector(
       onTap: isThisYear
           ? () => widget.onDateSelected?.call(date)
           : null,
       child: Container(
-        height: cellHeight,
-        margin: const EdgeInsets.all(0.5),
+        width: _cellSize,
+        height: _cellSize,
+        margin: const EdgeInsets.all(_cellGap / 2),
         decoration: BoxDecoration(
           color: cellColor,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.circular(2.5),
         ),
       ),
     );
-
-    return cellWidget;
   }
 
   Widget _buildLegend(BuildContext context) {
     final themeColors = context.themeColors;
-    // 4 个经量等级色块，使用不同色相/明度区分
     final legendColors = [
-      AppColors.flowNone,   // 无（未记录）
-      AppColors.flowLight,  // 少
-      AppColors.flowNormal, // 中
-      AppColors.flowHeavy,  // 多
+      AppColors.flowNone,
+      AppColors.flowLight,
+      AppColors.flowNormal,
+      AppColors.flowHeavy,
     ];
     final legendLabels = ['无', '少', '中', '多'];
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        Text(
+          '经量：',
+          style: TextStyle(
+            fontSize: 10,
+            color: themeColors.onSurfaceTertiary,
+          ),
+        ),
         for (int i = 0; i < legendColors.length; i++) ...[
           Container(
-            width: 10,
-            height: 10,
-            margin: const EdgeInsets.symmetric(horizontal: 1),
+            width: 11,
+            height: 11,
             decoration: BoxDecoration(
               color: legendColors[i],
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(2.5),
             ),
           ),
-          const SizedBox(width: 2),
+          const SizedBox(width: 3),
           Text(
             legendLabels[i],
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 10,
               color: themeColors.onSurfaceTertiary,
             ),
           ),
           if (i < legendColors.length - 1)
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
         ],
       ],
     );
+  }
+}
+
+/// 月份标签绘制器：在每月第一周位置绘制 "X月" 文本。
+class _MonthLabelPainter extends CustomPainter {
+  final Map<int, int> weekMonths;
+  final List<int> monthStartWeeks;
+  final double cellStep;
+  final Color textColor;
+
+  _MonthLabelPainter({
+    required this.weekMonths,
+    required this.monthStartWeeks,
+    required this.cellStep,
+    required this.textColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    );
+
+    weekMonths.forEach((week, month) {
+      final x = week * cellStep;
+      final label = '$month月';
+      textPainter.text = TextSpan(
+        text: label,
+        style: TextStyle(fontSize: 10, color: textColor),
+      );
+      textPainter.layout();
+      // 文字左对齐到月份起始位置
+      textPainter.paint(canvas, Offset(x, size.height / 2 - textPainter.height / 2));
+    });
+  }
+
+  @override
+  bool shouldRepaint(covariant _MonthLabelPainter oldDelegate) {
+    return oldDelegate.weekMonths != weekMonths ||
+        oldDelegate.cellStep != cellStep;
+  }
+}
+
+/// 月份分隔线绘制器：在每月边界处画竖线。
+class _MonthDividerPainter extends CustomPainter {
+  final List<int> monthStartWeeks;
+  final double cellStep;
+  final double gridHeight;
+  final Color dividerColor;
+
+  _MonthDividerPainter({
+    required this.monthStartWeeks,
+    required this.cellStep,
+    required this.gridHeight,
+    required this.dividerColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = dividerColor.withValues(alpha: 0.3)
+      ..strokeWidth = 0.5
+      ..style = PaintingStyle.stroke;
+
+    for (final week in monthStartWeeks) {
+      final x = week * cellStep - cellStep / 4;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, gridHeight),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MonthDividerPainter oldDelegate) {
+    return oldDelegate.monthStartWeeks != monthStartWeeks;
   }
 }
