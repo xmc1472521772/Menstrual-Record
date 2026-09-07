@@ -292,12 +292,8 @@ class SettingsScreen extends StatelessWidget {
               dialBackgroundColor: themeColors.surfaceTile,
               dialHandColor: AppColors.brandPrimary,
               dialTextColor: themeColors.onSurface,
-              dialSelectedColor: AppColors.brandPrimary,
-              dialSelectedTextColor: AppColors.white,
               hourMinuteColor: themeColors.surfaceTile,
               hourMinuteTextColor: themeColors.onSurface,
-              hourMinuteSelectedColor: AppColors.brandPrimary,
-              hourMinuteSelectedTextColor: AppColors.white,
               hourMinuteShape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppDimens.radiusMd),
               ),
@@ -307,7 +303,7 @@ class SettingsScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppDimens.radius2xl),
               ),
-              helpStyle: AppTheme.bodySmall.copyWith(
+              helpTextStyle: AppTheme.bodySmall.copyWith(
                 color: themeColors.onSurfaceSecondary,
               ),
               cancelButtonStyle: ButtonStyle(
