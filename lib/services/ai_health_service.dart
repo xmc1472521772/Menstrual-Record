@@ -795,11 +795,12 @@ $dataText
         'temperature': 0.3,
         'max_tokens': 4096,
       }),
-    ).timeout(const Duration(seconds: 60));
+    ).timeout(const Duration(seconds: 120));
 
     if (response.statusCode != 200) {
+      final errorBody = response.body;
       throw Exception(
-        'AI请求失败（HTTP ${response.statusCode}）',
+        'AI请求失败（HTTP ${response.statusCode}）${errorBody.isNotEmpty ? ': $errorBody' : ''}',
       );
     }
 
@@ -839,7 +840,7 @@ $dataText
 
     final client = http.Client();
     final response = await client.send(request)
-        .timeout(const Duration(seconds: 60));
+        .timeout(const Duration(seconds: 120));
 
     if (response.statusCode != 200) {
       client.close();
