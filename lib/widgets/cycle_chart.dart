@@ -21,9 +21,9 @@ class CycleChart extends StatefulWidget {
 }
 
 enum _TimeRange {
-  threeMonths('近三月'),
-  sixMonths('近六月'),
-  oneYear('近一年'),
+  threeMonths('3月'),
+  sixMonths('6月'),
+  oneYear('1年'),
   all('全部');
 
   final String label;
@@ -87,7 +87,7 @@ class _CycleChartState extends State<CycleChart> {
                     color: context.themeColors.onSurface,
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: AppDimens.spacingSm),
                 _buildRangeChips(),
               ],
             ),
@@ -197,53 +197,51 @@ class _CycleChartState extends State<CycleChart> {
 
   // ─── 筛选条 ───────────────────────────────────────────────
   Widget _buildRangeChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: _TimeRange.values.map((range) {
-          final selected = range == _selectedRange;
-          return Padding(
-            padding: EdgeInsets.only(
-              right: range == _TimeRange.values.last
-                  ? 0
-                  : AppDimens.spacingSm,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: _TimeRange.values.map((range) {
+        final selected = range == _selectedRange;
+        final isLast = range == _TimeRange.values.last;
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedRange = range;
+              _selectedIdx = null;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 3,
             ),
-            child: FilterChip(
-              label: Text(range.label),
-              selected: selected,
-              onSelected: (_) {
-                setState(() {
-                  _selectedRange = range;
-                  _selectedIdx = null;
-                });
-              },
-              selectedColor: AppColors.brandPrimary,
-              backgroundColor: context.themeColors.surfaceTile,
-              labelStyle: TextStyle(
-                fontSize: 12,
+            margin: EdgeInsets.only(
+              right: isLast ? 0 : 4,
+            ),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.brandPrimary
+                  : context.themeColors.surfaceTile,
+              borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+              border: selected
+                  ? null
+                  : Border.all(
+                      color: context.themeColors.divider,
+                      width: 0.5,
+                    ),
+            ),
+            child: Text(
+              range.label,
+              style: TextStyle(
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
                 color: selected
                     ? AppColors.white
                     : context.themeColors.onSurfaceSecondary,
               ),
-              side: BorderSide(
-                color: selected
-                    ? AppColors.brandPrimary
-                    : context.themeColors.divider,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-              ),
-              showCheckmark: false,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimens.spacingXs,
-                vertical: 2,
-              ),
-              visualDensity: VisualDensity.compact,
             ),
-          );
-        }).toList(),
-      ),
+          ),
+        );
+      }).toList(),
     );
   }
 
