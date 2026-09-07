@@ -582,120 +582,129 @@ class SettingsScreen extends StatelessWidget {
                       borderRadius:
                           BorderRadius.circular(AppDimens.radiusLg),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Column(
                       children: [
-                        // 减少按钮
-                        _buildStepButton(
-                          context: context,
-                          icon: Icons.remove_rounded,
-                          enabled: canDecrease,
-                          onTap: () {
-                            setState(() {
-                              selectedValue--;
-                              textController.text =
-                                  selectedValue.toString();
-                              errorText = null;
-                            });
-                          },
-                        ),
-                        const SizedBox(width: AppDimens.spacingLg),
-                        // 数值显示
-                        Expanded(
-                          child: Column(
-                            children: [
-                              SizedBox(
-                                height: 56,
-                                child: TextField(
-                                  controller: textController,
-                                  keyboardType: TextInputType.number,
-                                  textAlign: TextAlign.center,
-                                  style: AppTheme.statValue.copyWith(
-                                    color: AppColors.brandPrimary,
-                                    fontSize: 28,
-                                  ),
-                                  decoration: InputDecoration(
-                                    contentPadding:
-                                        const EdgeInsets.symmetric(
-                                      horizontal: AppDimens.spacingSm,
-                                      vertical: AppDimens.spacingXs,
-                                    ),
-                                    errorText: errorText,
-                                    errorStyle: AppTheme.bodySmall.copyWith(
-                                      fontSize: 11,
-                                      color: AppColors.error,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(
-                                          AppDimens.radiusMd),
-                                      borderSide: BorderSide(
-                                        color: AppColors.brandPrimary
-                                            .withValues(alpha: 0.3),
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(
-                                          AppDimens.radiusMd),
-                                      borderSide: const BorderSide(
-                                        color: AppColors.brandPrimary,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor:
-                                        context.themeColors.surfaceCard,
-                                  ),
-                                  onChanged: (text) {
-                                    final newValue = int.tryParse(text);
-                                    if (newValue == null) {
-                                      setState(() {
-                                        errorText = '请输入数字';
-                                        selectedValue = value;
-                                      });
-                                    } else if (newValue < min) {
-                                      setState(() {
-                                        errorText = '不能小于 $min';
-                                        selectedValue = newValue;
-                                      });
-                                    } else if (newValue > max) {
-                                      setState(() {
-                                        errorText = '不能大于 $max';
-                                        selectedValue = newValue;
-                                      });
-                                    } else {
-                                      setState(() {
-                                        errorText = null;
-                                        selectedValue = newValue;
-                                      });
-                                    }
-                                  },
+                        // 加减按钮 + 输入框：三者固定高度，水平居中对齐
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 减少按钮
+                            _buildStepButton(
+                              context: context,
+                              icon: Icons.remove_rounded,
+                              enabled: canDecrease,
+                              onTap: () {
+                                setState(() {
+                                  selectedValue--;
+                                  textController.text =
+                                      selectedValue.toString();
+                                  errorText = null;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: AppDimens.spacingLg),
+                            // 数值输入框（固定高度，不随 errorText 变化）
+                            SizedBox(
+                              width: 100,
+                              height: 48,
+                              child: TextField(
+                                controller: textController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: AppTheme.statValue.copyWith(
+                                  color: AppColors.brandPrimary,
+                                  fontSize: 28,
                                 ),
-                              ),
-                              const SizedBox(height: AppDimens.spacingXs),
-                              Text(
-                                '范围 $min - $max',
-                                style: AppTheme.bodySmall.copyWith(
-                                  color: context.themeColors.onSurfaceTertiary,
+                                decoration: InputDecoration(
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(
+                                    horizontal: AppDimens.spacingXs,
+                                    vertical: AppDimens.spacingXs,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusMd),
+                                    borderSide: BorderSide(
+                                      color: AppColors.brandPrimary
+                                          .withValues(alpha: 0.3),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusMd),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.brandPrimary,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  filled: true,
+                                  fillColor:
+                                      context.themeColors.surfaceCard,
                                 ),
+                                onChanged: (text) {
+                                  final newValue = int.tryParse(text);
+                                  if (newValue == null) {
+                                    setState(() {
+                                      errorText = '请输入有效数字';
+                                      selectedValue = value;
+                                    });
+                                  } else if (newValue < min) {
+                                    setState(() {
+                                      errorText = '最小值为 $min';
+                                      selectedValue = newValue;
+                                    });
+                                  } else if (newValue > max) {
+                                    setState(() {
+                                      errorText = '最大值为 $max';
+                                      selectedValue = newValue;
+                                    });
+                                  } else {
+                                    setState(() {
+                                      errorText = null;
+                                      selectedValue = newValue;
+                                    });
+                                  }
+                                },
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: AppDimens.spacingLg),
+                            // 增加按钮
+                            _buildStepButton(
+                              context: context,
+                              icon: Icons.add_rounded,
+                              enabled: canIncrease,
+                              onTap: () {
+                                setState(() {
+                                  selectedValue++;
+                                  textController.text =
+                                      selectedValue.toString();
+                                  errorText = null;
+                                });
+                              },
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: AppDimens.spacingLg),
-                        // 增加按钮
-                        _buildStepButton(
-                          context: context,
-                          icon: Icons.add_rounded,
-                          enabled: canIncrease,
-                          onTap: () {
-                            setState(() {
-                              selectedValue++;
-                              textController.text =
-                                  selectedValue.toString();
-                              errorText = null;
-                            });
-                          },
+                        // 错误提示（独立行，不影响 Row 内部对齐）
+                        const SizedBox(height: AppDimens.spacingXs),
+                        SizedBox(
+                          height: 18,
+                          child: errorText != null
+                              ? Text(
+                                  errorText!,
+                                  style: AppTheme.bodySmall.copyWith(
+                                    fontSize: 11,
+                                    color: AppColors.error,
+                                  ),
+                                )
+                              : Text(
+                                  '有效范围 $min - $max',
+                                  style: AppTheme.bodySmall.copyWith(
+                                    color: context
+                                        .themeColors.onSurfaceTertiary,
+                                  ),
+                                ),
                         ),
                       ],
                     ),
@@ -754,8 +763,8 @@ class SettingsScreen extends StatelessWidget {
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
           color: enabled
               ? AppColors.brandPrimary
