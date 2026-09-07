@@ -406,6 +406,109 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+          // ── 经期进行中：今日经量快速选择 ──
+          if (hasOngoing) ...[
+            const SizedBox(height: AppDimens.spacingMd),
+            _buildFlowQuickPick(provider),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 经量快速选择器：经期进行中时嵌入状态卡底部。
+  ///
+  /// 四档经量（无/少/中/多），点击即记录，选中态高亮。
+  Widget _buildFlowQuickPick(PeriodProvider provider) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentFlow = provider.getFlowLevel(today);
+
+    // 经量选项：(标签, 等级, 颜色)
+    final flowOptions = <(String, int)>[
+      (AppStrings.flowLabelNone, 0),
+      (AppStrings.flowLabelLight, 1),
+      (AppStrings.flowLabelNormal, 2),
+      (AppStrings.flowLabelHeavy, 3),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.spacingLg,
+        vertical: AppDimens.spacingSm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(
+              left: AppDimens.spacingXs,
+              bottom: AppDimens.spacingXs,
+            ),
+            child: Text(
+              AppStrings.todayFlow,
+              style: AppTheme.labelMedium.copyWith(
+                color: AppColors.white.withValues(alpha: 0.8),
+              ),
+            ),
+          ),
+          Row(
+            children: flowOptions.map((item) {
+              final label = item.$1;
+              final level = item.$2;
+              final isSelected = currentFlow == level;
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.spacingXs / 2,
+                  ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => provider.setDailyFlow(today, level),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppDimens.spacingSm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppColors.white.withValues(alpha: 0.28)
+                            : AppColors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+                        border: isSelected
+                            ? Border.all(
+                                color: AppColors.white.withValues(alpha: 0.6),
+                                width: 1.5,
+                              )
+                            : Border.all(
+                                color: AppColors.white.withValues(alpha: 0.15),
+                                width: 0.5,
+                              ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? AppColors.white
+                              : AppColors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );

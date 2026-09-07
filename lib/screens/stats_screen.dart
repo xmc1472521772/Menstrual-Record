@@ -18,18 +18,49 @@ class StatsScreen extends StatefulWidget {
   State<StatsScreen> createState() => _StatsScreenState();
 }
 
-class _StatsScreenState extends State<StatsScreen> {
+class _StatsScreenState extends State<StatsScreen>
+    with SingleTickerProviderStateMixin {
   /// 每页显示的历史记录条数
   static const int _pageSize = 5;
 
   /// 当前显示的记录条数（页数 × _pageSize）
   int _displayCount = _pageSize;
 
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.stats),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppColors.brandPrimary,
+          unselectedLabelColor: context.themeColors.onSurfaceTertiary,
+          indicatorColor: AppColors.brandPrimary,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: AppTheme.titleMedium.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+          unselectedLabelStyle: AppTheme.titleMedium,
+          tabs: const [
+            Tab(text: AppStrings.statsTabOverview),
+            Tab(text: AppStrings.statsTabTrend),
+            Tab(text: AppStrings.statsTabHistory),
+          ],
+        ),
       ),
       body: Consumer2<PeriodProvider, SettingsProvider>(
         builder: (context, periodProvider, settingsProvider, child) {
@@ -45,39 +76,106 @@ class _StatsScreenState extends State<StatsScreen> {
             _displayCount = totalPeriods;
           }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimens.spacingLg,
-              AppDimens.spacingLg,
-              AppDimens.spacingLg,
-              100,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildOverviewCard(context, cycleData),
-                const SizedBox(height: AppDimens.spacingLg),
-                CycleChart(periods: cycleData.recentPeriods),
-                const SizedBox(height: AppDimens.spacingLg),
-                PeriodLengthChart(periods: cycleData.recentPeriods),
-                const SizedBox(height: AppDimens.spacingLg),
-                _buildAlgorithmSelector(context, settingsProvider, periodProvider),
-                const SizedBox(height: AppDimens.spacingLg),
-                _buildPredictionCard(context, cycleData),
-                const SizedBox(height: AppDimens.spacingLg),
-                _buildHistoryList(context, cycleData),
-                const SizedBox(height: AppDimens.spacingLg),
-                YearHeatmap(
-                  records: periodProvider.records,
-                  flowMap: periodProvider.dailyFlowMap,
-                ),
-              ],
-            ),
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              // ─── Tab 1: 概览 ───
+              _buildOverviewTab(context, cycleData, settingsProvider, periodProvider),
+              // ─── Tab 2: 趋势 ───
+              _buildTrendTab(context, cycleData, periodProvider),
+              // ─── Tab 3: 历史 ───
+              _buildHistoryTab(context, cycleData),
+            ],
           );
         },
       ),
     );
   }
+
+  // ═════════════════════════════════════════════════════════════════
+  //  Tab 1: 概览
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildOverviewTab(
+    BuildContext context,
+    CycleData cycleData,
+    SettingsProvider settingsProvider,
+    PeriodProvider periodProvider,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        100,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildOverviewCard(context, cycleData),
+          const SizedBox(height: AppDimens.spacingLg),
+          _buildAlgorithmSelector(context, settingsProvider, periodProvider),
+          const SizedBox(height: AppDimens.spacingLg),
+          _buildPredictionCard(context, cycleData),
+        ],
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  //  Tab 2: 趋势
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildTrendTab(
+    BuildContext context,
+    CycleData cycleData,
+    PeriodProvider periodProvider,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        100,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CycleChart(periods: cycleData.recentPeriods),
+          const SizedBox(height: AppDimens.spacingLg),
+          PeriodLengthChart(periods: cycleData.recentPeriods),
+          const SizedBox(height: AppDimens.spacingLg),
+          YearHeatmap(
+            records: periodProvider.records,
+            flowMap: periodProvider.dailyFlowMap,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  //  Tab 3: 历史
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildHistoryTab(BuildContext context, CycleData cycleData) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        100,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHistoryList(context, cycleData),
+        ],
+      ),
+    );
+  }
+
+  // ─── Empty state ────────────────────────────────────────────────
 
   Widget _buildEmptyState(BuildContext context) {
     return Center(
@@ -116,6 +214,8 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ─── Overview card ──────────────────────────────────────────────
+
   Widget _buildOverviewCard(BuildContext context, CycleData cycleData) {
     return Container(
       padding: const EdgeInsets.all(AppDimens.spacingXl),
@@ -126,8 +226,6 @@ class _StatsScreenState extends State<StatsScreen> {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-        // 与 home_screen 的状态卡片保持一致：不使用 boxShadow。
-        // 滚动时每帧重放高斯模糊栅格化会导致掉帧。
       ),
       child: Column(
         children: [
@@ -202,6 +300,8 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ─── Algorithm selector ─────────────────────────────────────────
+
   Widget _buildAlgorithmSelector(
     BuildContext context,
     SettingsProvider settingsProvider,
@@ -274,7 +374,6 @@ class _StatsScreenState extends State<StatsScreen> {
 
     return InkWell(
       onTap: () async {
-        // 先持久化设置，成功后再重算预测，保证 DB 与内存一致
         await settingsProvider.setAlgorithm(value);
         await periodProvider.setAlgorithm(value);
       },
@@ -327,6 +426,8 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
     );
   }
+
+  // ─── Prediction card ────────────────────────────────────────────
 
   Widget _buildPredictionCard(BuildContext context, CycleData cycleData) {
     final predictedDate = cycleData.predictedNextPeriod;
@@ -456,6 +557,8 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ─── History list ────────────────────────────────────────────────
+
   Widget _buildHistoryList(BuildContext context, CycleData cycleData) {
     final periods = cycleData.recentPeriods;
     final displayPeriods = periods.take(_displayCount).toList();
@@ -507,7 +610,6 @@ class _StatsScreenState extends State<StatsScreen> {
                 ),
               )
             else ...[
-              // 仅展开当前页的记录，避免数据过多时列表过长
               Column(
                 children: [
                   for (int i = 0; i < displayPeriods.length; i++)

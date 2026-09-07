@@ -118,6 +118,18 @@ class AppStrings {
   static const String today_ = '今天';
   static const String daysPassed = '已过 {} 天';
 
+  // ─── Stats Tab Labels ───────────────────────────────────────────
+  static const String statsTabOverview = '概览';
+  static const String statsTabTrend = '趋势';
+  static const String statsTabHistory = '历史';
+
+  // ─── Home Flow Quick Pick ───────────────────────────────────────
+  static const String todayFlow = '今日经量';
+  static const String flowLabelNone = '无';
+  static const String flowLabelLight = '少';
+  static const String flowLabelNormal = '中';
+  static const String flowLabelHeavy = '多';
+
   // ─── Settings screen ─────────────────────────────────────────────
   static const String cycleParams = '周期参数';
   static const String reminderSettings = '提醒设置';
