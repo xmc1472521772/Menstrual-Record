@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_background">
+
+    <!-- 顶部：标题 + 状态 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@mipmap/ic_launcher"
+            android:contentDescription="@string/widget_title" />
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/widget_title"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#2A2622" />
+
+    </LinearLayout>
+
+    <!-- 中间：主要内容 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- 左侧：大字状态 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_status_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="经期第 1 天"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#B4564F" />
+
+            <TextView
+                android:id="@+id/widget_sub_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="点击下方按钮记录"
+                android:textSize="11sp"
+                android:textColor="#6E665E"
+                android:layout_marginTop="2dp" />
+
+        </LinearLayout>
+
+        <!-- 右侧：经量快捷按钮（经期中显示） -->
+        <LinearLayout
+            android:id="@+id/widget_flow_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/btn_flow_light"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_margin="2dp"
+                android:background="@drawable/widget_flow_btn_bg"
+                android:src="@drawable/widget_flow_light"
+                android:contentDescription="少"
+                android:scaleType="centerInside" />
+
+            <ImageButton
+                android:id="@+id/btn_flow_normal"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_margin="2dp"
+                android:background="@drawable/widget_flow_btn_bg"
+                android:src="@drawable/widget_flow_normal"
+                android:contentDescription="中"
+                android:scaleType="centerInside" />
+
+            <ImageButton
+                android:id="@+id/btn_flow_heavy"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_margin="2dp"
+                android:background="@drawable/widget_flow_btn_bg"
+                android:src="@drawable/widget_flow_heavy"
+                android:contentDescription="多"
+                android:scaleType="centerInside" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- 底部：操作按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+
+        <Button
+            android:id="@+id/btn_start"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:text="开始经期"
+            android:textSize="11sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/widget_btn_primary"
+            android:layout_marginEnd="4dp" />
+
+        <Button
+            android:id="@+id/btn_end"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:text="结束经期"
+            android:textSize="11sp"
+            android:textColor="#8E3F3A"
+            android:background="@drawable/widget_btn_secondary"
+            android:layout_marginStart="4dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

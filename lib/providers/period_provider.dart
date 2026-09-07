@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
@@ -11,6 +11,7 @@ import '../database/settings_dao.dart';
 import '../services/prediction_service.dart';
 import '../services/notification_service.dart';
 import '../services/ai_health_service.dart';
+import '../services/widget_service.dart';
 import '../utils/date_utils.dart';
 
 /// `startPeriodWithMerge` 的返回类型。
@@ -255,6 +256,7 @@ class PeriodProvider with ChangeNotifier {
 
     // 通知调度涉及 platform channel，刻意不 await —— 它不应阻塞 UI 刷新。
     _scheduleReminderIfNeeded();
+    _updateWidget();
   }
 
   /// 重算派生数据（周期预测 + 经期日索引 + 日类型缓存）。
@@ -282,6 +284,7 @@ class PeriodProvider with ChangeNotifier {
     notifyListeners();
     _autoBackup();
     _scheduleReminderIfNeeded();
+    _updateWidget();
   }
 
   /// 自动备份：将当前数据快照写入应用文档目录。
@@ -919,6 +922,24 @@ class PeriodProvider with ChangeNotifier {
 
   void _clearDayTypeCache() {
     _dayTypeCache.clear();
+  }
+
+  /// 将当前经期状态同步到桌面小组件。
+  /// 仅 Android 平台有效，其他平台静默失败。
+  Future<void> _updateWidget() async {
+    if (kIsWeb) return; // Web 平台无小组件
+    try {
+      final cycleLen = _cycleData?.averageCycleLength.round() ?? 28;
+      final periodLen = _cycleData?.averagePeriodLength.round() ?? 5;
+      await WidgetService.instance.updateWidget(
+        records: _records,
+        cycleData: _cycleData,
+        userCycleLength: cycleLen,
+        userPeriodLength: periodLen,
+      );
+    } catch (e) {
+      debugPrint('Widget update error: $e');
+    }
   }
 
   PeriodRecord? getRecordForDate(DateTime date) {

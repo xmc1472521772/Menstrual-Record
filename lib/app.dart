@@ -8,12 +8,57 @@ import 'screens/record_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/widget_service.dart';
 import 'constants/app_colors.dart';
 import 'constants/app_strings.dart';
 import 'constants/app_theme.dart';
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    // 注册桌面小组件操作回调
+    WidgetService.instance.onWidgetAction = (action, flowLevel) {
+      final provider = context.read<PeriodProvider>();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      switch (action) {
+        case 'start_period':
+          if (!provider.hasOngoingPeriod) {
+            provider.startPeriodWithMerge(today);
+          }
+          break;
+        case 'end_period':
+          if (provider.hasOngoingPeriod) {
+            provider.endPeriod(today);
+          }
+          break;
+        case 'set_flow':
+          if (provider.hasOngoingPeriod && flowLevel != null) {
+            provider.setDailyFlow(today, flowLevel);
+          }
+          break;
+        case 'open_app':
+          // App 已通过 Intent 打开，无需额外操作
+          break;
+      }
+    };
+  }
+
+  @override
+  void dispose() {
+    WidgetService.instance.onWidgetAction = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
