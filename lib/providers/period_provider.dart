@@ -10,6 +10,7 @@ import '../database/daily_flow_dao.dart';
 import '../database/settings_dao.dart';
 import '../services/prediction_service.dart';
 import '../services/notification_service.dart';
+import '../services/ai_health_service.dart';
 import '../utils/date_utils.dart';
 
 /// `startPeriodWithMerge` 的返回类型。
@@ -104,6 +105,16 @@ class PeriodProvider with ChangeNotifier {
   /// 是否存在进行中的经期，由 [_recalculate] 维护。
   bool _hasOngoing = false;
 
+  // ─── AI 助手缓存（跨页面持久化）──────────────────────────────
+  /// 缓存上次生成的 AI 健康报告。退出 AI 助手页面后仍保留。
+  HealthReport? _cachedReport;
+
+  /// 报告生成时的 dataVersion，用于判断经期数据是否已更新。
+  int _reportDataVersion = 0;
+
+  /// 缓存 AI 问答的聊天历史。退出 AI 助手页面后仍保留。
+  final List<ChatMessage> _chatHistory = [];
+
   List<PeriodRecord> get records => _records;
   CycleData? get cycleData => _cycleData;
   bool get isLoading => _isLoading;
@@ -112,6 +123,37 @@ class PeriodProvider with ChangeNotifier {
 
   /// 是否存在进行中的经期。缓存以避免 UI 每次构建都遍历一遍记录列表。
   bool get hasOngoingPeriod => _hasOngoing;
+
+  // ─── AI 助手缓存 getter ──────────────────────────────────────
+  /// 获取缓存的 AI 健康报告（可能为 null）。
+  HealthReport? get cachedReport => _cachedReport;
+
+  /// 报告生成时的 dataVersion。
+  int get reportDataVersion => _reportDataVersion;
+
+  /// 获取缓存的 AI 聊天历史（可变引用，UI 可直接操作）。
+  List<ChatMessage> get chatHistory => _chatHistory;
+
+  /// 保存 AI 健康报告到缓存。
+  void cacheReport(HealthReport report) {
+    _cachedReport = report;
+    _reportDataVersion = _dataVersion;
+  }
+
+  /// 清除缓存的 AI 健康报告（如用户手动刷新或数据变更后）。
+  void clearCachedReport() {
+    _cachedReport = null;
+    _reportDataVersion = 0;
+  }
+
+  /// 判断自上次报告生成后数据是否已更新。
+  bool get isReportDataStale =>
+      _reportDataVersion != 0 && _reportDataVersion != _dataVersion;
+
+  /// 清除聊天历史。
+  void clearChatHistory() {
+    _chatHistory.clear();
+  }
 
   /// 获取某天的经量等级。返回 null 表示无记录。
   int? getFlowLevel(DateTime date) {

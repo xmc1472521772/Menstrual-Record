@@ -17,15 +17,12 @@ class AIAssistantScreen extends StatefulWidget {
 
 class _AIAssistantScreenState extends State<AIAssistantScreen>
     with SingleTickerProviderStateMixin {
-  // ─── 报告相关状态 ───
-  HealthReport? _report;
+  // ─── 报告相关状态（仅UI层状态，报告本身缓存在PeriodProvider）───
   bool _isAnalyzing = false;
   String? _error;
   int _analyzingStep = 0;
-  int _lastReportDataVersion = 0;
 
-  // ─── 问答相关状态 ───
-  final List<ChatMessage> _chatHistory = [];
+  // ─── 问答相关状态（聊天历史缓存在PeriodProvider）───
   final TextEditingController _chatController = TextEditingController();
   bool _isChatLoading = false;
   final ScrollController _chatScrollController = ScrollController();
@@ -55,7 +52,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     _anim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _generateReport();
+      final provider = context.read<PeriodProvider>();
+      // 只有第一次（没有缓存报告）才自动生成
+      if (provider.cachedReport == null &&
+          provider.records.isNotEmpty &&
+          provider.cycleData != null) {
+        _generateReport();
+      }
     });
   }
 
@@ -103,10 +106,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
       if (mounted) {
         setState(() {
-          _report = report;
           _isAnalyzing = false;
-          _lastReportDataVersion = provider.dataVersion;
         });
+        // 将报告缓存到 Provider，退出后仍保留
+        if (report != null) {
+          provider.cacheReport(report);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -129,8 +134,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   bool get _dataUpdatedSinceReport {
     final provider = context.read<PeriodProvider>();
-    return _lastReportDataVersion != provider.dataVersion &&
-        _lastReportDataVersion != 0;
+    return provider.isReportDataStale;
   }
 
   // ─── 问答功能（流式）────────────────────────────────────────
@@ -145,6 +149,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       return;
     }
 
+    final chatHistory = provider.chatHistory;
     final userMessage = ChatMessage(
       role: 'user',
       content: text.trim(),
@@ -153,8 +158,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
     // 立即添加用户消息和空的AI回答消息
     setState(() {
-      _chatHistory.add(userMessage);
-      _chatHistory.add(ChatMessage(
+      chatHistory.add(userMessage);
+      chatHistory.add(ChatMessage(
         role: 'assistant',
         content: '',
         timestamp: DateTime.now(),
@@ -175,7 +180,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         userCycleLength: settings.cycleLength,
         userPeriodLength: settings.periodLength,
         // 传不含最后空回答的历史
-        chatHistory: _chatHistory.sublist(0, _chatHistory.length - 1),
+        chatHistory: chatHistory.sublist(0, chatHistory.length - 1),
       );
 
       await for (final chunk in stream) {
@@ -183,8 +188,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         _streamingBuffer.write(chunk);
         // 实时更新最后一条AI消息
         setState(() {
-          final lastIndex = _chatHistory.length - 1;
-          _chatHistory[lastIndex] = ChatMessage(
+          final lastIndex = chatHistory.length - 1;
+          chatHistory[lastIndex] = ChatMessage(
             role: 'assistant',
             content: _streamingBuffer.toString(),
             timestamp: DateTime.now(),
@@ -203,16 +208,16 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         setState(() {
           // 如果有部分内容已经收到，保留它并添加错误标记
           if (_streamingBuffer.isNotEmpty) {
-            final lastIndex = _chatHistory.length - 1;
-            _chatHistory[lastIndex] = ChatMessage(
+            final lastIndex = chatHistory.length - 1;
+            chatHistory[lastIndex] = ChatMessage(
               role: 'assistant',
               content: '${_streamingBuffer.toString()}\n\n⚠️ $e',
               timestamp: DateTime.now(),
             );
           } else {
             // 没收到任何内容，替换为错误提示
-            final lastIndex = _chatHistory.length - 1;
-            _chatHistory[lastIndex] = ChatMessage(
+            final lastIndex = chatHistory.length - 1;
+            chatHistory[lastIndex] = ChatMessage(
               role: 'assistant',
               content: '回答失败：$e',
               timestamp: DateTime.now(),
@@ -242,7 +247,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       appBar: AppBar(
         title: const Text(AppStrings.aiAssistant),
         actions: [
-          if (_currentTab == 0 && _report != null && !_isAnalyzing)
+          if (_currentTab == 0 && context.read<PeriodProvider>().cachedReport != null && !_isAnalyzing)
             IconButton(
               onPressed: _generateReport,
               icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -345,13 +350,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildReportTab(BuildContext context) {
+    final provider = context.read<PeriodProvider>();
     if (_isAnalyzing) {
       return _buildAnalyzingState(context);
     }
     if (_error != null) {
       return _buildErrorState(context);
     }
-    if (_report == null) {
+    if (provider.cachedReport == null) {
       return _buildGenerateButton(context);
     }
     return _buildReport(context);
@@ -568,7 +574,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildReport(BuildContext context) {
-    final report = _report!;
+    final report = context.read<PeriodProvider>().cachedReport!;
     final themeColors = context.themeColors;
 
     return SingleChildScrollView(
@@ -1307,8 +1313,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   Widget _buildChatTab(BuildContext context) {
     final themeColors = context.themeColors;
+    final provider = context.read<PeriodProvider>();
+    final chatHistory = provider.chatHistory;
     // 判断是否为初始空状态（没有任何消息）
-    final isEmpty = _chatHistory.isEmpty;
+    final isEmpty = chatHistory.isEmpty;
 
     return Column(
       children: [
@@ -1324,12 +1332,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
                     AppDimens.spacingLg,
                     AppDimens.spacingSm,
                   ),
-                  itemCount: _chatHistory.length,
+                  itemCount: chatHistory.length,
                   itemBuilder: (context, index) {
-                    final msg = _chatHistory[index];
+                    final msg = chatHistory[index];
                     // 最后一条AI消息正在流式输出时显示打字光标
                     final isStreaming = _isChatLoading &&
-                        index == _chatHistory.length - 1 &&
+                        index == chatHistory.length - 1 &&
                         msg.role == 'assistant';
                     return _buildChatBubble(msg, themeColors,
                         isStreaming: isStreaming);
