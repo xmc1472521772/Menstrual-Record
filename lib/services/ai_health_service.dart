@@ -1,7 +1,40 @@
-import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
+
+/// 将字符串映射为IconData。
+IconData _iconFromString(String str, AdviceType type) {
+  final s = str.toLowerCase();
+  if (s.contains('period') || s.contains('cycle')) {
+    return Icons.calendar_today_rounded;
+  }
+  if (s.contains('flow') || s.contains('water')) {
+    return Icons.water_drop_rounded;
+  }
+  if (s.contains('warning') || s.contains('hospital') || s.contains('flag')) {
+    return Icons.local_hospital_rounded;
+  }
+  if (s.contains('caution')) {
+    return Icons.warning_amber_rounded;
+  }
+  if (s.contains('check') || s.contains('success')) {
+    return Icons.check_circle_outline_rounded;
+  }
+  if (s.contains('timer') || s.contains('time')) {
+    return Icons.timer_outlined;
+  }
+  if (s.contains('event')) {
+    return Icons.event_available_rounded;
+  }
+  // 默认图标按type区分
+  return switch (type) {
+    AdviceType.info => Icons.info_outline_rounded,
+    AdviceType.caution => Icons.warning_amber_rounded,
+    AdviceType.warning => Icons.error_outline_rounded,
+  };
+}
 
 /// AI健康分析报告中的单条建议项。
 class HealthAdvice {
@@ -16,6 +49,23 @@ class HealthAdvice {
     required this.content,
     required this.type,
   });
+
+  factory HealthAdvice.fromJson(Map<String, dynamic> json) {
+    final typeStr = json['type'] as String? ?? 'info';
+    final type = switch (typeStr) {
+      'warning' => AdviceType.warning,
+      'caution' => AdviceType.caution,
+      _ => AdviceType.info,
+    };
+    final iconStr = json['icon'] as String? ?? 'info';
+    final icon = _iconFromString(iconStr, type);
+    return HealthAdvice(
+      icon: icon,
+      title: json['title'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      type: type,
+    );
+  }
 }
 
 /// 建议类型，用于卡片配色区分。
@@ -37,6 +87,13 @@ class RedFlagSymptom {
     required this.symptom,
     required this.description,
   });
+
+  factory RedFlagSymptom.fromJson(Map<String, dynamic> json) {
+    return RedFlagSymptom(
+      symptom: json['symptom'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+    );
+  }
 }
 
 /// 周期评估结果。
@@ -59,6 +116,15 @@ class CycleAssessment {
     required this.normalRange,
     required this.deviationDays,
   });
+
+  factory CycleAssessment.fromJson(Map<String, dynamic> json) {
+    return CycleAssessment(
+      isNormal: json['isNormal'] as bool? ?? true,
+      explanation: json['explanation'] as String? ?? '',
+      normalRange: json['normalRange'] as String? ?? '正常周期范围：21-35天',
+      deviationDays: (json['deviationDays'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 /// 因素排查项。
@@ -70,6 +136,13 @@ class CauseFactor {
     required this.factor,
     required this.explanation,
   });
+
+  factory CauseFactor.fromJson(Map<String, dynamic> json) {
+    return CauseFactor(
+      factor: json['factor'] as String? ?? '',
+      explanation: json['explanation'] as String? ?? '',
+    );
+  }
 }
 
 /// 行动建议项。
@@ -81,6 +154,13 @@ class ActionSuggestion {
     required this.observation,
     required this.suggestion,
   });
+
+  factory ActionSuggestion.fromJson(Map<String, dynamic> json) {
+    return ActionSuggestion(
+      observation: json['observation'] as String? ?? '',
+      suggestion: json['suggestion'] as String? ?? '',
+    );
+  }
 }
 
 /// 完整的AI健康报告。
@@ -123,81 +203,107 @@ class HealthReport {
     required this.healthScore,
     required this.summary,
   });
+
+  factory HealthReport.fromJson(Map<String, dynamic> json) {
+    final basicInfoRaw = json['basicInfo'] as Map<String, dynamic>? ?? {};
+    final basicInfo = basicInfoRaw.map(
+      (k, v) => MapEntry(k, v?.toString() ?? '-'),
+    );
+
+    final causesRaw = json['causeFactors'] as List? ?? [];
+    final causes = causesRaw
+        .map((e) => CauseFactor.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final actionsRaw = json['actionSuggestions'] as List? ?? [];
+    final actions = actionsRaw
+        .map((e) => ActionSuggestion.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final flagsRaw = json['redFlags'] as List? ?? [];
+    final flags = flagsRaw
+        .map((e) => RedFlagSymptom.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final advicesRaw = json['advices'] as List? ?? [];
+    final advices = advicesRaw
+        .map((e) => HealthAdvice.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    return HealthReport(
+      generatedAt: DateTime.now(),
+      basicInfo: basicInfo,
+      cycleAssessment: CycleAssessment.fromJson(
+        json['cycleAssessment'] as Map<String, dynamic>? ?? {},
+      ),
+      causeFactors: causes,
+      actionSuggestions: actions,
+      redFlags: flags,
+      advices: advices,
+      healthScore: (json['healthScore'] as num?)?.toInt() ?? 75,
+      summary: json['summary'] as String? ?? '',
+    );
+  }
 }
 
 /// AI健康分析服务。
 ///
-/// 基于用户的经期记录、周期数据和每日经量数据，
+/// 通过调用智谱GLM-4-flash大模型，基于用户的经期记录、周期数据和每日经量数据，
 /// 进行客观、严谨的数据分析与健康提示。
 ///
 /// 注意：此服务不给出绝对化的医疗诊断结论，
 /// 仅供用户参考和日常健康管理使用。
 class AIHealthService {
-  /// 医学常量
-  static const int _normalCycleMin = 21;
-  static const int _normalCycleMax = 35;
-  static const int _normalPeriodMin = 2;
-  static const int _normalPeriodMax = 8;
-  static const int _cycleVariationThreshold = 7; // 周期波动超过此天数视为异常
-  static const int _latePeriodThreshold = 7; // 推迟超过此天数需关注
+  /// 智谱API端点
+  static const String _apiUrl =
+      'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
-  /// 生成完整的健康分析报告。
-  static HealthReport? generateReport({
+  /// API Key
+  static const String _apiKey = 'c6ef078858c645fa8c84b37cd48b9894.O9RJw6SrAbGtpCMW';
+
+  /// 模型名称
+  static const String _model = 'glm-4-flash';
+
+  /// 生成完整的健康分析报告（异步，调用智谱GLM API）。
+  ///
+  /// 返回 null 表示数据不足无法生成报告。
+  /// 抛出异常表示API调用失败。
+  static Future<HealthReport?> generateReport({
     required List<PeriodRecord> records,
     required CycleData cycleData,
     required Map<int, int> dailyFlowMap,
     required int userCycleLength,
     required int userPeriodLength,
-  }) {
+  }) async {
     if (records.isEmpty) return null;
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    // ─── 1. 个人基本信息 ───
-    final basicInfo = _collectBasicInfo(records, cycleData, userCycleLength, userPeriodLength);
-
-    // ─── 2. 周期评估 ───
-    final cycleAssessment = _assessCycle(records, cycleData, today);
-
-    // ─── 3. 症因排查 ───
-    final causeFactors = _analyzeCauses(records, cycleData, dailyFlowMap, cycleAssessment);
-
-    // ─── 4. 行动建议 ───
-    final actionSuggestions = _generateActionSuggestions(records, cycleData, dailyFlowMap, cycleAssessment);
-
-    // ─── 5. 就医预警（红旗症状） ───
-    final redFlags = _identifyRedFlags(records, cycleData, dailyFlowMap);
-
-    // ─── 6. 健康建议卡片 ───
-    final advices = _buildAdvices(cycleAssessment, causeFactors, actionSuggestions, redFlags, cycleData, dailyFlowMap);
-
-    // ─── 7. 健康评分 ───
-    final healthScore = _calculateHealthScore(cycleAssessment, records, cycleData, dailyFlowMap);
-
-    // ─── 8. 摘要 ───
-    final summary = _generateSummary(cycleAssessment, healthScore, cycleData);
-
-    return HealthReport(
-      generatedAt: now,
-      basicInfo: basicInfo,
-      cycleAssessment: cycleAssessment,
-      causeFactors: causeFactors,
-      actionSuggestions: actionSuggestions,
-      redFlags: redFlags,
-      advices: advices,
-      healthScore: healthScore,
-      summary: summary,
+    // ─── 1. 收集本地数据并构建用户信息文本 ───
+    final dataText = _buildUserDataText(
+      records, cycleData, dailyFlowMap, userCycleLength, userPeriodLength,
     );
+
+    // ─── 2. 构建系统提示词 ───
+    final systemPrompt = _buildSystemPrompt();
+
+    // ─── 3. 构建用户消息 ───
+    final userMessage = _buildUserMessage(dataText);
+
+    // ─── 4. 调用智谱GLM API ───
+    final response = await _callApi(systemPrompt, userMessage);
+
+    // ─── 5. 解析JSON响应 ───
+    return _parseResponse(response);
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  1. 个人基本信息
+  //  本地数据收集
   // ═══════════════════════════════════════════════════════════════
 
-  static Map<String, String> _collectBasicInfo(
+  /// 将用户的经期记录、周期数据等整理为文本，供AI分析使用。
+  static String _buildUserDataText(
     List<PeriodRecord> records,
     CycleData cycleData,
+    Map<int, int> dailyFlowMap,
     int userCycleLength,
     int userPeriodLength,
   ) {
@@ -205,541 +311,261 @@ class AIHealthService {
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
 
     final lastRecord = sorted.first;
-    final lastStartDate = lastRecord.startDate;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    // 计算历史平均周期
-    final avgCycle = cycleData.averageCycleLength.toStringAsFixed(0);
-    final avgPeriod = cycleData.averagePeriodLength.toStringAsFixed(0);
+    final buffer = StringBuffer();
 
-    // 本次记录/异常情况
-    String currentStatus;
-    if (lastRecord.isOngoing) {
-      currentStatus = '经期进行中（第${lastRecord.periodDays}天）';
+    // ─── 基本信息 ───
+    buffer.writeln('【个人基本信息与历史数据】');
+    buffer.writeln('- 上一次月经来潮日期：${lastRecord.startDate}');
+
+    if (cycleData.totalCycles > 0) {
+      buffer.writeln(
+        '- 历史平均周期长度：${cycleData.averageCycleLength.toStringAsFixed(1)} 天（用户设置值：$userCycleLength 天）',
+      );
+      buffer.writeln(
+        '- 经期持续天数：${cycleData.averagePeriodLength.toStringAsFixed(1)} 天（用户设置值：$userPeriodLength 天）',
+      );
     } else {
-      final daysSinceLast = DateTime.now().difference(lastRecord.startDateTime).inDays;
-      currentStatus = '上次经期开始于 $lastStartDate，距今 $daysSinceLast 天';
+      buffer.writeln('- 历史平均周期长度：暂无足够数据（用户设置值：$userCycleLength 天）');
+      buffer.writeln('- 经期持续天数：暂无足够数据（用户设置值：$userPeriodLength 天）');
     }
 
-    return {
-      'lastPeriodDate': lastStartDate,
-      'avgCycleLength': '$avgCycle 天（设置值 $userCycleLength 天）',
-      'avgPeriodLength': '$avgPeriod 天（设置值 $userPeriodLength 天）',
-      'currentStatus': currentStatus,
-      'totalRecords': '${records.length} 次记录',
-    };
-  }
+    // ─── 本次记录/异常情况 ───
+    buffer.write('- 本次记录/异常情况：');
+    if (lastRecord.isOngoing) {
+      buffer.writeln('经期进行中（第${lastRecord.periodDays}天）');
+    } else {
+      final daysSinceLast = today.difference(lastRecord.startDateTime).inDays;
+      final expectedCycle = cycleData.averageCycleLength.round();
+      final deviation = daysSinceLast - expectedCycle;
+      if (deviation > 0) {
+        buffer.writeln('距上次经期开始已 $daysSinceLast 天，比预期推迟了 $deviation 天');
+      } else if (deviation < 0) {
+        buffer.writeln('距上次经期开始已 $daysSinceLast 天，比预期提前了 ${-deviation} 天');
+      } else {
+        buffer.writeln('距上次经期开始已 $daysSinceLast 天，与预期一致');
+      }
+    }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  2. 周期评估
-  // ═══════════════════════════════════════════════════════════════
+    // ─── 历史经期记录列表 ───
+    buffer.writeln('- 历史经期记录（共 ${records.length} 条）：');
+    for (final record in sorted.take(10)) {
+      final start = record.startDate;
+      final end = record.endDate ?? '进行中';
+      final days = record.periodDays;
+      final flow = record.flowLevel != null
+          ? '经量${_flowLevelText(record.flowLevel!)}'
+          : '';
+      final mood = record.mood != null ? '，情绪：${record.mood}' : '';
+      final symptoms = record.symptoms != null ? '，症状：${record.symptoms}' : '';
+      final notes = record.notes != null && record.notes!.isNotEmpty
+          ? '，备注：${record.notes}'
+          : '';
+      buffer.writeln('  · $start ~ $end（$days 天）$flow$mood$symptoms$notes');
+    }
 
-  static CycleAssessment _assessCycle(
-    List<PeriodRecord> records,
-    CycleData cycleData,
-    DateTime today,
-  ) {
-    final sorted = List<PeriodRecord>.from(records)
+    // ─── 周期长度序列 ───
+    final cycleSorted = List<PeriodRecord>.from(records)
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
-
-    // 收集所有周期长度
     final cycleLengths = <int>[];
-    for (int i = 1; i < sorted.length; i++) {
-      final diff = sorted[i].startDateTime.difference(sorted[i - 1].startDateTime).inDays;
+    for (int i = 1; i < cycleSorted.length; i++) {
+      final diff = cycleSorted[i].startDateTime
+          .difference(cycleSorted[i - 1].startDateTime)
+          .inDays;
       cycleLengths.add(diff);
     }
+    if (cycleLengths.isNotEmpty) {
+      buffer.writeln('- 历史周期长度序列：${cycleLengths.join('、')} 天');
+      final avg = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
+      buffer.writeln('- 平均周期：${avg.toStringAsFixed(1)} 天');
+    }
 
-    if (cycleLengths.isEmpty) {
-      // 只有一条记录
-      final lastRecord = sorted.last;
-      final daysSince = today.difference(lastRecord.startDateTime).inDays;
-      final expectedCycle = cycleData.averageCycleLength.round();
-      final deviation = daysSince - expectedCycle;
-
-      if (lastRecord.isOngoing) {
-        return const CycleAssessment(
-          isNormal: true,
-          explanation: '当前正在经期中，周期评估将在经期结束后进行。',
-          normalRange: '正常周期范围：$_normalCycleMin-$_normalCycleMax 天',
-          deviationDays: 0,
+    // ─── 每日经量数据 ───
+    if (dailyFlowMap.isNotEmpty) {
+      final flowValues = dailyFlowMap.values.where((v) => v > 0).toList();
+      if (flowValues.isNotEmpty) {
+        final avgFlow =
+            flowValues.reduce((a, b) => a + b) / flowValues.length;
+        buffer.writeln(
+          '- 每日经量记录：共 ${flowValues.length} 天，平均经量等级 ${avgFlow.toStringAsFixed(1)}（0=无,1=少,2=中,3=多）',
         );
       }
-
-      return CycleAssessment(
-        isNormal: deviation.abs() <= _cycleVariationThreshold,
-        explanation: '仅有一次记录，距上次经期开始已 $daysSince 天。'
-            '${deviation > 0 ? "比预期推迟了 $deviation 天" : deviation < 0 ? "比预期提前了 ${-deviation} 天" : "与预期一致"}。',
-        normalRange: '正常周期范围：$_normalCycleMin-$_normalCycleMax 天',
-        deviationDays: deviation,
-      );
     }
 
-    // 计算最新周期与历史平均的偏差
-    final latestCycle = cycleLengths.last;
-    final avgCycle = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
-    final deviation = (latestCycle - avgCycle).round();
-
-    // 标准差
-    final variance = cycleLengths.map((v) => pow(v - avgCycle, 2)).reduce((a, b) => a + b) / cycleLengths.length;
-    final stdDev = sqrt(variance);
-
-    // 周期波动性评估
-    final bool isNormalLength = latestCycle >= _normalCycleMin && latestCycle <= _normalCycleMax;
-    final bool isNormalVariation = deviation.abs() <= _cycleVariationThreshold;
-    final bool isNormal = isNormalLength && isNormalVariation;
-
-    final buffer = StringBuffer();
-    if (!isNormalLength) {
-      if (latestCycle < _normalCycleMin) {
-        buffer.write('本次周期仅 $latestCycle 天，短于正常范围下限（$_normalCycleMin 天），属于周期缩短。');
-      } else {
-        buffer.write('本次周期达 $latestCycle 天，超过正常范围上限（$_normalCycleMax 天），属于周期延长。');
+    // ─── 预测信息 ───
+    if (cycleData.predictedNextPeriod != null) {
+      final predicted = cycleData.predictedNextPeriod!;
+      final daysUntil = cycleData.daysUntilPredicted;
+      buffer.writeln('- 预测下次经期开始日期：${predicted.toIso8601String().split('T')[0]}');
+      if (daysUntil != null) {
+        if (daysUntil > 0) {
+          buffer.writeln('- 距下次经期还有 $daysUntil 天');
+        } else if (daysUntil == 0) {
+          buffer.writeln('- 今天是预测经期开始日');
+        } else {
+          buffer.writeln('- 预测经期已逾期 ${-daysUntil} 天');
+        }
       }
-    } else {
-      buffer.write('本次周期 $latestCycle 天，处于正常范围内。');
-    }
-
-    if (deviation > 0 && deviation > _cycleVariationThreshold) {
-      buffer.write(' 相比历史平均推迟了 $deviation 天。');
-    } else if (deviation < 0 && deviation.abs() > _cycleVariationThreshold) {
-      buffer.write(' 相比历史平均提前了 ${-deviation} 天。');
-    } else if (stdDev > 5) {
-      buffer.write(' 历史周期波动较大（标准差 ${stdDev.toStringAsFixed(1)} 天），提示周期不太规律。');
-    } else {
-      buffer.write(' 周期波动在正常范围内（标准差 ${stdDev.toStringAsFixed(1)} 天）。');
-    }
-
-    return CycleAssessment(
-      isNormal: isNormal,
-      explanation: buffer.toString(),
-      normalRange: '正常周期范围：$_normalCycleMin-$_normalCycleMax 天，正常波动范围：±$_cycleVariationThreshold 天',
-      deviationDays: deviation,
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  3. 症因排查
-  // ═══════════════════════════════════════════════════════════════
-
-  static List<CauseFactor> _analyzeCauses(
-    List<PeriodRecord> records,
-    CycleData cycleData,
-    Map<int, int> dailyFlowMap,
-    CycleAssessment assessment,
-  ) {
-    final factors = <CauseFactor>[];
-
-    // 基于偏差方向选择不同因素
-    if (assessment.deviationDays > _latePeriodThreshold) {
-      // 推迟
-      factors.add(const CauseFactor(
-        factor: '压力与情绪因素',
-        explanation: '长期精神压力、焦虑或情绪波动会影响下丘脑-垂体-卵巢轴（HPO轴）功能，导致促性腺激素释放激素脉冲频率改变，从而引起排卵延迟和月经推迟。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '体重与营养变化',
-        explanation: '短期内体重显著下降（>10%）、过度节食或体脂率过低（<18%）会抑制促性腺激素分泌，导致暂时性闭经或周期延长。相反，体重快速增加也可能影响内分泌平衡。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '作息与睡眠',
-        explanation: '长期熬夜、睡眠不足或昼夜节律紊乱会干扰褪黑素和皮质醇的分泌节律，间接影响生殖内分泌轴的稳定性，导致月经推迟。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '内分泌因素',
-        explanation: '多囊卵巢综合征（PCOS）、甲状腺功能异常、高泌乳素血症等内分泌疾病均可表现为月经稀发或推迟。若连续3个周期以上推迟，建议就医排查。',
-      ));
-    } else if (assessment.deviationDays < -_cycleVariationThreshold) {
-      // 提前
-      factors.add(const CauseFactor(
-        factor: '黄体功能不足',
-        explanation: '黄体期缩短会导致周期变短。正常黄体期约12-14天，若少于10天可能影响受孕和月经规律，常见于压力、年龄增长或内分泌紊乱。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '情绪波动',
-        explanation: '短期的情绪剧烈波动可能影响下丘脑功能，导致促性腺激素释放节奏改变，引起排卵提前。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '生活方式变化',
-        explanation: '旅行出差（时区变化）、剧烈运动量增加、饮食结构改变等生活因素变化，都可能暂时影响周期节律。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '子宫因素',
-        explanation: '子宫肌瘤、子宫内膜息肉、宫颈炎症等器质性问题可能引起非经期出血，被误认为是月经提前。若伴有异常出血模式，需就医鉴别。',
-      ));
-    } else {
-      // 正常波动
-      factors.add(const CauseFactor(
-        factor: '生理性波动',
-        explanation: '月经周期存在自然波动，7天以内的变化属于正常范围。情绪、睡眠、饮食的日常变化都可能轻微影响周期。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '季节与温度',
-        explanation: '部分研究表明，季节变化和温度骤变可能对月经周期长度有轻微影响，尤其在春秋交替时节。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '运动强度',
-        explanation: '运动强度的突然增加或减少，会通过影响体脂率和内分泌水平，对周期产生轻微影响。',
-      ));
-      factors.add(const CauseFactor(
-        factor: '药物影响',
-        explanation: '紧急避孕药、抗生素、精神类药物、中药活血化瘀类等药物可能影响近期周期。若在服用药物期间周期波动，通常为药物引起。',
-      ));
-    }
-
-    // 经量异常因素
-    final avgFlow = _calculateAverageFlow(dailyFlowMap);
-    if (avgFlow > 0) {
-      if (avgFlow > 2.5) {
-        factors.add(const CauseFactor(
-          factor: '经量偏多',
-          explanation: '经量持续偏多可能与子宫肌瘤、子宫内膜增厚、凝血功能异常有关。建议观察是否伴有血块增多、贫血症状（乏力、头晕）。',
-        ));
-      } else if (avgFlow < 1.5) {
-        factors.add(const CauseFactor(
-          factor: '经量偏少',
-          explanation: '经量持续偏少可能与子宫内膜薄、内分泌紊乱（如雌激素不足）、过度减肥或近期压力大有关。偶尔一次偏少通常无需担心。',
-        ));
-      }
-    }
-
-    return factors;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  4. 行动建议
-  // ═══════════════════════════════════════════════════════════════
-
-  static List<ActionSuggestion> _generateActionSuggestions(
-    List<PeriodRecord> records,
-    CycleData cycleData,
-    Map<int, int> dailyFlowMap,
-    CycleAssessment assessment,
-  ) {
-    final suggestions = <ActionSuggestion>[];
-
-    // 观察点
-    suggestions.add(const ActionSuggestion(
-      observation: '记录未来1-2个周期的开始与结束日期',
-      suggestion: '持续记录至少2个完整周期，以判断本次偏差是否为偶发或趋势性变化。',
-    ));
-
-    suggestions.add(const ActionSuggestion(
-      observation: '关注经量变化模式',
-      suggestion: '使用App的经量记录功能逐日记录经量等级，观察经量是否持续偏多或偏少。',
-    ));
-
-    if (assessment.deviationDays.abs() > _cycleVariationThreshold) {
-      suggestions.add(const ActionSuggestion(
-        observation: '关注伴随症状',
-        suggestion: '留意是否出现腹痛、异常出血、乳房胀痛、情绪波动等伴随症状，记录在备注中供后续参考。',
-      ));
-    }
-
-    suggestions.add(const ActionSuggestion(
-      observation: '监测基础体温（可选）',
-      suggestion: '如有条件，可每日晨起测量基础体温，帮助判断排卵是否正常发生。',
-    ));
-
-    // 调理建议
-    suggestions.add(const ActionSuggestion(
-      observation: '保持规律作息',
-      suggestion: '尽量在23:00前入睡，保证7-8小时睡眠，维持稳定的生物钟有助于内分泌节律恢复。',
-    ));
-
-    suggestions.add(const ActionSuggestion(
-      observation: '适度运动',
-      suggestion: '每周进行3-5次中等强度运动（如快走、瑜伽、游泳），经期避免剧烈运动。适度运动有助于改善盆腔血液循环和情绪调节。',
-    ));
-
-    suggestions.add(const ActionSuggestion(
-      observation: '均衡饮食',
-      suggestion: '注意补充富含铁元素的食物（红肉、菠菜、红枣）、优质蛋白质和维生素B族。避免过度节食或暴饮暴食。',
-    ));
-
-    suggestions.add(const ActionSuggestion(
-      observation: '情绪管理',
-      suggestion: '尝试冥想、深呼吸或渐进式肌肉放松等减压方法。长期压力是影响月经规律的重要因素之一。',
-    ));
-
-    // 如果周期不规律
-    if (!assessment.isNormal) {
-      suggestions.add(const ActionSuggestion(
-        observation: '就医咨询',
-        suggestion: '若连续3个周期以上不规律，或本次推迟/提前超过7天且排除怀孕可能，建议就诊妇科进行内分泌检查（性激素六项、甲状腺功能等）。',
-      ));
-    }
-
-    return suggestions;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  5. 就医预警（红旗症状）
-  // ═══════════════════════════════════════════════════════════════
-
-  static List<RedFlagSymptom> _identifyRedFlags(
-    List<PeriodRecord> records,
-    CycleData cycleData,
-    Map<int, int> dailyFlowMap,
-  ) {
-    final flags = <RedFlagSymptom>[];
-
-    flags.add(const RedFlagSymptom(
-      symptom: '剧烈腹痛',
-      description: '经期出现难以忍受的下腹绞痛，影响日常活动，止痛药无法缓解时需立即就医。可能是子宫内膜异位症、子宫腺肌症或卵巢囊肿扭转的信号。',
-    ));
-
-    flags.add(const RedFlagSymptom(
-      symptom: '经量异常增多',
-      description: '1-2小时内需更换卫生巾/卫生棉条，或排出大量血块（直径>2.5cm），可能导致贫血，需急诊处理。',
-    ));
-
-    flags.add(const RedFlagSymptom(
-      symptom: '经期超长',
-      description: '经期持续超过10天仍未结束，或经间期反复出血，需就医排查子宫内膜病变、息肉或激素紊乱。',
-    ));
-
-    flags.add(const RedFlagSymptom(
-      symptom: '停经后出血',
-      description: '已停经3个月以上再次出现阴道出血，必须就医排除子宫内膜病变。',
-    ));
-
-    flags.add(const RedFlagSymptom(
-      symptom: '妊娠期出血',
-      description: '确认怀孕后出现任何阴道出血，需立即就医排除先兆流产、宫外孕等。',
-    ));
-
-    flags.add(const RedFlagSymptom(
-      symptom: '异常分泌物',
-      description: '经期外出现大量水样、脓性或带异味分泌物，伴有发热、下腹痛时，可能是盆腔感染的表现。',
-    ));
-
-    return flags;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  6. 健康建议卡片
-  // ═══════════════════════════════════════════════════════════════
-
-  static List<HealthAdvice> _buildAdvices(
-    CycleAssessment assessment,
-    List<CauseFactor> causes,
-    List<ActionSuggestion> actions,
-    List<RedFlagSymptom> redFlags,
-    CycleData cycleData,
-    Map<int, int> dailyFlowMap,
-  ) {
-    final advices = <HealthAdvice>[];
-
-    // 周期规律性建议
-    if (assessment.isNormal) {
-      advices.add(const HealthAdvice(
-        icon: Icons.check_circle_outline_rounded,
-        title: '周期正常',
-        content: '您的周期在正常范围内，继续保持良好的生活习惯即可。规律作息、均衡饮食和适度运动是维持周期规律的基础。',
-        type: AdviceType.info,
-      ));
-    } else {
-      advices.add(HealthAdvice(
-        icon: Icons.warning_amber_rounded,
-        title: '周期波动',
-        content: assessment.explanation,
-        type: AdviceType.caution,
-      ));
-    }
-
-    // 经量建议
-    final avgFlow = _calculateAverageFlow(dailyFlowMap);
-    if (avgFlow > 0) {
-      if (avgFlow > 2.5) {
-        advices.add(const HealthAdvice(
-          icon: Icons.water_drop_rounded,
-          title: '经量偏多',
-          content: '近期记录的经量偏多，建议补充含铁食物（如红肉、动物肝脏、红枣），预防缺铁性贫血。若连续3个月经量偏多，建议就医检查。',
-          type: AdviceType.caution,
-        ));
-      } else if (avgFlow < 1.5 && avgFlow > 0) {
-        advices.add(const HealthAdvice(
-          icon: Icons.water_drop_outlined,
-          title: '经量偏少',
-          content: '近期记录的经量偏少，偶尔一次偏少通常无需担心。若持续偏少并伴有其他不适，可咨询医生了解子宫内膜情况。',
-          type: AdviceType.info,
-        ));
-      } else {
-        advices.add(const HealthAdvice(
-          icon: Icons.water_drop_rounded,
-          title: '经量正常',
-          content: '近期经量记录在正常范围内，经量适中对身体是有利的。',
-          type: AdviceType.info,
-        ));
-      }
-    }
-
-    // 经期长度建议
-    final avgPeriodLength = cycleData.averagePeriodLength;
-    if (avgPeriodLength < _normalPeriodMin) {
-      advices.add(const HealthAdvice(
-        icon: Icons.timer_outlined,
-        title: '经期偏短',
-        content: '平均经期天数偏短（少于$_normalPeriodMin天），可能与子宫内膜薄、雌激素水平偏低有关。若伴有经量明显减少，建议就医咨询。',
-        type: AdviceType.info,
-      ));
-    } else if (avgPeriodLength > _normalPeriodMax) {
-      advices.add(const HealthAdvice(
-        icon: Icons.timer_off_outlined,
-        title: '经期偏长',
-        content: '平均经期天数偏长（超过$_normalPeriodMax天），长期可能导致贫血。建议就医排查子宫内膜息肉、子宫肌瘤等问题。',
-        type: AdviceType.caution,
-      ));
-    }
-
-    // 预测提醒
-    final daysUntil = cycleData.daysUntilPredicted;
-    if (daysUntil != null) {
-      if (daysUntil > 0 && daysUntil <= 3) {
-        advices.add(HealthAdvice(
-          icon: Icons.event_available_rounded,
-          title: '经期临近',
-          content: '预计 $daysUntil 天后下次经期开始，建议提前准备卫生用品，注意保暖，避免过度劳累和寒凉饮食。',
-          type: AdviceType.info,
-        ));
-      } else if (daysUntil < 0) {
-        advices.add(HealthAdvice(
-          icon: Icons.error_outline_rounded,
-          title: '经期已逾期',
-          content: '预计经期已逾期 ${-daysUntil} 天。如有性生活，建议先排除怀孕可能。若推迟超过$_latePeriodThreshold天且排除怀孕，建议就医咨询。',
-          type: AdviceType.warning,
-        ));
-      }
-    }
-
-    // 红旗症状提醒
-    if (redFlags.isNotEmpty) {
-      advices.add(HealthAdvice(
-        icon: Icons.local_hospital_rounded,
-        title: '就医预警',
-        content: '若出现以下红旗症状，请立即就医：${redFlags.take(3).map((r) => r.symptom).join('、')}',
-        type: AdviceType.warning,
-      ));
-    }
-
-    return advices;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  7. 健康评分
-  // ═══════════════════════════════════════════════════════════════
-
-  static int _calculateHealthScore(
-    CycleAssessment assessment,
-    List<PeriodRecord> records,
-    CycleData cycleData,
-    Map<int, int> dailyFlowMap,
-  ) {
-    int score = 100;
-
-    // 周期规律扣分
-    if (!assessment.isNormal) {
-      final deviation = assessment.deviationDays.abs();
-      if (deviation > 14) {
-        score -= 25;
-      } else if (deviation > 7) {
-        score -= 15;
-      } else {
-        score -= 8;
-      }
-    }
-
-    // 经量异常扣分
-    final avgFlow = _calculateAverageFlow(dailyFlowMap);
-    if (avgFlow > 2.5) {
-      score -= 10;
-    } else if (avgFlow > 0 && avgFlow < 1.5) {
-      score -= 5;
-    }
-
-    // 经期天数异常扣分
-    final avgPeriod = cycleData.averagePeriodLength;
-    if (avgPeriod < _normalPeriodMin || avgPeriod > _normalPeriodMax) {
-      score -= 10;
-    }
-
-    // 记录数据量扣分（数据太少评估可信度降低）
-    if (records.length < 3) {
-      score -= 5;
-    }
-
-    // 周期波动扣分
-    final cycleLengths = <int>[];
-    final sorted = List<PeriodRecord>.from(records)
-      ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    for (int i = 1; i < sorted.length; i++) {
-      final diff = sorted[i].startDateTime.difference(sorted[i - 1].startDateTime).inDays;
-      cycleLengths.add(diff);
-    }
-    if (cycleLengths.length >= 2) {
-      final avg = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
-      final variance = cycleLengths.map((v) => pow(v - avg, 2)).reduce((a, b) => a + b) / cycleLengths.length;
-      final stdDev = sqrt(variance);
-      if (stdDev > 7) {
-        score -= 15;
-      } else if (stdDev > 5) {
-        score -= 8;
-      }
-    }
-
-    return score.clamp(0, 100).round();
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  8. 摘要
-  // ═══════════════════════════════════════════════════════════════
-
-  static String _generateSummary(
-    CycleAssessment assessment,
-    int healthScore,
-    CycleData cycleData,
-  ) {
-    final buffer = StringBuffer();
-
-    // 健康评分描述
-    if (healthScore >= 85) {
-      buffer.write('整体周期健康状况良好。');
-    } else if (healthScore >= 70) {
-      buffer.write('周期健康有轻微波动，建议关注。');
-    } else if (healthScore >= 50) {
-      buffer.write('周期存在一定异常，建议调整生活方式并持续观察。');
-    } else {
-      buffer.write('周期异常较为明显，建议尽快就医咨询。');
-    }
-
-    // 周期状态
-    if (assessment.deviationDays.abs() > 7) {
-      buffer.write(assessment.deviationDays > 0
-          ? '本次周期推迟${assessment.deviationDays}天，'
-          : '本次周期提前${-assessment.deviationDays}天，');
-      buffer.write('建议观察后续1-2个周期的变化趋势。');
-    } else if (assessment.isNormal) {
-      buffer.write('本次周期在正常范围内。');
-    }
-
-    // 预测信息
-    final daysUntil = cycleData.daysUntilPredicted;
-    if (daysUntil != null && daysUntil > 0) {
-      buffer.write('预计下次经期还有 $daysUntil 天。');
     }
 
     return buffer.toString();
   }
 
+  static String _flowLevelText(int level) {
+    return switch (level) {
+      0 => '无',
+      1 => '偏少',
+      2 => '正常',
+      3 => '偏多',
+      _ => '未知',
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════
-  //  辅助方法
+  //  提示词构建
   // ═══════════════════════════════════════════════════════════════
 
-  /// 计算平均经量等级
-  static double _calculateAverageFlow(Map<int, int> dailyFlowMap) {
-    if (dailyFlowMap.isEmpty) return 0;
-    final values = dailyFlowMap.values.where((v) => v > 0).toList();
-    if (values.isEmpty) return 0;
-    return values.reduce((a, b) => a + b) / values.length;
+  /// 构建系统提示词——定义AI角色和分析要求。
+  static String _buildSystemPrompt() {
+    return '''你是一位妇产科与女性健康领域的专业助手。请根据用户提供的个人生理周期数据，进行客观、严谨的数据分析与健康提示。
+
+【分析要求】
+
+1. 周期评估：基于数据分析本次周期是否在正常波动范围内（说明正常范围）。
+2. 症因排查：列出导致当前状况（如推迟/疼痛/流量异常）的 3-4 个常见生活或生理因素。
+3. 行动建议：提供接下来的观察点（如需记录哪些指标）以及日常调理建议。
+4. 就医预警：明确指出出现哪些"红旗症状"（如剧烈腹痛、异常出血等）时必须立即就医。
+
+注意：语言请保持客观、体贴、条理清晰，不要夸大风险，也不要给出绝对化的医疗诊断结论。
+
+请以JSON格式输出分析报告，严格遵循以下结构（不要输出JSON以外的任何文本）：
+
+```json
+{
+  "summary": "报告摘要文本，2-3句话概括整体健康状况",
+  "healthScore": 75,
+  "basicInfo": {
+    "lastPeriodDate": "上次月经来潮日期",
+    "avgCycleLength": "历史平均周期长度描述",
+    "avgPeriodLength": "经期持续天数描述",
+    "currentStatus": "本次记录/异常情况描述",
+    "totalRecords": "历史记录条数"
+  },
+  "cycleAssessment": {
+    "isNormal": true,
+    "explanation": "周期评估详细说明",
+    "normalRange": "正常周期范围说明",
+    "deviationDays": 0
+  },
+  "causeFactors": [
+    {"factor": "因素名称", "explanation": "详细解释"},
+    {"factor": "因素名称", "explanation": "详细解释"},
+    {"factor": "因素名称", "explanation": "详细解释"}
+  ],
+  "actionSuggestions": [
+    {"observation": "观察点", "suggestion": "建议内容"},
+    {"observation": "观察点", "suggestion": "建议内容"}
+  ],
+  "redFlags": [
+    {"symptom": "红旗症状名称", "description": "详细说明何时需立即就医"},
+    {"symptom": "红旗症状名称", "description": "详细说明"}
+  ],
+  "advices": [
+    {"icon": "info", "title": "建议标题", "content": "建议内容", "type": "info"},
+    {"icon": "caution", "title": "建议标题", "content": "建议内容", "type": "caution"}
+  ]
+}
+```
+
+字段说明：
+- healthScore: 0-100的整数，基于周期规律性、经量、经期天数综合评分
+- cycleAssessment.isNormal: 布尔值，本次周期是否正常
+- cycleAssessment.deviationDays: 整数，正=推迟天数，负=提前天数，0=正常
+- advices中的type只能是"info"（正常提示）、"caution"（需关注）、"warning"（预警）三种之一
+- advices中的icon可使用"info"、"caution"、"warning"、"period"、"flow"、"cycle"等关键词
+- causeFactors列出3-4个因素
+- redFlags至少列出4个红旗症状''';
+  }
+
+  /// 构建用户消息——将本地数据嵌入提示词模板。
+  static String _buildUserMessage(String dataText) {
+    return '''请根据以下个人生理周期数据进行分析：
+
+$dataText
+
+请按照系统提示中的JSON格式输出完整的健康分析报告。''';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  API调用
+  // ═══════════════════════════════════════════════════════════════
+
+  /// 调用智谱GLM API，返回模型生成的文本内容。
+  static Future<String> _callApi(String systemPrompt, String userMessage) async {
+    final response = await http.post(
+      Uri.parse(_apiUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': _model,
+        'messages': [
+          {'role': 'system', 'content': systemPrompt},
+          {'role': 'user', 'content': userMessage},
+        ],
+        'temperature': 0.3,
+        'max_tokens': 4096,
+      }),
+    ).timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'AI分析请求失败（HTTP ${response.statusCode}）：${response.body}',
+      );
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final choices = body['choices'] as List?;
+    if (choices == null || choices.isEmpty) {
+      throw Exception('AI返回数据格式异常：无choices字段');
+    }
+
+    final content = choices[0]['message']['content'] as String?;
+    if (content == null || content.isEmpty) {
+      throw Exception('AI返回数据为空');
+    }
+
+    return content;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  响应解析
+  // ═══════════════════════════════════════════════════════════════
+
+  /// 解析AI返回的文本内容为HealthReport。
+  static HealthReport _parseResponse(String content) {
+    // 尝试从文本中提取JSON块
+    String jsonStr = content;
+
+    // 如果模型输出了markdown代码块，提取其中的JSON
+    final jsonBlockMatch = RegExp(
+      r'```(?:json)?\s*([\s\S]*?)```',
+    ).firstMatch(content);
+    if (jsonBlockMatch != null) {
+      jsonStr = jsonBlockMatch.group(1)!.trim();
+    } else {
+      // 尝试找到第一个{和最后一个}之间的内容
+      final firstBrace = content.indexOf('{');
+      final lastBrace = content.lastIndexOf('}');
+      if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+        jsonStr = content.substring(firstBrace, lastBrace + 1);
+      }
+    }
+
+    final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+    return HealthReport.fromJson(json);
   }
 }
-

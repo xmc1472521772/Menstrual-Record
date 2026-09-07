@@ -181,7 +181,7 @@ class AppStrings {
   static const String aiRegenerateReport = '重新分析';
   static const String aiNoDataTitle = '暂无数据可分析';
   static const String aiNoDataSubtitle = '请先记录至少一次经期数据，AI助手将为您生成个性化健康分析报告';
-  static const String aiAnalyzing = '正在分析您的健康数据…';
+  static const String aiAnalyzing = 'AI正在分析您的健康数据…';
   static const String aiBasicInfo = '基本信息';
   static const String aiCycleAssessment = '周期评估';
   static const String aiCauseAnalysis = '症因排查';
@@ -198,7 +198,7 @@ class AppStrings {
   static const String aiTotalRecords = '历史记录';
   static const String aiObservation = '观察点';
   static const String aiSuggestion = '建议';
-  static const String aiDisclaimer = '本报告基于您记录的本地数据生成，仅供参考，不构成医疗诊断。如有健康疑虑，请及时就医咨询专业医生。';
+  static const String aiDisclaimer = '本报告由智谱GLM-4大模型基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。';
   static const String aiNormalRange = '正常范围';
   static const String aiDeviation = '偏差';
   static const String aiDaysLate = '推迟';

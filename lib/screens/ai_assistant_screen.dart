@@ -18,6 +18,7 @@ class AIAssistantScreen extends StatefulWidget {
 class _AIAssistantScreenState extends State<AIAssistantScreen> {
   HealthReport? _report;
   bool _isAnalyzing = false;
+  String? _error;
 
   @override
   void initState() {
@@ -36,24 +37,33 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       return;
     }
 
-    setState(() => _isAnalyzing = true);
+    setState(() {
+      _isAnalyzing = true;
+      _error = null;
+    });
 
-    // 模拟分析延迟（500ms），让用户看到分析动画
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      final report = await AIHealthService.generateReport(
+        records: provider.records,
+        cycleData: provider.cycleData!,
+        dailyFlowMap: provider.dailyFlowMap,
+        userCycleLength: settings.cycleLength,
+        userPeriodLength: settings.periodLength,
+      );
 
-    final report = AIHealthService.generateReport(
-      records: provider.records,
-      cycleData: provider.cycleData!,
-      dailyFlowMap: provider.dailyFlowMap,
-      userCycleLength: settings.cycleLength,
-      userPeriodLength: settings.periodLength,
-    );
-
-    if (mounted) {
-      setState(() {
-        _report = report;
-        _isAnalyzing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _report = report;
+          _isAnalyzing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
+          _error = '分析失败：$e';
+        });
+      }
     }
   }
 
@@ -81,6 +91,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
 
           if (_isAnalyzing) {
             return _buildAnalyzingState(context);
+          }
+
+          if (_error != null) {
+            return _buildErrorState(context);
           }
 
           if (_report == null) {
@@ -163,6 +177,57 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Error state
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildErrorState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDimens.spacing3xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppDimens.radius2xl),
+              ),
+              child: const Icon(
+                Icons.cloud_off_rounded,
+                size: 44,
+                color: AppColors.error,
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingXl),
+            Text(
+              '分析失败',
+              style: AppTheme.headingSmall.copyWith(
+                color: context.themeColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingSm),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: AppTheme.bodyMedium.copyWith(
+                color: context.themeColors.onSurfaceTertiary,
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingXl),
+            ElevatedButton.icon(
+              onPressed: _generateReport,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: const Text(AppStrings.aiRegenerateReport),
+            ),
+          ],
+        ),
       ),
     );
   }
