@@ -533,7 +533,7 @@ class AIHealthService {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  四、经量分析
+    //  四、经量分析（含每日明细）
     // ═══════════════════════════════════════════════════════════════
     buffer.writeln('');
     buffer.writeln('【经量分析】');
@@ -557,6 +557,22 @@ class AIHealthService {
         final lastFlowLevel = lastRecord.flowLevel;
         if (lastFlowLevel != null) {
           buffer.writeln('- 最近一次经量：${_flowLevelText(lastFlowLevel)}');
+        }
+
+        // 每日经量明细（日期 -> 经量等级）
+        buffer.writeln('- 每日经量明细（日期：经量等级）：');
+        final sortedFlows = dailyFlowMap.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
+        for (final entry in sortedFlows) {
+          final dateInt = entry.key;
+          final year = dateInt ~/ 10000;
+          final month = (dateInt % 10000) ~/ 100;
+          final day = dateInt % 100;
+          final dateStr = '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+          final level = entry.value;
+          if (level > 0) {
+            buffer.writeln('    $dateStr：${_flowLevelText(level)}（等级$level）');
+          }
         }
       }
     } else {
@@ -648,7 +664,7 @@ class AIHealthService {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  七、近期记录明细
+    //  七、全部经期记录明细（含所有字段）
     // ═══════════════════════════════════════════════════════════════
     buffer.writeln('');
     buffer.writeln('【全部经期记录明细（共${records.length}次）】');
@@ -656,15 +672,39 @@ class AIHealthService {
       final start = record.startDate;
       final end = record.endDate ?? '进行中';
       final days = record.periodDays;
-      final flow = record.flowLevel != null
-          ? '，经量${_flowLevelText(record.flowLevel!)}'
-          : '';
-      final mood = record.mood != null ? '，情绪：${record.mood}' : '';
-      final symptoms = record.symptoms != null ? '，症状：${record.symptoms}' : '';
-      final notes = record.notes != null && record.notes!.isNotEmpty
-          ? '，备注：${record.notes}'
-          : '';
-      buffer.writeln('  · $start ~ $end（$days 天）$flow$mood$symptoms$notes');
+      buffer.writeln('  · 第${sorted.indexOf(record) + 1}次：$start ~ $end（$days 天）');
+      buffer.writeln('    - 经期天数：$days 天');
+      buffer.writeln('    - 周期长度：${record.cycleLength?.toString() ?? '未知'} 天');
+      buffer.writeln('    - 整体经量等级：${record.flowLevel != null ? '${_flowLevelText(record.flowLevel!)}（等级${record.flowLevel}）' : '未设置'}');
+      buffer.writeln('    - 情绪状态：${record.mood ?? '未记录'}');
+      buffer.writeln('    - 症状记录：${record.symptoms ?? '无'}');
+      final notes = record.notes != null && record.notes!.isNotEmpty ? record.notes : '无';
+      buffer.writeln('    - 备注：$notes');
+      // 附带该次经期内的每日经量明细
+      final recordStart = record.startDateTime;
+      final recordEnd = record.endDateTime ?? DateTime.now();
+      final dailyFlowsForRecord = <String, String>{};
+      for (final entry in dailyFlowMap.entries) {
+        final dateInt = entry.key;
+        final year = dateInt ~/ 10000;
+        final month = (dateInt % 10000) ~/ 100;
+        final day = dateInt % 100;
+        final date = DateTime(year, month, day);
+        if ((date.isAfter(recordStart) || date.isAtSameMomentAs(recordStart)) &&
+            (date.isBefore(recordEnd) || date.isAtSameMomentAs(recordEnd)) &&
+            entry.value > 0) {
+          final dateStr = '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+          dailyFlowsForRecord[dateStr] = '${_flowLevelText(entry.value)}（等级${entry.value}）';
+        }
+      }
+      if (dailyFlowsForRecord.isNotEmpty) {
+        buffer.writeln('    - 本次每日经量：');
+        final flowEntries = dailyFlowsForRecord.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
+        for (final fe in flowEntries) {
+          buffer.writeln('      ${fe.key}：${fe.value}');
+        }
+      }
     }
 
     return buffer.toString();
@@ -762,14 +802,19 @@ $dataText
   static String _buildQASystemPrompt(String dataText) {
     return '''你是一位妇产科与女性健康领域的专业助手，正在与用户进行一对一的问答对话。
 
-以下是用户的个人生理周期数据：
+以下是用户的完整个人生理周期数据（包含全部经期记录、每日经量明细、情绪、症状、备注等所有字段）：
 
 $dataText
+
+【重要提示】
+- 你可以访问上述数据中的所有字段，包括每次经期的开始/结束日期、天数、周期长度、整体经量等级、每日经量明细（日期对应的具体经量等级：0=无,1=少,2=中,3=多）、情绪状态、症状记录、备注等。
+- 当用户询问经量相关问题时，请直接引用具体的每日经量数据来回答，例如"2024-01-15：偏少（等级1）"。
+- 当用户询问症状、情绪等问题时，同样引用具体记录中的数据。
 
 【回答规则】
 1. 仅回答与经期、月经周期、女性生殖健康相关的问题。
 2. 如果用户的问题与经期健康完全无关（如天气、美食、科技等），请礼貌地说明你只能回答经期健康相关问题，并引导用户提问。
-3. 回答要结合用户的实际数据进行分析，给出个性化建议。
+3. 回答要结合用户的实际数据进行分析，给出个性化建议。引用具体数据时请标明日期和数值。
 4. 语言保持客观、体贴、条理清晰，不要夸大风险，不要给出绝对化的医疗诊断结论。
 5. 回答控制在200-400字以内，条理清晰。
 6. 如涉及红旗症状（剧烈腹痛、异常出血等），提醒用户及时就医。''';
