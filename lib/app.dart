@@ -25,38 +25,44 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
 
-    // 注册桌面小组件操作回调
-    WidgetService.instance.onWidgetAction = (action, flowLevel) {
-      final provider = context.read<PeriodProvider>();
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
+    // 注册桌面小组件操作回调（使用 setter 以触发暂存操作的重放）
+    WidgetService.instance.widgetActionCallback = (action, flowLevel) {
+      // 延迟到下一帧执行，确保 Provider 已创建
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final provider = context.read<PeriodProvider>();
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
 
-      switch (action) {
-        case 'start_period':
-          if (!provider.hasOngoingPeriod) {
-            provider.startPeriodWithMerge(today);
-          }
-          break;
-        case 'end_period':
-          if (provider.hasOngoingPeriod) {
-            provider.endPeriod(today);
-          }
-          break;
-        case 'set_flow':
-          if (provider.hasOngoingPeriod && flowLevel != null) {
-            provider.setDailyFlow(today, flowLevel);
-          }
-          break;
-        case 'open_app':
-          // App 已通过 Intent 打开，无需额外操作
-          break;
-      }
+        debugPrint('[MyApp] widget action received: $action, flow: $flowLevel');
+
+        switch (action) {
+          case 'start_period':
+            if (!provider.hasOngoingPeriod) {
+              provider.startPeriodWithMerge(today);
+            }
+            break;
+          case 'end_period':
+            if (provider.hasOngoingPeriod) {
+              provider.endPeriod(today);
+            }
+            break;
+          case 'set_flow':
+            if (provider.hasOngoingPeriod && flowLevel != null) {
+              provider.setDailyFlow(today, flowLevel);
+            }
+            break;
+          case 'open_app':
+            // App 已通过 Intent 打开，无需额外操作
+            break;
+        }
+      });
     };
   }
 
   @override
   void dispose() {
-    WidgetService.instance.onWidgetAction = null;
+    WidgetService.instance.widgetActionCallback = null;
     super.dispose();
   }
 

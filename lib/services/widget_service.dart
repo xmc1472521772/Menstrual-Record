@@ -23,6 +23,11 @@ class WidgetService {
   /// [flowLevel] 仅 set_flow 操作有值（1=少, 2=中, 3=多）。
   void Function(String action, int? flowLevel)? onWidgetAction;
 
+  /// 待处理的操作队列。
+  /// 当 onWidgetAction 还未注册时，收到的操作暂存在这里，
+  /// 等 onWidgetAction 注册后依次执行。
+  final List<(String, int?)> _pendingActions = [];
+
   /// 初始化 MethodChannel，监听来自小组件的操作。
   void init() {
     _channel.setMethodCallHandler((call) async {
@@ -52,10 +57,40 @@ class WidgetService {
         }
 
         debugPrint('[WidgetService] widget action: $flutterAction, flow: $flowLevel');
-        onWidgetAction?.call(flutterAction, flowLevel);
+
+        if (onWidgetAction != null) {
+          onWidgetAction!.call(flutterAction, flowLevel);
+        } else {
+          // 回调未注册，暂存到队列
+          debugPrint('[WidgetService] callback not ready, queuing action');
+          _pendingActions.add((flutterAction, flowLevel));
+        }
       }
       return null;
     });
+
+    // 通知原生端 Flutter 已准备好接收小组件操作
+    _channel.invokeMethod('widgetReady').catchError((e) {
+      debugPrint('[WidgetService] widgetReady error: $e');
+    });
+  }
+
+  /// 注册回调后，执行队列中暂存的操作。
+  void _flushPendingActions() {
+    if (_pendingActions.isEmpty) return;
+    for (final (action, flowLevel) in _pendingActions) {
+      debugPrint('[WidgetService] flushing pending action: $action');
+      onWidgetAction?.call(action, flowLevel);
+    }
+    _pendingActions.clear();
+  }
+
+  /// 设置回调并执行暂存的操作。
+  set widgetActionCallback(void Function(String action, int? flowLevel)? callback) {
+    onWidgetAction = callback;
+    if (callback != null) {
+      _flushPendingActions();
+    }
   }
 
   /// 将当前经期状态发送给原生端，更新小组件 UI。
@@ -111,7 +146,6 @@ class WidgetService {
       if (r.endDate != null && lastEnded == null) {
         lastEnded = r;
       } else if (r.endDate != null) {
-        // 取 startDate 最新的已结束记录
         if (r.startDateTime.isAfter(lastEnded!.startDateTime)) {
           lastEnded = r;
         }
