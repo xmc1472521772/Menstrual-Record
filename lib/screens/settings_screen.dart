@@ -507,19 +507,168 @@ class SettingsScreen extends StatelessWidget {
       final selected = await showDialog<File>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('选择备份'),
+          title: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.brandSoft,
+                  borderRadius:
+                      BorderRadius.circular(AppDimens.radiusSm),
+                ),
+                child: const Icon(
+                  Icons.history_rounded,
+                  color: AppColors.brandPrimary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: AppDimens.spacingSm),
+              Expanded(
+                child: Text(
+                  '选择备份',
+                  style: AppTheme.headingSmall.copyWith(
+                    color: context.themeColors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
           content: SizedBox(
             width: double.maxFinite,
-            child: ListView.builder(
+            child: ListView.separated(
               shrinkWrap: true,
               itemCount: backups.length,
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: context.themeColors.divider),
               itemBuilder: (context, index) {
                 final file = backups[index];
-                final name = file.path.split('/').last;
-                return ListTile(
-                  leading: const Icon(Icons.backup_outlined, size: 20),
-                  title: Text(name.replaceAll('auto_backup_', '').replaceAll('.json', '')),
+                final isLatest = index == 0;
+                // 解析文件名中的日期时间
+                // 格式: auto_backup_20260907_143052.json
+                final rawName =
+                    file.path.split(RegExp(r'[/\\]')).last;
+                final dateStr = rawName
+                    .replaceAll('auto_backup_', '')
+                    .replaceAll('.json', '');
+                // 提取 yyyyMMdd 和 HHmmss 两部分
+                final parts = dateStr.split('_');
+                String displayDate = rawName;
+                String displayTime = '';
+                if (parts.length == 2 &&
+                    parts[0].length == 8 &&
+                    parts[1].length == 6) {
+                  final year = parts[0].substring(0, 4);
+                  final month = parts[0].substring(4, 6);
+                  final day = parts[0].substring(6, 8);
+                  final hour = parts[1].substring(0, 2);
+                  final minute = parts[1].substring(2, 4);
+                  displayDate = '$year年$month月$day日';
+                  displayTime = '$hour:$minute';
+                }
+                // 文件大小
+                final fileSize = file.lengthSync();
+                final sizeStr = fileSize > 1024
+                    ? '${(fileSize / 1024).toStringAsFixed(1)} KB'
+                    : '$fileSize B';
+
+                return InkWell(
                   onTap: () => Navigator.pop(ctx, file),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.spacingMd,
+                      vertical: AppDimens.spacingMd,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isLatest
+                          ? AppColors.brandSoft.withValues(alpha: 0.5)
+                          : Colors.transparent,
+                      borderRadius:
+                          BorderRadius.circular(AppDimens.radiusSm),
+                      border: isLatest
+                          ? Border.all(
+                              color: AppColors.brandPrimary
+                                  .withValues(alpha: 0.2),
+                            )
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isLatest
+                              ? Icons.backup_table_rounded
+                              : Icons.backup_outlined,
+                          size: 20,
+                          color: isLatest
+                              ? AppColors.brandPrimary
+                              : context.themeColors.onSurfaceTertiary,
+                        ),
+                        const SizedBox(width: AppDimens.spacingMd),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    displayDate,
+                                    style: AppTheme.titleMedium.copyWith(
+                                      color: isLatest
+                                          ? AppColors.brandPrimary
+                                          : context.themeColors.onSurface,
+                                      fontWeight: isLatest
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppDimens.spacingSm),
+                                  Text(
+                                    displayTime,
+                                    style: AppTheme.bodyMedium.copyWith(
+                                      color: isLatest
+                                          ? AppColors.brandPrimary
+                                              .withValues(alpha: 0.8)
+                                          : context.themeColors.onSurfaceSecondary,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  if (isLatest)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: AppDimens.spacingSm,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.brandPrimary,
+                                        borderRadius:
+                                            BorderRadius.circular(
+                                                AppDimens.radiusFull),
+                                      ),
+                                      child: const Text(
+                                        '最新',
+                                        style: TextStyle(
+                                          color: AppColors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                sizeStr,
+                                style: AppTheme.bodySmall.copyWith(
+                                  color: context.themeColors.onSurfaceTertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
@@ -527,6 +676,11 @@ class SettingsScreen extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
+              style: TextButton.styleFrom(
+                foregroundColor:
+                    context.themeColors.onSurfaceSecondary,
+                textStyle: AppTheme.labelLarge,
+              ),
               child: const Text(AppStrings.cancel),
             ),
           ],
