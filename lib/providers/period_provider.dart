@@ -134,16 +134,48 @@ class PeriodProvider with ChangeNotifier {
   /// 获取缓存的 AI 聊天历史（可变引用，UI 可直接操作）。
   List<ChatMessage> get chatHistory => _chatHistory;
 
-  /// 保存 AI 健康报告到缓存。
+  /// 保存 AI 健康报告到缓存，并持久化到 SQLite。
   void cacheReport(HealthReport report) {
     _cachedReport = report;
     _reportDataVersion = _dataVersion;
+    // 异步持久化，不阻塞 UI
+    _persistCachedReport();
   }
 
   /// 清除缓存的 AI 健康报告（如用户手动刷新或数据变更后）。
   void clearCachedReport() {
     _cachedReport = null;
     _reportDataVersion = 0;
+    // 异步清除持久化
+    _settingsDao.setValue('ai_report_json', '');
+    _settingsDao.setValue('ai_report_data_version', '0');
+  }
+
+  /// 从 SQLite 加载缓存的 AI 报告。
+  Future<void> _loadCachedReport() async {
+    try {
+      final jsonStr = await _settingsDao.getValue('ai_report_json');
+      if (jsonStr == null || jsonStr.isEmpty) return;
+      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+      _cachedReport = HealthReport.fromJson(json);
+      final versionStr = await _settingsDao.getValue('ai_report_data_version');
+      _reportDataVersion = int.tryParse(versionStr ?? '0') ?? 0;
+    } catch (e) {
+      debugPrint('Error loading cached AI report: $e');
+    }
+  }
+
+  /// 将缓存的 AI 报告持久化到 SQLite。
+  Future<void> _persistCachedReport() async {
+    try {
+      if (_cachedReport == null) return;
+      final jsonStr = jsonEncode(_cachedReport!.toJson());
+      await _settingsDao.setValue('ai_report_json', jsonStr);
+      await _settingsDao.setValue(
+          'ai_report_data_version', _reportDataVersion.toString());
+    } catch (e) {
+      debugPrint('Error persisting AI report: $e');
+    }
   }
 
   /// 判断自上次报告生成后数据是否已更新。
@@ -210,6 +242,8 @@ class PeriodProvider with ChangeNotifier {
       if (_autoEndEnabled) {
         await _autoEndExpiredPeriods();
       }
+      // 从本地存储加载缓存的 AI 报告
+      await _loadCachedReport();
       _lastError = null;
     } catch (e) {
       debugPrint('Error loading records: $e');

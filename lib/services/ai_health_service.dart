@@ -38,6 +38,18 @@ IconData _iconFromString(String str, AdviceType type) {
   };
 }
 
+/// 将 AdviceType 映射回字符串关键词（用于 toJson 序列化）。
+String _iconToString(IconData icon) {
+  if (icon == Icons.calendar_today_rounded) return 'period';
+  if (icon == Icons.water_drop_rounded) return 'flow';
+  if (icon == Icons.local_hospital_rounded) return 'flag';
+  if (icon == Icons.warning_amber_rounded) return 'caution';
+  if (icon == Icons.check_circle_outline_rounded) return 'check';
+  if (icon == Icons.timer_outlined) return 'timer';
+  if (icon == Icons.event_available_rounded) return 'event';
+  return 'info';
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  数据模型
 // ═══════════════════════════════════════════════════════════════
@@ -72,6 +84,13 @@ class HealthAdvice {
       type: type,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'icon': _iconToString(icon),
+        'title': title,
+        'content': content,
+        'type': type.name,
+      };
 }
 
 /// 建议类型，用于卡片配色区分。
@@ -100,6 +119,12 @@ class RedFlagSymptom {
       userMatched: json['userMatched'] as bool? ?? false,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'symptom': symptom,
+        'description': description,
+        'userMatched': userMatched,
+      };
 }
 
 /// 周期评估结果。
@@ -124,6 +149,13 @@ class CycleAssessment {
       deviationDays: (json['deviationDays'] as num?)?.toInt() ?? 0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'isNormal': isNormal,
+        'explanation': explanation,
+        'normalRange': normalRange,
+        'deviationDays': deviationDays,
+      };
 }
 
 /// 因素排查项。
@@ -142,6 +174,11 @@ class CauseFactor {
       explanation: json['explanation'] as String? ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'factor': factor,
+        'explanation': explanation,
+      };
 }
 
 /// 行动建议项。
@@ -160,6 +197,11 @@ class ActionSuggestion {
       suggestion: json['suggestion'] as String? ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'observation': observation,
+        'suggestion': suggestion,
+      };
 }
 
 /// 问答消息项。
@@ -239,6 +281,18 @@ class HealthReport {
       summary: json['summary'] as String? ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'generatedAt': generatedAt.toIso8601String(),
+        'basicInfo': basicInfo,
+        'cycleAssessment': cycleAssessment.toJson(),
+        'causeFactors': causeFactors.map((e) => e.toJson()).toList(),
+        'actionSuggestions': actionSuggestions.map((e) => e.toJson()).toList(),
+        'redFlags': redFlags.map((e) => e.toJson()).toList(),
+        'advices': advices.map((e) => e.toJson()).toList(),
+        'healthScore': healthScore,
+        'summary': summary,
+      };
 }
 
 // ═══════════════════════════════════════════════════════════════
