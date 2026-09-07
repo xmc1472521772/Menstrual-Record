@@ -10,6 +10,7 @@ import '../constants/app_theme.dart';
 import '../widgets/cycle_chart.dart';
 import '../widgets/period_length_chart.dart';
 import '../widgets/year_heatmap.dart';
+import 'ai_assistant_screen.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -117,7 +118,88 @@ class _StatsScreenState extends State<StatsScreen>
           _buildAlgorithmSelector(context, settingsProvider, periodProvider),
           const SizedBox(height: AppDimens.spacingLg),
           _buildPredictionCard(context, cycleData),
+          const SizedBox(height: AppDimens.spacingLg),
+          _buildAIAssistantCard(context, cycleData),
         ],
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  //  AI助手入口卡片
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildAIAssistantCard(BuildContext context, CycleData cycleData) {
+    final hasData = cycleData.totalCycles > 0;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AIAssistantScreen(),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(AppDimens.spacingLg),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF6B5B95),
+              Color(0xFF8B7AB8),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+              ),
+              child: const Icon(
+                Icons.psychology_rounded,
+                color: AppColors.white,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: AppDimens.spacingMd),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AI健康助手',
+                    style: AppTheme.titleMedium.copyWith(
+                      color: AppColors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasData
+                        ? '基于您的周期数据生成健康分析报告'
+                        : '记录数据后即可使用',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppColors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.white.withValues(alpha: 0.7),
+              size: 24,
+            ),
+          ],
+        ),
       ),
     );
   }

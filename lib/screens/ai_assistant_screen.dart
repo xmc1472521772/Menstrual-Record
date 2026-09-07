@@ -1370,34 +1370,22 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
               ],
             ),
           ),
-        // ─── 输入框 + 免责声明（底部 padding 避开导航栏）───
+        // ─── 输入框 ───
+        _buildChatInput(themeColors),
+        // ─── 免责声明 ───
         Padding(
-          padding: EdgeInsets.fromLTRB(
+          padding: const EdgeInsets.fromLTRB(
             AppDimens.spacingLg,
-            0,
+            AppDimens.spacingSm,
             AppDimens.spacingLg,
-            MediaQuery.of(context).padding.bottom + 88,
+            AppDimens.spacingSm,
           ),
-          child: Column(
-            children: [
-              _buildChatInput(themeColors),
-              // ─── 免责声明 ───
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppDimens.spacingLg,
-                  0,
-                  AppDimens.spacingLg,
-                  AppDimens.spacingSm,
-                ),
-                child: Text(
-                  AppStrings.aiChatDisclaimer,
-                  style: AppTheme.bodySmall.copyWith(
-                    fontSize: 11,
-                    color: themeColors.onSurfaceTertiary,
-                  ),
-                ),
-              ),
-            ],
+          child: Text(
+            AppStrings.aiChatDisclaimer,
+            style: AppTheme.bodySmall.copyWith(
+              fontSize: 11,
+              color: themeColors.onSurfaceTertiary,
+            ),
           ),
         ),
       ],
