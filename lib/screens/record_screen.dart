@@ -343,17 +343,7 @@ class _RecordScreenState extends State<RecordScreen> {
       lastDate: DateTime(now.year + 1),
       locale: const Locale('zh', 'CN'),
       builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: AppColors.brandPrimary,
-                  onPrimary: AppColors.white,
-                  surface: AppColors.white,
-                  onSurface: AppColors.ink,
-                ),
-          ),
-          child: child!,
-        );
+        return _buildDatePickerTheme(context, child);
       },
     );
     if (picked == null) return;
@@ -372,6 +362,135 @@ class _RecordScreenState extends State<RecordScreen> {
         }
       }
     });
+  }
+
+  /// 构建 DatePicker 主题，使弹出的日历与项目"温暖陶土色"设计语言统一。
+  ///
+  /// 优化点：
+  /// - 使用项目品牌色（陶土色 `brandPrimary`）替代默认蓝色调
+  /// - 圆角使用 `AppDimens.radiusMd`（12px）与卡片圆角保持一致
+  /// - 选中日期使用实心陶土色圆角方块
+  /// - 头部年份/月份使用 `AppTheme.titleLarge` 样式
+  /// - 日期数字使用 `AppTheme.bodyMedium` 统一字号
+  /// - 暖中性背景色（`surfaceCard` / `surfaceTile`）适配明暗主题
+  /// - 头部切换箭头使用品牌色
+  Widget _buildDatePickerTheme(BuildContext context, Widget? child) {
+    final themeColors = context.themeColors;
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: AppColors.brandPrimary,
+              onPrimary: AppColors.white,
+              surface: themeColors.surfaceCard,
+              onSurface: themeColors.onSurface,
+              surfaceContainerHighest: themeColors.surfaceTile,
+            ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: themeColors.surfaceCard,
+          surfaceTintColor: AppColors.transparent,
+          elevation: AppDimens.elevationNone,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimens.radius2xl),
+          ),
+          headerBackgroundColor: AppColors.transparent,
+          headerForegroundColor: themeColors.onSurface,
+          headerHeadlineStyle: AppTheme.headingSmall.copyWith(
+            color: themeColors.onSurface,
+          ),
+          headerHelpStyle: AppTheme.bodySmall.copyWith(
+            color: themeColors.onSurfaceSecondary,
+          ),
+          weekdayStyle: TextStyle(
+            color: themeColors.onSurfaceTertiary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+          yearStyle: TextStyle(
+            color: themeColors.onSurface,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+          ),
+          dayStyle: AppTheme.bodyMedium.copyWith(
+            color: themeColors.onSurface,
+          ),
+          dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.brandPrimary;
+            }
+            return AppColors.transparent;
+          }),
+          dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.white;
+            }
+            if (states.contains(WidgetState.disabled)) {
+              return themeColors.onSurfaceTertiary.withValues(alpha: 0.4);
+            }
+            return themeColors.onSurface;
+          }),
+          dayOverlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return AppColors.brandPrimary.withValues(alpha: 0.12);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return AppColors.brandPrimary.withValues(alpha: 0.08);
+            }
+            return AppColors.transparent;
+          }),
+          todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.brandPrimary;
+            }
+            return AppColors.brandPrimary.withValues(alpha: 0.1);
+          }),
+          todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.white;
+            }
+            return AppColors.brandPrimary;
+          }),
+          todayBorder: const Border.fromBorderSide(
+            BorderSide(color: AppColors.brandPrimary, width: 0),
+          ),
+          yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.brandPrimary;
+            }
+            return AppColors.transparent;
+          }),
+          yearForegroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.white;
+            }
+            if (states.contains(WidgetState.disabled)) {
+              return themeColors.onSurfaceTertiary.withValues(alpha: 0.4);
+            }
+            return themeColors.onSurfaceSecondary;
+          }),
+          yearOverlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return AppColors.brandPrimary.withValues(alpha: 0.12);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return AppColors.brandPrimary.withValues(alpha: 0.08);
+            }
+            return AppColors.transparent;
+          }),
+          cancelButtonStyle: ButtonStyle(
+            foregroundColor: WidgetStateProperty.all(themeColors.onSurfaceSecondary),
+            textStyle: WidgetStateProperty.all(AppTheme.labelLarge),
+          ),
+          confirmButtonStyle: ButtonStyle(
+            foregroundColor: WidgetStateProperty.all(AppColors.brandPrimary),
+            textStyle: WidgetStateProperty.all(AppTheme.labelLarge.copyWith(
+              fontWeight: FontWeight.w600,
+            )),
+          ),
+          dividerColor: themeColors.divider,
+        ),
+      ),
+      child: child!,
+    );
   }
 
   Future<void> _saveRange(PeriodProvider provider) async {
@@ -863,16 +982,7 @@ class _RecordScreenState extends State<RecordScreen> {
                         lastDate: startLastDate,
                         locale: const Locale('zh', 'CN'),
                         builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme:
-                                  Theme.of(context).colorScheme.copyWith(
-                                        primary: AppColors.brandPrimary,
-                                        onPrimary: AppColors.white,
-                                      ),
-                            ),
-                            child: child!,
-                          );
+                          return _buildDatePickerTheme(context, child);
                         },
                       );
                       if (picked != null) {
@@ -936,16 +1046,7 @@ class _RecordScreenState extends State<RecordScreen> {
                             DateTime(editStart.year + 1),
                         locale: const Locale('zh', 'CN'),
                         builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme:
-                                  Theme.of(context).colorScheme.copyWith(
-                                        primary: AppColors.brandPrimary,
-                                        onPrimary: AppColors.white,
-                                      ),
-                            ),
-                            child: child!,
-                          );
+                          return _buildDatePickerTheme(context, child);
                         },
                       );
                       if (picked != null) {
