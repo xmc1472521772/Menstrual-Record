@@ -422,16 +422,153 @@ class _YearHeatmapState extends State<YearHeatmap> {
     }
 
     return GestureDetector(
-      onTap: isThisYear
-          ? () => widget.onDateSelected?.call(date)
+      onTap: isThisYear && isPeriodDay
+          ? () => _showCellInfo(date, flowLevel, themeColors)
           : null,
-      child: Container(
-        width: _cellSize,
-        height: _cellSize,
-        margin: const EdgeInsets.all(_cellGap / 2),
-        decoration: BoxDecoration(
-          color: cellColor,
-          borderRadius: BorderRadius.circular(2.5),
+      child: Tooltip(
+        message: isThisYear && isPeriodDay
+            ? '${date.month}月${date.day}日 ${_flowLabel(flowLevel)}'
+            : (isThisYear ? '${date.month}月${date.day}日' : ''),
+        waitDuration: const Duration(milliseconds: 300),
+        preferBelow: false,
+        child: Container(
+          width: _cellSize,
+          height: _cellSize,
+          margin: const EdgeInsets.all(_cellGap / 2),
+          decoration: BoxDecoration(
+            color: cellColor,
+            borderRadius: BorderRadius.circular(2.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 经量等级对应的中文标签。
+  String _flowLabel(int flowLevel) {
+    switch (flowLevel) {
+      case 0:
+        return '经量未记录';
+      case 1:
+        return '经量少';
+      case 2:
+        return '经量中';
+      case 3:
+        return '经量多';
+      default:
+        return '经量未记录';
+    }
+  }
+
+  /// 点击经期日格子时显示日期+经量信息卡片。
+  void _showCellInfo(DateTime date, int flowLevel, AppThemeColors themeColors) {
+    final weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final weekday = weekdays[date.weekday - 1];
+    final flowLabel = _flowLabel(flowLevel);
+
+    // 经量对应颜色
+    Color flowColor;
+    switch (flowLevel) {
+      case 0:
+        flowColor = AppColors.flowNone;
+        break;
+      case 1:
+        flowColor = AppColors.flowLight;
+        break;
+      case 2:
+        flowColor = AppColors.flowNormal;
+        break;
+      case 3:
+        flowColor = AppColors.flowHeavy;
+        break;
+      default:
+        flowColor = AppColors.flowNone;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: themeColors.surfaceCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimens.spacingLg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 日期标题
+              Row(
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: flowColor,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: AppDimens.spacingSm),
+                  Text(
+                    '${date.year}年${date.month}月${date.day}日',
+                    style: AppTheme.titleMedium.copyWith(
+                      color: themeColors.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppDimens.spacingXs),
+              Text(
+                weekday,
+                style: AppTheme.bodySmall.copyWith(
+                  color: themeColors.onSurfaceTertiary,
+                ),
+              ),
+              const SizedBox(height: AppDimens.spacingMd),
+              // 经量信息
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.spacingMd,
+                  vertical: AppDimens.spacingSm + 2,
+                ),
+                decoration: BoxDecoration(
+                  color: themeColors.surfaceTile,
+                  borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: flowColor,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: AppDimens.spacingSm),
+                    Text(
+                      flowLabel,
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: themeColors.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppDimens.spacingLg),
+              // 关闭按钮
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('关闭'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
