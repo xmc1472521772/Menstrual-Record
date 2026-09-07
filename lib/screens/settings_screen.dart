@@ -196,55 +196,22 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _buildReminderDaysSetting(
       BuildContext context, SettingsProvider provider) {
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingLg,
-          vertical: AppDimens.spacingSm,
-        ),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: AppColors.brandSoft,
-            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-          ),
-          child: const Icon(
-            Icons.notifications,
-            color: AppColors.brandPrimary,
-            size: 24,
-          ),
-        ),
-        title: Text(
-          AppStrings.reminderDays,
-          style: AppTheme.titleMedium.copyWith(
-            color: context.themeColors.onSurface,
-          ),
-        ),
-        subtitle: Text(
-          '提前 ${provider.reminderDays} 天提醒',
-          style: AppTheme.bodyMedium.copyWith(
-            color: context.themeColors.onSurfaceSecondary,
-          ),
-        ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: context.themeColors.onSurfaceTertiary,
-        ),
-        onTap: () => _showNumberPicker(
-          context: context,
-          title: AppStrings.reminderDays,
-          value: provider.reminderDays,
-          min: 1,
-          max: 7,
-          onChanged: (value) => provider.setReminderDays(value),
-        ),
-      ),
+    return _buildSliderSetting(
+      context: context,
+      title: AppStrings.reminderDays,
+      icon: Icons.notifications_rounded,
+      value: provider.reminderDays,
+      min: 1,
+      max: 7,
+      onChanged: (v) => provider.setReminderDays(v.round()),
     );
   }
 
   Widget _buildReminderHourSetting(
       BuildContext context, SettingsProvider provider) {
+    final hour = provider.reminderHour;
+    final timeStr =
+        '${hour.toString().padLeft(2, '0')}:00';
     return Card(
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
@@ -252,16 +219,16 @@ class SettingsScreen extends StatelessWidget {
           vertical: AppDimens.spacingSm,
         ),
         leading: Container(
-          width: 44,
-          height: 44,
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
             color: AppColors.brandSoft,
             borderRadius: BorderRadius.circular(AppDimens.radiusSm),
           ),
           child: const Icon(
-            Icons.access_time,
+            Icons.access_time_rounded,
             color: AppColors.brandPrimary,
-            size: 24,
+            size: 16,
           ),
         ),
         title: Text(
@@ -271,25 +238,96 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          '${provider.reminderHour}:00',
+          timeStr,
           style: AppTheme.bodyMedium.copyWith(
             color: context.themeColors.onSurfaceSecondary,
           ),
         ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: context.themeColors.onSurfaceTertiary,
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimens.spacingMd,
+            vertical: AppDimens.spacingXs,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.brandSoft,
+            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+          ),
+          child: Text(
+            timeStr,
+            style: AppTheme.titleMedium.copyWith(
+              color: AppColors.brandPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
-        onTap: () => _showNumberPicker(
-          context: context,
-          title: AppStrings.reminderTime,
-          value: provider.reminderHour,
-          min: 0,
-          max: 23,
-          onChanged: (value) => provider.setReminderHour(value),
-        ),
+        onTap: () => _pickReminderTime(context, provider),
       ),
     );
+  }
+
+  Future<void> _pickReminderTime(
+      BuildContext context, SettingsProvider provider) async {
+    final initialTime = TimeOfDay(hour: provider.reminderHour, minute: 0);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (context, child) {
+        final themeColors = context.themeColors;
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: AppColors.brandPrimary,
+                  onPrimary: AppColors.white,
+                  surface: themeColors.surfaceCard,
+                  onSurface: themeColors.onSurface,
+                  surfaceContainerHighest: themeColors.surfaceTile,
+                ),
+            timePickerTheme: TimePickerThemeData(
+              backgroundColor: themeColors.surfaceCard,
+              dayPeriodColor: AppColors.brandPrimary.withValues(alpha: 0.15),
+              dayPeriodTextColor: AppColors.brandPrimary,
+              dayPeriodBorderSide: BorderSide(
+                color: AppColors.brandPrimary.withValues(alpha: 0.3),
+              ),
+              dialBackgroundColor: themeColors.surfaceTile,
+              dialHandColor: AppColors.brandPrimary,
+              dialTextColor: themeColors.onSurface,
+              dialSelectedColor: AppColors.brandPrimary,
+              dialSelectedTextColor: AppColors.white,
+              hourMinuteColor: themeColors.surfaceTile,
+              hourMinuteTextColor: themeColors.onSurface,
+              hourMinuteSelectedColor: AppColors.brandPrimary,
+              hourMinuteSelectedTextColor: AppColors.white,
+              hourMinuteShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+              ),
+              dayPeriodShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radius2xl),
+              ),
+              helpStyle: AppTheme.bodySmall.copyWith(
+                color: themeColors.onSurfaceSecondary,
+              ),
+              cancelButtonStyle: ButtonStyle(
+                foregroundColor: WidgetStateProperty.all(
+                    themeColors.onSurfaceSecondary),
+                textStyle: WidgetStateProperty.all(AppTheme.labelLarge),
+              ),
+              confirmButtonStyle: ButtonStyle(
+                foregroundColor: WidgetStateProperty.all(AppColors.brandPrimary),
+                textStyle: WidgetStateProperty.all(
+                    AppTheme.labelLarge.copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+    await provider.setReminderHour(picked.hour);
   }
 
   Widget _buildExportButton(BuildContext context, PeriodProvider provider) {
@@ -518,267 +556,5 @@ class SettingsScreen extends StatelessWidget {
         );
       }
     }
-  }
-
-  void _showNumberPicker({
-    required BuildContext context,
-    required String title,
-    required int value,
-    required int min,
-    required int max,
-    required ValueChanged<int> onChanged,
-  }) {
-    int selectedValue = value;
-    final TextEditingController textController =
-        TextEditingController(text: value.toString());
-    String? errorText;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final canDecrease = selectedValue > min;
-            final canIncrease = selectedValue < max;
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.brandSoft,
-                      borderRadius:
-                          BorderRadius.circular(AppDimens.radiusSm),
-                    ),
-                    child: const Icon(
-                      Icons.tune_rounded,
-                      color: AppColors.brandPrimary,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: AppDimens.spacingSm),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: AppTheme.headingSmall.copyWith(
-                        color: context.themeColors.onSurface,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ── 数值显示 + 加减控制 ──
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimens.spacingLg,
-                      vertical: AppDimens.spacingXl,
-                    ),
-                    decoration: BoxDecoration(
-                      color: context.themeColors.surfaceTile,
-                      borderRadius:
-                          BorderRadius.circular(AppDimens.radiusLg),
-                    ),
-                    child: Column(
-                      children: [
-                        // 加减按钮 + 输入框：三者固定高度，水平居中对齐
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 减少按钮
-                            _buildStepButton(
-                              context: context,
-                              icon: Icons.remove_rounded,
-                              enabled: canDecrease,
-                              onTap: () {
-                                setState(() {
-                                  selectedValue--;
-                                  textController.text =
-                                      selectedValue.toString();
-                                  errorText = null;
-                                });
-                              },
-                            ),
-                            const SizedBox(width: AppDimens.spacingLg),
-                            // 数值输入框（固定高度，不随 errorText 变化）
-                            SizedBox(
-                              width: 100,
-                              height: 48,
-                              child: TextField(
-                                controller: textController,
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                style: AppTheme.statValue.copyWith(
-                                  color: AppColors.brandPrimary,
-                                  fontSize: 28,
-                                ),
-                                decoration: InputDecoration(
-                                  contentPadding:
-                                      const EdgeInsets.symmetric(
-                                    horizontal: AppDimens.spacingXs,
-                                    vertical: AppDimens.spacingXs,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppDimens.radiusMd),
-                                    borderSide: BorderSide(
-                                      color: AppColors.brandPrimary
-                                          .withValues(alpha: 0.3),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppDimens.radiusMd),
-                                    borderSide: const BorderSide(
-                                      color: AppColors.brandPrimary,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  filled: true,
-                                  fillColor:
-                                      context.themeColors.surfaceCard,
-                                ),
-                                onChanged: (text) {
-                                  final newValue = int.tryParse(text);
-                                  if (newValue == null) {
-                                    setState(() {
-                                      errorText = '请输入有效数字';
-                                      selectedValue = value;
-                                    });
-                                  } else if (newValue < min) {
-                                    setState(() {
-                                      errorText = '最小值为 $min';
-                                      selectedValue = newValue;
-                                    });
-                                  } else if (newValue > max) {
-                                    setState(() {
-                                      errorText = '最大值为 $max';
-                                      selectedValue = newValue;
-                                    });
-                                  } else {
-                                    setState(() {
-                                      errorText = null;
-                                      selectedValue = newValue;
-                                    });
-                                  }
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: AppDimens.spacingLg),
-                            // 增加按钮
-                            _buildStepButton(
-                              context: context,
-                              icon: Icons.add_rounded,
-                              enabled: canIncrease,
-                              onTap: () {
-                                setState(() {
-                                  selectedValue++;
-                                  textController.text =
-                                      selectedValue.toString();
-                                  errorText = null;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        // 错误提示（独立行，不影响 Row 内部对齐）
-                        const SizedBox(height: AppDimens.spacingXs),
-                        SizedBox(
-                          height: 18,
-                          child: errorText != null
-                              ? Text(
-                                  errorText!,
-                                  style: AppTheme.bodySmall.copyWith(
-                                    fontSize: 11,
-                                    color: AppColors.error,
-                                  ),
-                                )
-                              : Text(
-                                  '有效范围 $min - $max',
-                                  style: AppTheme.bodySmall.copyWith(
-                                    color: context
-                                        .themeColors.onSurfaceTertiary,
-                                  ),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        context.themeColors.onSurfaceSecondary,
-                    textStyle: AppTheme.labelLarge,
-                  ),
-                  child: const Text(AppStrings.cancel),
-                ),
-                ElevatedButton(
-                  onPressed: errorText == null
-                      ? () {
-                          onChanged(selectedValue);
-                          Navigator.pop(ctx);
-                        }
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary,
-                    foregroundColor: AppColors.white,
-                    elevation: AppDimens.elevationNone,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimens.spacing2xl,
-                      vertical: AppDimens.spacingMd,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppDimens.radiusMd),
-                    ),
-                  ),
-                  child: const Text(AppStrings.confirm),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    ).then((_) {
-      textController.dispose();
-    });
-  }
-
-  /// 构建数字选择器的加减按钮
-  Widget _buildStepButton({
-    required BuildContext context,
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: enabled
-              ? AppColors.brandPrimary
-              : AppColors.brandPrimary.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        ),
-        child: Icon(
-          icon,
-          color: enabled
-              ? AppColors.white
-              : AppColors.brandPrimary.withValues(alpha: 0.4),
-          size: 22,
-        ),
-      ),
-    );
   }
 }
