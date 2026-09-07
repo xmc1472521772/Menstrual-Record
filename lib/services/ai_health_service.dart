@@ -651,8 +651,8 @@ class AIHealthService {
     //  七、近期记录明细
     // ═══════════════════════════════════════════════════════════════
     buffer.writeln('');
-    buffer.writeln('【近期经期记录明细（最近10次）】');
-    for (final record in sorted.take(10)) {
+    buffer.writeln('【全部经期记录明细（共${records.length}次）】');
+    for (final record in sorted) {
       final start = record.startDate;
       final end = record.endDate ?? '进行中';
       final days = record.periodDays;
