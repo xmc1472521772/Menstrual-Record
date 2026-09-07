@@ -34,8 +34,9 @@ class _YearHeatmapState extends State<YearHeatmap> {
   /// 当前显示的年份。
   late int _year;
 
-  /// 经期日索引：`yyyyMMdd -> true`，用于 O(1) 判断某天是否为经期。
-  late Set<int> _periodDays;
+  /// 经期日索引：`yyyyMMdd -> flowLevel`，用于 O(1) 判断某天是否为经期及其经量。
+  /// flowLevel: 1=偏少, 2=正常, 3=偏多, 0=未设置（默认中等）
+  late Map<int, int> _periodDays;
 
   @override
   void initState() {
@@ -61,7 +62,8 @@ class _YearHeatmapState extends State<YearHeatmap> {
       var d = DateTime(start.year, start.month, start.day);
       while (!d.isAfter(end)) {
         if (d.year == _year) {
-          _periodDays.add(AppDateUtils.dayKey(d));
+          // 经量等级：null 视为 0（未设置，用中等深浅）
+          _periodDays[AppDateUtils.dayKey(d)] = r.flowLevel ?? 0;
         }
         d = d.add(const Duration(days: 1));
       }
@@ -342,12 +344,27 @@ class _YearHeatmapState extends State<YearHeatmap> {
     DateTime today,
   ) {
     final isThisYear = date.year == _year;
-    final isPeriodDay = _periodDays.contains(AppDateUtils.dayKey(date));
+    final flowLevel = _periodDays[AppDateUtils.dayKey(date)];
+    final isPeriodDay = flowLevel != null;
     final isFuture = date.isAfter(today);
 
     Color? cellColor;
     if (isPeriodDay) {
-      cellColor = AppColors.brandPrimary;
+      // 根据经量等级显示不同深浅
+      // flowLevel: 0=未设置（中等）, 1=偏少, 2=正常, 3=偏多
+      switch (flowLevel) {
+        case 1:
+          cellColor = AppColors.brandPrimary.withValues(alpha: 0.4);
+          break;
+        case 3:
+          cellColor = AppColors.brandPrimary;
+          break;
+        case 2:
+        case 0:
+        default:
+          cellColor = AppColors.brandPrimary.withValues(alpha: 0.7);
+          break;
+      }
     } else if (!isThisYear) {
       cellColor = Colors.transparent;
     } else {
@@ -373,37 +390,38 @@ class _YearHeatmapState extends State<YearHeatmap> {
 
   Widget _buildLegend(BuildContext context) {
     final themeColors = context.themeColors;
+    // 3 个经量等级色块 + 非经期底色
+    final legendColors = [
+      themeColors.surfaceTile.withValues(alpha: 0.5),
+      AppColors.brandPrimary.withValues(alpha: 0.4), // 偏少
+      AppColors.brandPrimary.withValues(alpha: 0.7), // 正常
+      AppColors.brandPrimary, // 偏多
+    ];
+    final legendLabels = ['无', '少', '中', '多'];
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Text(
-          '少',
-          style: TextStyle(
-            fontSize: 10,
-            color: themeColors.onSurfaceTertiary,
-          ),
-        ),
-        const SizedBox(width: 4),
-        ...List.generate(4, (i) {
-          final alpha = 0.25 + i * 0.25;
-          return Container(
+        for (int i = 0; i < legendColors.length; i++) ...[
+          Container(
             width: 10,
             height: 10,
             margin: const EdgeInsets.symmetric(horizontal: 1),
             decoration: BoxDecoration(
-              color: AppColors.brandPrimary.withValues(alpha: alpha),
+              color: legendColors[i],
               borderRadius: BorderRadius.circular(2),
             ),
-          );
-        }),
-        const SizedBox(width: 4),
-        Text(
-          '多',
-          style: TextStyle(
-            fontSize: 10,
-            color: themeColors.onSurfaceTertiary,
           ),
-        ),
+          const SizedBox(width: 2),
+          Text(
+            legendLabels[i],
+            style: TextStyle(
+              fontSize: 9,
+              color: themeColors.onSurfaceTertiary,
+            ),
+          ),
+          if (i < legendColors.length - 1)
+            const SizedBox(width: 8),
+        ],
       ],
     );
   }

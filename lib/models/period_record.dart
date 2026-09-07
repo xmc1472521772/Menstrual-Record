@@ -4,10 +4,16 @@ class PeriodRecord {
   final String? endDate;
   final int? cycleLength;
   final int? periodLength;
+  final int? flowLevel;
   final String? mood;
   final String? notes;
   final String? symptoms;
   final int createdAt;
+
+  /// 经量等级：1=偏少, 2=正常, 3=偏多, null=未设置
+  static const int flowLight = 1;
+  static const int flowNormal = 2;
+  static const int flowHeavy = 3;
 
   PeriodRecord({
     this.id,
@@ -15,6 +21,7 @@ class PeriodRecord {
     this.endDate,
     this.cycleLength,
     this.periodLength,
+    this.flowLevel,
     this.mood,
     this.notes,
     this.symptoms,
@@ -27,6 +34,7 @@ class PeriodRecord {
       'end_date': endDate,
       'cycle_length': cycleLength,
       'period_length': periodLength,
+      'flow_level': flowLevel,
       'mood': mood,
       'notes': notes,
       'symptoms': symptoms,
@@ -43,6 +51,7 @@ class PeriodRecord {
       endDate: map['end_date'] as String?,
       cycleLength: map['cycle_length'] as int?,
       periodLength: map['period_length'] as int?,
+      flowLevel: map['flow_level'] as int?,
       mood: map['mood'] as String?,
       notes: map['notes'] as String?,
       symptoms: map['symptoms'] as String?,
@@ -57,6 +66,7 @@ class PeriodRecord {
       'endDate': endDate,
       'cycleLength': cycleLength,
       'periodLength': periodLength,
+      'flowLevel': flowLevel,
       'mood': mood,
       'notes': notes,
       'symptoms': symptoms,
@@ -74,6 +84,7 @@ class PeriodRecord {
       endDate: json['endDate'] as String?,
       cycleLength: json['cycleLength'] as int?,
       periodLength: json['periodLength'] as int?,
+      flowLevel: json['flowLevel'] as int?,
       mood: (json['mood'] as String?)?.isNotEmpty == true
           ? json['mood'] as String
           : null,
@@ -97,6 +108,7 @@ class PeriodRecord {
     String? endDate,
     int? cycleLength,
     int? periodLength,
+    int? flowLevel,
     String? mood,
     String? notes,
     String? symptoms,
@@ -107,6 +119,7 @@ class PeriodRecord {
     bool clearSymptoms = false,
     bool clearCycleLength = false,
     bool clearPeriodLength = false,
+    bool clearFlowLevel = false,
   }) {
     return PeriodRecord(
       id: id ?? this.id,
@@ -116,6 +129,7 @@ class PeriodRecord {
           clearCycleLength ? null : (cycleLength ?? this.cycleLength),
       periodLength:
           clearPeriodLength ? null : (periodLength ?? this.periodLength),
+      flowLevel: clearFlowLevel ? null : (flowLevel ?? this.flowLevel),
       mood: clearMood ? null : (mood ?? this.mood),
       notes: clearNotes ? null : (notes ?? this.notes),
       symptoms: clearSymptoms ? null : (symptoms ?? this.symptoms),

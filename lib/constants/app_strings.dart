@@ -111,8 +111,9 @@ class AppStrings {
   static const String weightedMoreAccurate = '根据数据特征自动切换算法，更精准';
   static const String weightedDescription = '自适应混合算法：自动检测周期规律性，规律用户用 WMA-6 加权移动平均，不规律或突变用户用 WMA-3 + 剪切均值，冷启动用医学基线 28 天。';
   static const String needMoreDataToPredict = '需要更多数据来预测';
+  static const String viewMore = '查看更多';
+  static const String collapse = '收起';
   static const String recordsCount = '共 {} 条记录';
-  static const String pageIndicator = '{}/{}';
   static const String daysLeft = '还有 {} 天';
   static const String today_ = '今天';
   static const String daysPassed = '已过 {} 天';

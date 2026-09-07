@@ -19,7 +19,7 @@ class DatabaseHelper implements DatabaseProvider {
   DatabaseHelper._internal();
 
   /// Current database version. Increment when schema changes.
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   @override
   Future<Database> get database async {
@@ -61,10 +61,11 @@ class DatabaseHelper implements DatabaseProvider {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_period_start_date ON period_records (start_date)');
     }
-    // Example for future migrations:
-    //   if (oldVersion < 3) {
-    //     await db.execute('ALTER TABLE period_records ADD COLUMN tag TEXT');
-    //   }
+    if (oldVersion < 3) {
+      // Add flow_level column for menstrual flow intensity (1=light, 2=normal, 3=heavy)
+      await db.execute(
+          'ALTER TABLE period_records ADD COLUMN flow_level INTEGER');
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -75,6 +76,7 @@ class DatabaseHelper implements DatabaseProvider {
         end_date TEXT,
         cycle_length INTEGER,
         period_length INTEGER,
+        flow_level INTEGER,
         mood TEXT,
         notes TEXT,
         symptoms TEXT,

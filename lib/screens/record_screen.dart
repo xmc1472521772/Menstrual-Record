@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../models/period_record.dart';
 import 'package:intl/intl.dart';
@@ -8,7 +7,6 @@ import '../providers/settings_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
-import '../utils/date_utils.dart';
 import 'add_record_calendar_page.dart';
 
 /// 多选日历默认延展天数（X）的取值规则：
@@ -841,8 +839,9 @@ class _RecordScreenState extends State<RecordScreen> {
     DateTime? editEnd = record.endDateTime;
     bool isOngoing = record.isOngoing;
 
-    // ── 症状/心情/备注 ──
+    // ── 症状/心情/备注/经量 ──
     String? editMood = record.mood;
+    int? editFlowLevel = record.flowLevel;
     List<String> editSymptoms = record.symptoms != null
         ? record.symptoms!.split(',').where((s) => s.isNotEmpty).toList()
         : [];
@@ -1143,6 +1142,63 @@ class _RecordScreenState extends State<RecordScreen> {
                       ),
                     ),
                   ],
+                  // ── 经量选择 ──
+                  const SizedBox(height: AppDimens.spacingLg),
+                  Text(
+                    '经量',
+                    style: AppTheme.bodyMedium.copyWith(
+                      color: AppColors.inkSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppDimens.spacingSm),
+                  Wrap(
+                    spacing: AppDimens.spacingSm,
+                    runSpacing: AppDimens.spacingSm,
+                    children: [
+                      ('偏少', PeriodRecord.flowLight),
+                      ('正常', PeriodRecord.flowNormal),
+                      ('偏多', PeriodRecord.flowHeavy),
+                    ].map((item) {
+                      final label = item.$1;
+                      final level = item.$2;
+                      final isSelected = editFlowLevel == level;
+                      return GestureDetector(
+                        onTap: () {
+                          setDialogState(() {
+                            editFlowLevel = isSelected ? null : level;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppDimens.spacingMd,
+                            vertical: AppDimens.spacingXs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.brandPrimary.withValues(alpha: 0.12)
+                                : ctx.themeColors.surfaceTile,
+                            borderRadius:
+                                BorderRadius.circular(AppDimens.radiusFull),
+                            border: isSelected
+                                ? Border.all(
+                                    color: AppColors.brandPrimary, width: 1.2)
+                                : Border.all(
+                                    color: ctx.themeColors.divider
+                                        .withValues(alpha: 0.3),
+                                    width: 0.5),
+                          ),
+                          child: Text(
+                            label,
+                            style: AppTheme.bodySmall.copyWith(
+                              color: isSelected
+                                  ? AppColors.brandPrimary
+                                  : ctx.themeColors.onSurfaceSecondary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                   // ── 心情选择 ──
                   const SizedBox(height: AppDimens.spacingLg),
                   Text(
@@ -1378,6 +1434,7 @@ class _RecordScreenState extends State<RecordScreen> {
                           startDate: startStr,
                           endDate: endStr,
                           periodLength: periodLength,
+                          flowLevel: editFlowLevel,
                           mood: editMood,
                           symptoms: editSymptoms.isEmpty
                               ? null
@@ -1385,6 +1442,7 @@ class _RecordScreenState extends State<RecordScreen> {
                           notes: editNotes.isEmpty ? null : editNotes,
                           clearEndDate: isOngoing,
                           clearPeriodLength: isOngoing,
+                          clearFlowLevel: editFlowLevel == null,
                           clearMood: editMood == null,
                           clearSymptoms: editSymptoms.isEmpty,
                           clearNotes: editNotes.isEmpty,

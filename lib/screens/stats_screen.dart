@@ -22,23 +22,8 @@ class _StatsScreenState extends State<StatsScreen> {
   /// 每页显示的历史记录条数
   static const int _pageSize = 5;
 
-  /// PageView 控制器
-  late PageController _pageController;
-
-  /// 当前页码（从 0 开始）
-  int _currentPage = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
+  /// 当前显示的记录条数（页数 × _pageSize）
+  int _displayCount = _pageSize;
 
   @override
   Widget build(BuildContext context) {
@@ -54,13 +39,10 @@ class _StatsScreenState extends State<StatsScreen> {
             return _buildEmptyState(context);
           }
 
-          // 当数据量变化时（如导入/删除），修正页码不越界
+          // 当数据量变化时（如导入/删除），确保 _displayCount 不越界
           final totalPeriods = cycleData.recentPeriods.length;
-          final totalPages = (totalPeriods / _pageSize).ceil();
-          if (totalPages == 0) {
-            // 无数据时保持 0 页
-          } else if (_currentPage >= totalPages) {
-            _currentPage = totalPages - 1;
+          if (_displayCount > totalPeriods) {
+            _displayCount = totalPeriods;
           }
 
           return SingleChildScrollView(
@@ -473,9 +455,8 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildHistoryList(BuildContext context, CycleData cycleData) {
     final periods = cycleData.recentPeriods;
-
-    // 将记录按 _pageSize 条分页
-    final totalPages = (periods.length / _pageSize).ceil();
+    final displayPeriods = periods.take(_displayCount).toList();
+    final hasMore = _displayCount < periods.length;
 
     return Card(
       child: Padding(
@@ -523,34 +504,19 @@ class _StatsScreenState extends State<StatsScreen> {
                 ),
               )
             else ...[
-              // 左右滑动翻页，每页 _pageSize 条记录
-              SizedBox(
-                height: _pageSize * 72.0,
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: totalPages,
-                  onPageChanged: (page) {
-                    setState(() {
-                      _currentPage = page;
-                    });
-                  },
-                  itemBuilder: (context, pageIndex) {
-                    final start = pageIndex * _pageSize;
-                    final end = (start + _pageSize).clamp(0, periods.length);
-                    final pageItems = periods.sublist(start, end);
-                    return Column(
-                      children: [
-                        for (int i = 0; i < pageItems.length; i++)
-                          _buildPeriodItem(context, pageItems[i], i),
-                      ],
-                    );
-                  },
-                ),
+              // 仅展开当前页的记录，避免数据过多时列表过长
+              Column(
+                children: [
+                  for (int i = 0; i < displayPeriods.length; i++)
+                    _buildPeriodItem(context, displayPeriods[i], i),
+                ],
               ),
-              if (totalPages > 1) ...[
+              if (hasMore || _displayCount > _pageSize)
                 const SizedBox(height: AppDimens.spacingSm),
-                _buildPageIndicator(context, totalPages),
-              ],
+              if (hasMore)
+                _buildViewMoreButton(context, periods.length)
+              else if (_displayCount > _pageSize)
+                _buildCollapseButton(context),
             ],
           ],
         ),
@@ -558,73 +524,65 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _buildPageIndicator(BuildContext context, int totalPages) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // 左翻页按钮
-        _buildNavButton(
-          context,
-          icon: Icons.chevron_left,
-          enabled: _currentPage > 0,
-          onTap: () {
-            _pageController.previousPage(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
-          },
-        ),
-        const SizedBox(width: AppDimens.spacingMd),
-        // 页码指示器
-        Text(
-          AppStrings.pageIndicator
-              .replaceFirst('{}', '${_currentPage + 1}')
-              .replaceFirst('{}', '$totalPages'),
-          style: AppTheme.labelMedium.copyWith(
-            color: context.themeColors.onSurfaceSecondary,
+  Widget _buildViewMoreButton(BuildContext context, int totalCount) {
+    final remaining = totalCount - _displayCount;
+    final nextBatch = remaining < _pageSize ? remaining : _pageSize;
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          setState(() {
+            _displayCount += nextBatch;
+          });
+        },
+        icon: const Icon(Icons.expand_more, size: 20),
+        label: Text(
+          '${AppStrings.viewMore} $nextBatch ${AppStrings.days}',
+          style: AppTheme.buttonLabel.copyWith(
+            color: AppColors.brandPrimary,
           ),
         ),
-        const SizedBox(width: AppDimens.spacingMd),
-        // 右翻页按钮
-        _buildNavButton(
-          context,
-          icon: Icons.chevron_right,
-          enabled: _currentPage < totalPages - 1,
-          onTap: () {
-            _pageController.nextPage(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
-          },
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: AppColors.brandPrimary.withValues(alpha: 0.3),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          ),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimens.spacingMd,
+          ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildNavButton(
-    BuildContext context, {
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: enabled
-              ? AppColors.brandPrimary.withValues(alpha: 0.1)
-              : context.themeColors.surfaceTile,
+  Widget _buildCollapseButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          setState(() {
+            _displayCount = _pageSize;
+          });
+        },
+        icon: const Icon(Icons.expand_less, size: 20),
+        label: Text(
+          AppStrings.collapse,
+          style: AppTheme.buttonLabel.copyWith(
+            color: AppColors.brandPrimary,
+          ),
         ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: enabled
-              ? AppColors.brandPrimary
-              : context.themeColors.onSurfaceTertiary,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: AppColors.brandPrimary.withValues(alpha: 0.3),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          ),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimens.spacingMd,
+          ),
         ),
       ),
     );
