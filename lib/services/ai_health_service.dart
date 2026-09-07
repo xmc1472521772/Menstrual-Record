@@ -36,6 +36,10 @@ IconData _iconFromString(String str, AdviceType type) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  数据模型
+// ═══════════════════════════════════════════════════════════════
+
 /// AI健康分析报告中的单条建议项。
 class HealthAdvice {
   final IconData icon;
@@ -70,11 +74,8 @@ class HealthAdvice {
 
 /// 建议类型，用于卡片配色区分。
 enum AdviceType {
-  /// 一般提示（绿色）
   info,
-  /// 需关注（黄色）
   caution,
-  /// 预警（红色）
   warning,
 }
 
@@ -82,32 +83,28 @@ enum AdviceType {
 class RedFlagSymptom {
   final String symptom;
   final String description;
+  final bool userMatched;
 
   const RedFlagSymptom({
     required this.symptom,
     required this.description,
+    this.userMatched = false,
   });
 
   factory RedFlagSymptom.fromJson(Map<String, dynamic> json) {
     return RedFlagSymptom(
       symptom: json['symptom'] as String? ?? '',
       description: json['description'] as String? ?? '',
+      userMatched: json['userMatched'] as bool? ?? false,
     );
   }
 }
 
 /// 周期评估结果。
 class CycleAssessment {
-  /// 本次周期是否在正常波动范围内
   final bool isNormal;
-
-  /// 评估说明文本
   final String explanation;
-
-  /// 正常周期范围描述
   final String normalRange;
-
-  /// 本次偏差天数（正=推迟，负=提前，0=正常）
   final int deviationDays;
 
   const CycleAssessment({
@@ -163,33 +160,29 @@ class ActionSuggestion {
   }
 }
 
+/// 问答消息项。
+class ChatMessage {
+  final String role;
+  final String content;
+  final DateTime timestamp;
+
+  const ChatMessage({
+    required this.role,
+    required this.content,
+    required this.timestamp,
+  });
+}
+
 /// 完整的AI健康报告。
 class HealthReport {
-  /// 报告生成时间
   final DateTime generatedAt;
-
-  /// 个人基本信息摘要
   final Map<String, String> basicInfo;
-
-  /// 周期评估
   final CycleAssessment cycleAssessment;
-
-  /// 症因排查（3-4个常见因素）
   final List<CauseFactor> causeFactors;
-
-  /// 行动建议（观察点 + 调理建议）
   final List<ActionSuggestion> actionSuggestions;
-
-  /// 就医预警（红旗症状列表）
   final List<RedFlagSymptom> redFlags;
-
-  /// 健康建议卡片列表
   final List<HealthAdvice> advices;
-
-  /// 综合健康评分（0-100）
   final int healthScore;
-
-  /// 报告摘要
   final String summary;
 
   const HealthReport({
@@ -246,28 +239,34 @@ class HealthReport {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  AI健康分析服务
+// ═══════════════════════════════════════════════════════════════
+
 /// AI健康分析服务。
 ///
 /// 通过调用智谱GLM-4-flash大模型，基于用户的经期记录、周期数据和每日经量数据，
 /// 进行客观、严谨的数据分析与健康提示。
-///
-/// 注意：此服务不给出绝对化的医疗诊断结论，
-/// 仅供用户参考和日常健康管理使用。
 class AIHealthService {
   /// 智谱API端点
   static const String _apiUrl =
       'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
-  /// API Key
-  static const String _apiKey = 'c6ef078858c645fa8c84b37cd48b9894.O9RJw6SrAbGtpCMW';
+  /// API Key —— 从编译时环境变量读取，避免硬编码
+  static const String _apiKey = String.fromEnvironment(
+    'GLM_API_KEY',
+    defaultValue: '',
+  );
 
   /// 模型名称
   static const String _model = 'glm-4-flash';
 
+  /// API Key 是否已配置
+  static bool get isConfigured => _apiKey.isNotEmpty;
+
+  // ─── 健康报告生成 ──────────────────────────────────────────────
+
   /// 生成完整的健康分析报告（异步，调用智谱GLM API）。
-  ///
-  /// 返回 null 表示数据不足无法生成报告。
-  /// 抛出异常表示API调用失败。
   static Future<HealthReport?> generateReport({
     required List<PeriodRecord> records,
     required CycleData cycleData,
@@ -277,29 +276,59 @@ class AIHealthService {
   }) async {
     if (records.isEmpty) return null;
 
-    // ─── 1. 收集本地数据并构建用户信息文本 ───
+    final dataText = _buildUserDataText(
+      records, cycleData, dailyFlowMap, userCycleLength, userPeriodLength,
+    );
+    final systemPrompt = _buildSystemPrompt();
+    final userMessage = _buildUserMessage(dataText);
+    final response = await _callApi(systemPrompt, userMessage);
+    return _parseResponse(response);
+  }
+
+  // ─── 问答功能 ──────────────────────────────────────────────────
+
+  /// 基于用户经期数据进行限定域问答。
+  ///
+  /// [chatHistory] 为之前的对话历史（不含本次问题）。
+  /// 返回AI的回答文本。
+  static Future<String> askQuestion({
+    required String question,
+    required List<PeriodRecord> records,
+    required CycleData cycleData,
+    required Map<int, int> dailyFlowMap,
+    required int userCycleLength,
+    required int userPeriodLength,
+    List<ChatMessage> chatHistory = const [],
+  }) async {
     final dataText = _buildUserDataText(
       records, cycleData, dailyFlowMap, userCycleLength, userPeriodLength,
     );
 
-    // ─── 2. 构建系统提示词 ───
-    final systemPrompt = _buildSystemPrompt();
+    final systemPrompt = _buildQASystemPrompt(dataText);
 
-    // ─── 3. 构建用户消息 ───
-    final userMessage = _buildUserMessage(dataText);
+    // 构建消息列表（历史 + 当前问题）
+    final messages = <Map<String, String>>[
+      {'role': 'system', 'content': systemPrompt},
+    ];
 
-    // ─── 4. 调用智谱GLM API ───
-    final response = await _callApi(systemPrompt, userMessage);
+    // 加入历史对话（最多最近6轮）
+    final recentHistory = chatHistory.length > 12
+        ? chatHistory.sublist(chatHistory.length - 12)
+        : chatHistory;
+    for (final msg in recentHistory) {
+      messages.add({'role': msg.role, 'content': msg.content});
+    }
 
-    // ─── 5. 解析JSON响应 ───
-    return _parseResponse(response);
+    // 当前问题
+    messages.add({'role': 'user', 'content': question});
+
+    return _callApiWithMessages(messages);
   }
 
   // ═══════════════════════════════════════════════════════════════
   //  本地数据收集
   // ═══════════════════════════════════════════════════════════════
 
-  /// 将用户的经期记录、周期数据等整理为文本，供AI分析使用。
   static String _buildUserDataText(
     List<PeriodRecord> records,
     CycleData cycleData,
@@ -316,7 +345,6 @@ class AIHealthService {
 
     final buffer = StringBuffer();
 
-    // ─── 基本信息 ───
     buffer.writeln('【个人基本信息与历史数据】');
     buffer.writeln('- 上一次月经来潮日期：${lastRecord.startDate}');
 
@@ -332,7 +360,6 @@ class AIHealthService {
       buffer.writeln('- 经期持续天数：暂无足够数据（用户设置值：$userPeriodLength 天）');
     }
 
-    // ─── 本次记录/异常情况 ───
     buffer.write('- 本次记录/异常情况：');
     if (lastRecord.isOngoing) {
       buffer.writeln('经期进行中（第${lastRecord.periodDays}天）');
@@ -349,7 +376,6 @@ class AIHealthService {
       }
     }
 
-    // ─── 历史经期记录列表 ───
     buffer.writeln('- 历史经期记录（共 ${records.length} 条）：');
     for (final record in sorted.take(10)) {
       final start = record.startDate;
@@ -366,7 +392,6 @@ class AIHealthService {
       buffer.writeln('  · $start ~ $end（$days 天）$flow$mood$symptoms$notes');
     }
 
-    // ─── 周期长度序列 ───
     final cycleSorted = List<PeriodRecord>.from(records)
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
     final cycleLengths = <int>[];
@@ -382,7 +407,6 @@ class AIHealthService {
       buffer.writeln('- 平均周期：${avg.toStringAsFixed(1)} 天');
     }
 
-    // ─── 每日经量数据 ───
     if (dailyFlowMap.isNotEmpty) {
       final flowValues = dailyFlowMap.values.where((v) => v > 0).toList();
       if (flowValues.isNotEmpty) {
@@ -394,7 +418,6 @@ class AIHealthService {
       }
     }
 
-    // ─── 预测信息 ───
     if (cycleData.predictedNextPeriod != null) {
       final predicted = cycleData.predictedNextPeriod!;
       final daysUntil = cycleData.daysUntilPredicted;
@@ -427,7 +450,7 @@ class AIHealthService {
   //  提示词构建
   // ═══════════════════════════════════════════════════════════════
 
-  /// 构建系统提示词——定义AI角色和分析要求。
+  /// 构建健康报告的系统提示词。
   static String _buildSystemPrompt() {
     return '''你是一位妇产科与女性健康领域的专业助手。请根据用户提供的个人生理周期数据，进行客观、严谨的数据分析与健康提示。
 
@@ -439,6 +462,13 @@ class AIHealthService {
 4. 就医预警：明确指出出现哪些"红旗症状"（如剧烈腹痛、异常出血等）时必须立即就医。
 
 注意：语言请保持客观、体贴、条理清晰，不要夸大风险，也不要给出绝对化的医疗诊断结论。
+
+【就医预警个性化要求】
+在redFlags中，如果用户当前数据已符合某个红旗症状的条件，请将该症状的userMatched字段设为true，并在description中标注"⚠️ 您当前已符合此症状"。例如：
+- 如果用户当前经期持续超过10天，"经期超长"的userMatched设为true
+- 如果用户经量均值>2.5（偏多），"经量异常增多"的userMatched设为true
+- 如果用户周期推迟超过35天，"停经后出血"的userMatched设为true
+未匹配的症状userMatched设为false。
 
 请以JSON格式输出分析报告，严格遵循以下结构（不要输出JSON以外的任何文本）：
 
@@ -460,21 +490,16 @@ class AIHealthService {
     "deviationDays": 0
   },
   "causeFactors": [
-    {"factor": "因素名称", "explanation": "详细解释"},
-    {"factor": "因素名称", "explanation": "详细解释"},
     {"factor": "因素名称", "explanation": "详细解释"}
   ],
   "actionSuggestions": [
-    {"observation": "观察点", "suggestion": "建议内容"},
     {"observation": "观察点", "suggestion": "建议内容"}
   ],
   "redFlags": [
-    {"symptom": "红旗症状名称", "description": "详细说明何时需立即就医"},
-    {"symptom": "红旗症状名称", "description": "详细说明"}
+    {"symptom": "红旗症状名称", "description": "详细说明何时需立即就医", "userMatched": false}
   ],
   "advices": [
-    {"icon": "info", "title": "建议标题", "content": "建议内容", "type": "info"},
-    {"icon": "caution", "title": "建议标题", "content": "建议内容", "type": "caution"}
+    {"icon": "info", "title": "建议标题", "content": "建议内容", "type": "info"}
   ]
 }
 ```
@@ -483,13 +508,14 @@ class AIHealthService {
 - healthScore: 0-100的整数，基于周期规律性、经量、经期天数综合评分
 - cycleAssessment.isNormal: 布尔值，本次周期是否正常
 - cycleAssessment.deviationDays: 整数，正=推迟天数，负=提前天数，0=正常
+- redFlags中的userMatched: 布尔值，用户当前数据是否已符合该症状
 - advices中的type只能是"info"（正常提示）、"caution"（需关注）、"warning"（预警）三种之一
 - advices中的icon可使用"info"、"caution"、"warning"、"period"、"flow"、"cycle"等关键词
 - causeFactors列出3-4个因素
 - redFlags至少列出4个红旗症状''';
   }
 
-  /// 构建用户消息——将本地数据嵌入提示词模板。
+  /// 构建用户消息。
   static String _buildUserMessage(String dataText) {
     return '''请根据以下个人生理周期数据进行分析：
 
@@ -498,12 +524,43 @@ $dataText
 请按照系统提示中的JSON格式输出完整的健康分析报告。''';
   }
 
+  /// 构建问答模式的系统提示词。
+  static String _buildQASystemPrompt(String dataText) {
+    return '''你是一位妇产科与女性健康领域的专业助手，正在与用户进行一对一的问答对话。
+
+以下是用户的个人生理周期数据：
+
+$dataText
+
+【回答规则】
+1. 仅回答与经期、月经周期、女性生殖健康相关的问题。
+2. 如果用户的问题与经期健康完全无关（如天气、美食、科技等），请礼貌地说明你只能回答经期健康相关问题，并引导用户提问。
+3. 回答要结合用户的实际数据进行分析，给出个性化建议。
+4. 语言保持客观、体贴、条理清晰，不要夸大风险，不要给出绝对化的医疗诊断结论。
+5. 回答控制在200-400字以内，条理清晰。
+6. 如涉及红旗症状（剧烈腹痛、异常出血等），提醒用户及时就医。''';
+  }
+
   // ═══════════════════════════════════════════════════════════════
   //  API调用
   // ═══════════════════════════════════════════════════════════════
 
-  /// 调用智谱GLM API，返回模型生成的文本内容。
+  /// 调用智谱GLM API（单轮：system + user），返回模型生成的文本内容。
   static Future<String> _callApi(String systemPrompt, String userMessage) async {
+    return _callApiWithMessages([
+      {'role': 'system', 'content': systemPrompt},
+      {'role': 'user', 'content': userMessage},
+    ]);
+  }
+
+  /// 调用智谱GLM API（多轮消息），返回模型生成的文本内容。
+  static Future<String> _callApiWithMessages(
+    List<Map<String, String>> messages,
+  ) async {
+    if (_apiKey.isEmpty) {
+      throw Exception('API Key 未配置，请使用 --dart-define=GLM_API_KEY=xxx 编译');
+    }
+
     final response = await http.post(
       Uri.parse(_apiUrl),
       headers: {
@@ -512,10 +569,7 @@ $dataText
       },
       body: jsonEncode({
         'model': _model,
-        'messages': [
-          {'role': 'system', 'content': systemPrompt},
-          {'role': 'user', 'content': userMessage},
-        ],
+        'messages': messages,
         'temperature': 0.3,
         'max_tokens': 4096,
       }),
@@ -523,14 +577,14 @@ $dataText
 
     if (response.statusCode != 200) {
       throw Exception(
-        'AI分析请求失败（HTTP ${response.statusCode}）：${response.body}',
+        'AI请求失败（HTTP ${response.statusCode}）',
       );
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final choices = body['choices'] as List?;
     if (choices == null || choices.isEmpty) {
-      throw Exception('AI返回数据格式异常：无choices字段');
+      throw Exception('AI返回数据格式异常');
     }
 
     final content = choices[0]['message']['content'] as String?;
@@ -545,19 +599,15 @@ $dataText
   //  响应解析
   // ═══════════════════════════════════════════════════════════════
 
-  /// 解析AI返回的文本内容为HealthReport。
   static HealthReport _parseResponse(String content) {
-    // 尝试从文本中提取JSON块
     String jsonStr = content;
 
-    // 如果模型输出了markdown代码块，提取其中的JSON
     final jsonBlockMatch = RegExp(
       r'```(?:json)?\s*([\s\S]*?)```',
     ).firstMatch(content);
     if (jsonBlockMatch != null) {
       jsonStr = jsonBlockMatch.group(1)!.trim();
     } else {
-      // 尝试找到第一个{和最后一个}之间的内容
       final firstBrace = content.indexOf('{');
       final lastBrace = content.lastIndexOf('}');
       if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {

@@ -181,8 +181,9 @@ class AppStrings {
   static const String aiRegenerateReport = '重新分析';
   static const String aiNoDataTitle = '暂无数据可分析';
   static const String aiNoDataSubtitle = '请先记录至少一次经期数据，AI助手将为您生成个性化健康分析报告';
-  static const String aiAnalyzing = 'AI正在分析您的健康数据…';
-  static const String aiBasicInfo = '基本信息';
+  static const String aiAnalyzing1 = '正在整理经期数据…';
+  static const String aiAnalyzing2 = '正在分析周期规律…';
+  static const String aiAnalyzing3 = '正在生成健康建议…';
   static const String aiCycleAssessment = '周期评估';
   static const String aiCauseAnalysis = '症因排查';
   static const String aiActionSuggestions = '行动建议';
@@ -191,11 +192,6 @@ class AppStrings {
   static const String aiHealthScore = '健康评分';
   static const String aiReportSummary = '报告摘要';
   static const String aiReportTime = '报告生成时间';
-  static const String aiLastPeriodDate = '上次月经来潮日期';
-  static const String aiAvgCycleLength = '历史平均周期';
-  static const String aiAvgPeriodLength = '经期持续天数';
-  static const String aiCurrentStatus = '本次记录/异常情况';
-  static const String aiTotalRecords = '历史记录';
   static const String aiObservation = '观察点';
   static const String aiSuggestion = '建议';
   static const String aiDisclaimer = '本报告由智谱GLM-4大模型基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。';
@@ -204,4 +200,20 @@ class AppStrings {
   static const String aiDaysLate = '推迟';
   static const String aiDaysEarly = '提前';
   static const String aiOnTrack = '正常';
+  static const String aiDataUpdatedHint = '经期数据已更新，建议重新生成报告';
+  static const String aiApiKeyNotConfigured = 'API Key 未配置，请联系开发者';
+  static const String aiYouMatched = '您当前已符合此症状';
+
+  // ─── AI Chat ───────────────────────────────────────────────────
+  static const String aiChatTitle = '经期问答';
+  static const String aiChatHint = '输入您的经期相关问题…';
+  static const String aiChatSend = '发送';
+  static const String aiChatThinking = '正在思考…';
+  static const String aiChatError = '回答失败，请重试';
+  static const String aiChatDisclaimer = 'AI回答仅供参考，不构成医疗诊断。如有健康疑虑请就医。';
+  static const String aiChatQuickQ1 = '我的周期规律吗？';
+  static const String aiChatQuickQ2 = '经量正常吗？';
+  static const String aiChatQuickQ3 = '如何调理经期？';
+  static const String aiChatTabReport = '健康报告';
+  static const String aiChatTabQA = '经期问答';
 }

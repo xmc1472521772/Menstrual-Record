@@ -15,18 +15,55 @@ class AIAssistantScreen extends StatefulWidget {
   State<AIAssistantScreen> createState() => _AIAssistantScreenState();
 }
 
-class _AIAssistantScreenState extends State<AIAssistantScreen> {
+class _AIAssistantScreenState extends State<AIAssistantScreen>
+    with SingleTickerProviderStateMixin {
+  // ─── 报告相关状态 ───
   HealthReport? _report;
   bool _isAnalyzing = false;
   String? _error;
+  int _analyzingStep = 0;
+  int _lastReportDataVersion = 0;
+
+  // ─── 问答相关状态 ───
+  final List<ChatMessage> _chatHistory = [];
+  final TextEditingController _chatController = TextEditingController();
+  bool _isChatLoading = false;
+  String? _chatError;
+  final ScrollController _chatScrollController = ScrollController();
+
+  // ─── Tab 控制 ───
+  int _currentTab = 0;
+
+  // ─── 分析动画 ───
+  late final AnimationController _animController;
+  late final Animation<double> _anim;
+
+  static const _analyzingSteps = [
+    AppStrings.aiAnalyzing1,
+    AppStrings.aiAnalyzing2,
+    AppStrings.aiAnalyzing3,
+  ];
 
   @override
   void initState() {
     super.initState();
-    // 延迟一帧后自动生成报告，让页面先完成首次渲染
+    _animController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat();
+    _anim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _generateReport();
     });
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _chatController.dispose();
+    _chatScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _generateReport() async {
@@ -37,10 +74,22 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       return;
     }
 
+    // 检查API Key是否配置
+    if (!AIHealthService.isConfigured) {
+      setState(() {
+        _error = AppStrings.aiApiKeyNotConfigured;
+      });
+      return;
+    }
+
     setState(() {
       _isAnalyzing = true;
       _error = null;
+      _analyzingStep = 0;
     });
+
+    // 分步更新动画文字
+    _startStepAnimation();
 
     try {
       final report = await AIHealthService.generateReport(
@@ -55,16 +104,103 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         setState(() {
           _report = report;
           _isAnalyzing = false;
+          _lastReportDataVersion = provider.dataVersion;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
-          _error = '分析失败：$e';
+          _error = '$e';
         });
       }
     }
+  }
+
+  void _startStepAnimation() async {
+    for (int i = 0; i < _analyzingSteps.length && _isAnalyzing; i++) {
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (mounted && _isAnalyzing) {
+        setState(() => _analyzingStep = i);
+      }
+    }
+  }
+
+  bool get _dataUpdatedSinceReport {
+    final provider = context.read<PeriodProvider>();
+    return _lastReportDataVersion != provider.dataVersion &&
+        _lastReportDataVersion != 0;
+  }
+
+  // ─── 问答功能 ──────────────────────────────────────────────────
+
+  Future<void> _sendChatMessage(String text) async {
+    if (text.trim().isEmpty || _isChatLoading) return;
+
+    final provider = context.read<PeriodProvider>();
+    final settings = context.read<SettingsProvider>();
+
+    if (provider.records.isEmpty || provider.cycleData == null) {
+      return;
+    }
+
+    final userMessage = ChatMessage(
+      role: 'user',
+      content: text.trim(),
+      timestamp: DateTime.now(),
+    );
+
+    setState(() {
+      _chatHistory.add(userMessage);
+      _isChatLoading = true;
+      _chatError = null;
+    });
+
+    _chatController.clear();
+    _scrollChatToBottom();
+
+    try {
+      final response = await AIHealthService.askQuestion(
+        question: text.trim(),
+        records: provider.records,
+        cycleData: provider.cycleData!,
+        dailyFlowMap: provider.dailyFlowMap,
+        userCycleLength: settings.cycleLength,
+        userPeriodLength: settings.periodLength,
+        chatHistory: _chatHistory,
+      );
+
+      if (mounted) {
+        setState(() {
+          _chatHistory.add(ChatMessage(
+            role: 'assistant',
+            content: response,
+            timestamp: DateTime.now(),
+          ));
+          _isChatLoading = false;
+        });
+        _scrollChatToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _chatError = '$e';
+          _isChatLoading = false;
+        });
+      }
+    }
+  }
+
+  void _scrollChatToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_chatScrollController.hasClients) {
+        _chatScrollController.animateTo(
+          _chatScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
@@ -73,7 +209,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       appBar: AppBar(
         title: const Text(AppStrings.aiAssistant),
         actions: [
-          if (_report != null && !_isAnalyzing)
+          if (_currentTab == 0 && _report != null && !_isAnalyzing)
             IconButton(
               onPressed: _generateReport,
               icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -89,22 +225,103 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             return _buildEmptyState(context);
           }
 
-          if (_isAnalyzing) {
-            return _buildAnalyzingState(context);
-          }
-
-          if (_error != null) {
-            return _buildErrorState(context);
-          }
-
-          if (_report == null) {
-            return _buildGenerateButton(context);
-          }
-
-          return _buildReport(context);
+          return Column(
+            children: [
+              _buildTabBar(context),
+              Expanded(
+                child: _currentTab == 0
+                    ? _buildReportTab(context)
+                    : _buildChatTab(context),
+              ),
+            ],
+          );
         },
       ),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Tab Bar
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildTabBar(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppDimens.spacingLg,
+        AppDimens.spacingSm,
+        AppDimens.spacingLg,
+        AppDimens.spacingSm,
+      ),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: context.themeColors.surfaceTile,
+        borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTabItem(0, AppStrings.aiChatTabReport,
+                Icons.description_outlined, Icons.description_rounded),
+          ),
+          Expanded(
+            child: _buildTabItem(1, AppStrings.aiChatTabQA,
+                Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabItem(
+      int index, String label, IconData icon, IconData activeIcon) {
+    final selected = _currentTab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _currentTab = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingSm),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.brandPrimary : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              selected ? activeIcon : icon,
+              size: 16,
+              color: selected ? AppColors.white : AppColors.inkTertiary,
+            ),
+            const SizedBox(width: AppDimens.spacingXs),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? AppColors.white : AppColors.inkTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Report Tab
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildReportTab(BuildContext context) {
+    if (_isAnalyzing) {
+      return _buildAnalyzingState(context);
+    }
+    if (_error != null) {
+      return _buildErrorState(context);
+    }
+    if (_report == null) {
+      return _buildGenerateButton(context);
+    }
+    return _buildReport(context);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -153,7 +370,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  Analyzing state
+  //  Analyzing state (分段式动画)
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildAnalyzingState(BuildContext context) {
@@ -161,19 +378,64 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(
-            width: 48,
-            height: 48,
-            child: CircularProgressIndicator(
-              color: AppColors.brandPrimary,
-              strokeWidth: 3,
+          // 脉动动画图标
+          ScaleTransition(
+            scale: _anim,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.brandSoft,
+                borderRadius: BorderRadius.circular(AppDimens.radius2xl),
+              ),
+              child: const Icon(
+                Icons.psychology_rounded,
+                size: 36,
+                color: AppColors.brandPrimary,
+              ),
             ),
           ),
           const SizedBox(height: AppDimens.spacingXl),
-          Text(
-            AppStrings.aiAnalyzing,
-            style: AppTheme.bodyLarge.copyWith(
-              color: context.themeColors.onSurfaceSecondary,
+          // 分段文字
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.3),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: Text(
+              _analyzingSteps[_analyzingStep],
+              key: ValueKey(_analyzingStep),
+              style: AppTheme.bodyLarge.copyWith(
+                color: context.themeColors.onSurfaceSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppDimens.spacingLg),
+          // 步骤指示器
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              _analyzingSteps.length,
+              (i) => Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: i <= _analyzingStep
+                      ? AppColors.brandPrimary
+                      : AppColors.brandPrimary.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+              ),
             ),
           ),
         ],
@@ -233,7 +495,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  Generate button (initial state with data but no report)
+  //  Generate button
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildGenerateButton(BuildContext context) {
@@ -269,7 +531,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  Full report
+  //  Full report (移除基本信息卡片，改为摘要行)
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildReport(BuildContext context) {
@@ -288,14 +550,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         children: [
           // ─── 健康评分头部 ───
           _buildScoreHeader(context, report),
+          const SizedBox(height: AppDimens.spacingSm),
+
+          // ─── 数据更新提示 ───
+          if (_dataUpdatedSinceReport) _buildDataUpdatedHint(themeColors),
+
+          // ─── 摘要行（替代原"基本信息"卡片）───
+          _buildSummaryRow(context, report, themeColors),
           const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 报告摘要 ───
           _buildSummaryCard(context, report, themeColors),
-          const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 基本信息 ───
-          _buildBasicInfoCard(context, report, themeColors),
           const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 周期评估 ───
@@ -321,6 +586,60 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           const SizedBox(height: AppDimens.spacingLg),
           _buildDisclaimer(context, themeColors),
         ],
+      ),
+    );
+  }
+
+  // ─── 数据更新提示 ──────────────────────────────────────────────
+
+  Widget _buildDataUpdatedHint(var themeColors) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.spacingMd,
+        vertical: AppDimens.spacingSm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.update_rounded, size: 14, color: AppColors.warning),
+          const SizedBox(width: AppDimens.spacingXs),
+          Expanded(
+            child: Text(
+              AppStrings.aiDataUpdatedHint,
+              style: AppTheme.bodySmall.copyWith(color: AppColors.warning),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── 摘要行（替代原"基本信息"卡片）──────────────────────────────
+
+  Widget _buildSummaryRow(
+    BuildContext context,
+    HealthReport report,
+    var themeColors,
+  ) {
+    final info = report.basicInfo;
+    final records = info['totalRecords'] ?? '-';
+    final lastDate = info['lastPeriodDate'] ?? '-';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingXs),
+      child: Text(
+        '基于 $records · 上次经期 $lastDate',
+        style: AppTheme.bodySmall.copyWith(
+          color: themeColors.onSurfaceTertiary,
+        ),
       ),
     );
   }
@@ -358,11 +677,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.insights_rounded, color: AppColors.white, size: 14),
+                    const Icon(Icons.insights_rounded,
+                        color: AppColors.white, size: 14),
                     const SizedBox(width: AppDimens.spacingXs),
                     Text(
                       AppStrings.aiHealthReport,
-                      style: AppTheme.labelMedium.copyWith(color: AppColors.white),
+                      style:
+                          AppTheme.labelMedium.copyWith(color: AppColors.white),
                     ),
                   ],
                 ),
@@ -449,58 +770,6 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  // ─── 基本信息 ──────────────────────────────────────────────────
-
-  Widget _buildBasicInfoCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    final info = report.basicInfo;
-    final entries = <(String, String)>[
-      (AppStrings.aiLastPeriodDate, info['lastPeriodDate'] ?? '-'),
-      (AppStrings.aiAvgCycleLength, info['avgCycleLength'] ?? '-'),
-      (AppStrings.aiAvgPeriodLength, info['avgPeriodLength'] ?? '-'),
-      (AppStrings.aiCurrentStatus, info['currentStatus'] ?? '-'),
-      (AppStrings.aiTotalRecords, info['totalRecords'] ?? '-'),
-    ];
-
-    return _ReportCard(
-      title: AppStrings.aiBasicInfo,
-      icon: Icons.person_outline_rounded,
-      themeColors: themeColors,
-      child: Column(
-        children: entries.map((e) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: AppDimens.spacingSm),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 110,
-                  child: Text(
-                    e.$1,
-                    style: AppTheme.bodySmall.copyWith(
-                      color: themeColors.onSurfaceTertiary,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    e.$2,
-                    style: AppTheme.bodyMedium.copyWith(
-                      color: themeColors.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   // ─── 周期评估 ──────────────────────────────────────────────────
 
   Widget _buildCycleAssessmentCard(
@@ -510,9 +779,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   ) {
     final assessment = report.cycleAssessment;
     final bool isNormal = assessment.isNormal;
-    final Color statusColor = isNormal ? AppColors.success : AppColors.warning;
-    final String statusLabel = isNormal ? AppStrings.aiOnTrack : 
-        (assessment.deviationDays > 0 ? AppStrings.aiDaysLate : AppStrings.aiDaysEarly);
+    final Color statusColor =
+        isNormal ? AppColors.success : AppColors.warning;
+    final String statusLabel = isNormal
+        ? AppStrings.aiOnTrack
+        : (assessment.deviationDays > 0
+            ? AppStrings.aiDaysLate
+            : AppStrings.aiDaysEarly);
 
     return _ReportCard(
       title: AppStrings.aiCycleAssessment,
@@ -521,7 +794,6 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 状态标签
           Row(
             children: [
               Container(
@@ -537,16 +809,19 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isNormal ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                      isNormal
+                          ? Icons.check_circle_rounded
+                          : Icons.warning_amber_rounded,
                       color: statusColor,
                       size: 14,
                     ),
                     const SizedBox(width: AppDimens.spacingXs),
                     Text(
-                      assessment.deviationDays == 0 
-                          ? statusLabel 
+                      assessment.deviationDays == 0
+                          ? statusLabel
                           : '$statusLabel ${assessment.deviationDays.abs()} 天',
-                      style: AppTheme.labelMedium.copyWith(color: statusColor),
+                      style:
+                          AppTheme.labelMedium.copyWith(color: statusColor),
                     ),
                   ],
                 ),
@@ -554,7 +829,6 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ],
           ),
           const SizedBox(height: AppDimens.spacingMd),
-          // 评估说明
           Text(
             assessment.explanation,
             style: AppTheme.bodyMedium.copyWith(
@@ -563,7 +837,6 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
           ),
           const SizedBox(height: AppDimens.spacingMd),
-          // 正常范围
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: AppDimens.spacingMd,
@@ -575,7 +848,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline_rounded, size: 14, color: themeColors.onSurfaceTertiary),
+                Icon(Icons.info_outline_rounded,
+                    size: 14, color: themeColors.onSurfaceTertiary),
                 const SizedBox(width: AppDimens.spacingXs),
                 Expanded(
                   child: Text(
@@ -610,7 +884,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           final factor = entry.value;
           return Padding(
             padding: EdgeInsets.only(
-              bottom: idx < report.causeFactors.length - 1 ? AppDimens.spacingMd : 0,
+              bottom: idx < report.causeFactors.length - 1
+                  ? AppDimens.spacingMd
+                  : 0,
             ),
             child: _buildFactorItem(factor, themeColors, idx + 1),
           );
@@ -683,7 +959,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           final suggestion = entry.value;
           return Padding(
             padding: EdgeInsets.only(
-              bottom: idx < report.actionSuggestions.length - 1 ? AppDimens.spacingMd : 0,
+              bottom: idx < report.actionSuggestions.length - 1
+                  ? AppDimens.spacingMd
+                  : 0,
             ),
             child: _buildSuggestionItem(suggestion, themeColors),
           );
@@ -704,7 +982,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.visibility_outlined, size: 14, color: AppColors.brandPrimary),
+              const Icon(Icons.visibility_outlined,
+                  size: 14, color: AppColors.brandPrimary),
               const SizedBox(width: AppDimens.spacingXs),
               Text(
                 AppStrings.aiObservation,
@@ -726,7 +1005,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           const SizedBox(height: AppDimens.spacingSm),
           Row(
             children: [
-              const Icon(Icons.lightbulb_outline_rounded, size: 14, color: AppColors.success),
+              const Icon(Icons.lightbulb_outline_rounded,
+                  size: 14, color: AppColors.success),
               const SizedBox(width: AppDimens.spacingXs),
               Text(
                 AppStrings.aiSuggestion,
@@ -750,7 +1030,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  // ─── 就医预警 ──────────────────────────────────────────────────
+  // ─── 就医预警（个性化 userMatched 高亮）──────────────────────────
 
   Widget _buildRedFlagsCard(
     BuildContext context,
@@ -772,7 +1052,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.local_hospital_rounded, color: AppColors.error, size: 20),
+              const Icon(Icons.local_hospital_rounded,
+                  color: AppColors.error, size: 20),
               const SizedBox(width: AppDimens.spacingSm),
               Text(
                 AppStrings.aiRedFlags,
@@ -796,39 +1077,88 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               final flag = entry.value;
               return Padding(
                 padding: EdgeInsets.only(
-                  bottom: idx < report.redFlags.length - 1 ? AppDimens.spacingSm : 0,
+                  bottom: idx < report.redFlags.length - 1
+                      ? AppDimens.spacingSm
+                      : 0,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.flag_rounded, size: 14, color: AppColors.error.withValues(alpha: 0.7)),
-                    const SizedBox(width: AppDimens.spacingSm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            flag.symptom,
-                            style: AppTheme.titleMedium.copyWith(
-                              color: AppColors.error,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            flag.description,
-                            style: AppTheme.bodySmall.copyWith(
-                              color: themeColors.onSurfaceSecondary,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                child: _buildRedFlagItem(flag, themeColors),
               );
             }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRedFlagItem(RedFlagSymptom flag, var themeColors) {
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.spacingSm),
+      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
+      decoration: BoxDecoration(
+        color: flag.userMatched
+            ? AppColors.error.withValues(alpha: 0.08)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+        border: flag.userMatched
+            ? Border.all(color: AppColors.error.withValues(alpha: 0.3))
+            : null,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            flag.userMatched ? Icons.priority_high_rounded : Icons.flag_rounded,
+            size: 14,
+            color: AppColors.error.withValues(alpha: 0.7),
+          ),
+          const SizedBox(width: AppDimens.spacingSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      flag.symptom,
+                      style: AppTheme.titleMedium.copyWith(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (flag.userMatched) ...[
+                      const SizedBox(width: AppDimens.spacingXs),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radiusFull),
+                        ),
+                        child: const Text(
+                          '⚠️ 已符合',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  flag.description,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: themeColors.onSurfaceSecondary,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -900,9 +1230,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
 
   (Color, Color) _adviceColors(AdviceType type) {
     return switch (type) {
-      AdviceType.info => (AppColors.success.withValues(alpha: 0.1), AppColors.success),
-      AdviceType.caution => (AppColors.warning.withValues(alpha: 0.1), AppColors.warning),
-      AdviceType.warning => (AppColors.error.withValues(alpha: 0.1), AppColors.error),
+      AdviceType.info =>
+        (AppColors.success.withValues(alpha: 0.1), AppColors.success),
+      AdviceType.caution =>
+        (AppColors.warning.withValues(alpha: 0.1), AppColors.warning),
+      AdviceType.warning =>
+        (AppColors.error.withValues(alpha: 0.1), AppColors.error),
     };
   }
 
@@ -918,7 +1251,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, size: 16, color: themeColors.onSurfaceTertiary),
+          Icon(Icons.info_outline_rounded,
+              size: 16, color: themeColors.onSurfaceTertiary),
           const SizedBox(width: AppDimens.spacingSm),
           Expanded(
             child: Text(
@@ -928,6 +1262,300 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 height: 1.5,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Chat Tab (经期问答)
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildChatTab(BuildContext context) {
+    final themeColors = context.themeColors;
+
+    return Column(
+      children: [
+        // ─── 消息列表 ───
+        Expanded(
+          child: _chatHistory.isEmpty
+              ? _buildChatEmptyState(themeColors)
+              : ListView.builder(
+                  controller: _chatScrollController,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppDimens.spacingLg,
+                    AppDimens.spacingSm,
+                    AppDimens.spacingLg,
+                    AppDimens.spacingSm,
+                  ),
+                  itemCount: _chatHistory.length + (_isChatLoading ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _chatHistory.length && _isChatLoading) {
+                      return _buildChatLoadingBubble(themeColors);
+                    }
+                    final msg = _chatHistory[index];
+                    return _buildChatBubble(msg, themeColors);
+                  },
+                ),
+        ),
+        // ─── 错误提示 ───
+        if (_chatError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppDimens.spacingLg,
+              vertical: AppDimens.spacingXs,
+            ),
+            child: Text(
+              AppStrings.aiChatError,
+              style: AppTheme.bodySmall.copyWith(color: AppColors.error),
+            ),
+          ),
+        // ─── 快捷问题 ───
+        if (_chatHistory.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppDimens.spacingLg,
+              vertical: AppDimens.spacingSm,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildQuickQuestion(
+                    AppStrings.aiChatQuickQ1, themeColors),
+                ),
+                const SizedBox(width: AppDimens.spacingSm),
+                Expanded(
+                  child: _buildQuickQuestion(
+                    AppStrings.aiChatQuickQ2, themeColors),
+                ),
+                const SizedBox(width: AppDimens.spacingSm),
+                Expanded(
+                  child: _buildQuickQuestion(
+                    AppStrings.aiChatQuickQ3, themeColors),
+                ),
+              ],
+            ),
+          ),
+        // ─── 输入框 ───
+        _buildChatInput(themeColors),
+        // ─── 免责声明 ───
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppDimens.spacingLg,
+            0,
+            AppDimens.spacingLg,
+            AppDimens.spacingSm,
+          ),
+          child: Text(
+            AppStrings.aiChatDisclaimer,
+            style: AppTheme.bodySmall.copyWith(
+              fontSize: 11,
+              color: themeColors.onSurfaceTertiary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatEmptyState(var themeColors) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDimens.spacing3xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.brandSoft,
+                borderRadius: BorderRadius.circular(AppDimens.radius2xl),
+              ),
+              child: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 32,
+                color: AppColors.brandPrimary,
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingLg),
+            Text(
+              AppStrings.aiChatTitle,
+              style: AppTheme.titleLarge.copyWith(
+                color: themeColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: AppDimens.spacingXs),
+            Text(
+              '基于您的经期数据进行智能问答',
+              style: AppTheme.bodySmall.copyWith(
+                color: themeColors.onSurfaceTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickQuestion(String text, var themeColors) {
+    return GestureDetector(
+      onTap: () => _sendChatMessage(text),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingSm,
+          vertical: AppDimens.spacingSm,
+        ),
+        decoration: BoxDecoration(
+          color: themeColors.surfaceTile,
+          borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+          border: Border.all(
+            color: AppColors.brandPrimary.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: AppTheme.bodySmall.copyWith(
+            color: AppColors.brandPrimary,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatBubble(ChatMessage msg, var themeColors) {
+    final isUser = msg.role == 'user';
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppDimens.spacingMd),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.8,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingMd,
+          vertical: AppDimens.spacingSm + 2,
+        ),
+        decoration: BoxDecoration(
+          color: isUser
+              ? AppColors.brandPrimary
+              : themeColors.surfaceCard,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(AppDimens.radiusLg),
+            topRight: const Radius.circular(AppDimens.radiusLg),
+            bottomLeft: isUser
+                ? const Radius.circular(AppDimens.radiusLg)
+                : const Radius.circular(2),
+            bottomRight: isUser
+                ? const Radius.circular(2)
+                : const Radius.circular(AppDimens.radiusLg),
+          ),
+          border: isUser
+              ? null
+              : Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
+        ),
+        child: Text(
+          msg.content,
+          style: AppTheme.bodyMedium.copyWith(
+            color: isUser ? AppColors.white : themeColors.onSurface,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatLoadingBubble(var themeColors) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppDimens.spacingMd),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingMd,
+          vertical: AppDimens.spacingMd,
+        ),
+        decoration: BoxDecoration(
+          color: themeColors.surfaceCard,
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+          border: Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.brandPrimary,
+              ),
+            ),
+            const SizedBox(width: AppDimens.spacingSm),
+            Text(
+              AppStrings.aiChatThinking,
+              style: AppTheme.bodySmall.copyWith(
+                color: themeColors.onSurfaceTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatInput(var themeColors) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppDimens.spacingLg,
+        0,
+        AppDimens.spacingLg,
+        0,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.spacingMd,
+        vertical: AppDimens.spacingXs,
+      ),
+      decoration: BoxDecoration(
+        color: themeColors.surfaceCard,
+        borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+        border: Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _chatController,
+              style: AppTheme.bodyMedium.copyWith(
+                color: themeColors.onSurface,
+              ),
+              decoration: InputDecoration(
+                hintText: AppStrings.aiChatHint,
+                hintStyle: AppTheme.bodyMedium.copyWith(
+                  color: themeColors.onSurfaceTertiary,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.spacingXs,
+                  vertical: AppDimens.spacingSm,
+                ),
+              ),
+              maxLines: null,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (text) => _sendChatMessage(text),
+            ),
+          ),
+          const SizedBox(width: AppDimens.spacingXs),
+          IconButton(
+            onPressed: _isChatLoading
+                ? null
+                : () => _sendChatMessage(_chatController.text),
+            icon: const Icon(Icons.send_rounded, size: 20),
+            color: AppColors.brandPrimary,
+            disabledColor: AppColors.inkTertiary,
           ),
         ],
       ),
