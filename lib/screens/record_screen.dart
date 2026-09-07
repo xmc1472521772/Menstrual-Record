@@ -449,9 +449,7 @@ class _RecordScreenState extends State<RecordScreen> {
             }
             return AppColors.brandPrimary;
           }),
-          todayBorder: const Border.fromBorderSide(
-            BorderSide(color: AppColors.brandPrimary, width: 0),
-          ),
+          todayBorder: const BorderSide(color: AppColors.brandPrimary, width: 0),
           yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
               return AppColors.brandPrimary;
