@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -15,34 +16,56 @@ class NotificationService {
   static const int _reminderNotificationId = 0;
   bool _tzInitialized = false;
 
-  Future<void> initialize() async {
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+  /// [initialize] 是否已被调用（同步置位，见方法首行）。
+  bool _initializeStarted = false;
 
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-    );
+  /// [initialize] 完成信号。
+  ///
+  /// `schedulePeriodReminder` 依赖 `tz.local` 已正确设置；若不等它完成，
+  /// `tz.TZDateTime.local` 会退回 UTC，通知被排到错误的绝对时刻。
+  final Completer<void> _ready = Completer<void>();
 
-    await _notifications.initialize(initSettings);
-
-    // Initialize timezone data (idempotent)
-    if (!_tzInitialized) {
-      tz.initializeTimeZones();
-      // 尝试获取系统时区名称并设置 local location
-      // 之前未调用 setLocalLocation，导致 tz.local 恒为 UTC，
-      // 通知时间被排到错误的绝对时刻。
-      try {
-        final localTimeZone = await FlutterTimezone.getLocalTimezone();
-        final location = tz.getLocation(localTimeZone);
-        tz.setLocalLocation(location);
-        debugPrint('Timezone set to: ${tz.local.name}');
-      } catch (e) {
-        debugPrint('Failed to set local timezone: $e');
-      }
-      _tzInitialized = true;
+  /// 调度前确保初始化完成。initialize() 从未被调用时（如单元测试）直接放行。
+  Future<void> _ensureReady() async {
+    if (_initializeStarted && !_ready.isCompleted) {
+      await _ready.future;
     }
+  }
 
-    await _requestPermissions();
+  Future<void> initialize() async {
+    _initializeStarted = true;
+    try {
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+      );
+
+      await _notifications.initialize(initSettings);
+
+      // Initialize timezone data (idempotent)
+      if (!_tzInitialized) {
+        tz.initializeTimeZones();
+        // 尝试获取系统时区名称并设置 local location
+        // 之前未调用 setLocalLocation，导致 tz.local 恒为 UTC，
+        // 通知时间被排到错误的绝对时刻。
+        try {
+          final localTimeZone = await FlutterTimezone.getLocalTimezone();
+          final location = tz.getLocation(localTimeZone);
+          tz.setLocalLocation(location);
+          debugPrint('Timezone set to: ${tz.local.name}');
+        } catch (e) {
+          debugPrint('Failed to set local timezone: $e');
+        }
+        _tzInitialized = true;
+      }
+
+      await _requestPermissions();
+    } finally {
+      // 无论成功与否都要放行等待者，避免调度流程永久挂起
+      if (!_ready.isCompleted) _ready.complete();
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -64,6 +87,8 @@ class NotificationService {
     required int reminderDays,
     required int reminderHour,
   }) async {
+    // 等待时区初始化完成，防止通知被排到错误的绝对时刻
+    await _ensureReady();
     await cancelAll();
 
     final scheduledDate = DateTime(
