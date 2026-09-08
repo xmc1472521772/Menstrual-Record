@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 /// 操作完成后：
 /// 1. 更新 SharedPreferences 中的小组件数据
 /// 2. 刷新所有小组件 UI
-/// 3. 发送广播通知 App 刷新数据
+/// 3. 通过静态 MethodChannel 直接通知 Flutter 端刷新数据
 class WidgetActionReceiver : BroadcastReceiver() {
 
     companion object {
@@ -28,9 +28,6 @@ class WidgetActionReceiver : BroadcastReceiver() {
         const val ACTION_END_PERIOD = "com.yima.yimaflutter.WIDGET_END_PERIOD"
         const val ACTION_SET_FLOW = "com.yima.yimaflutter.WIDGET_SET_FLOW"
         const val EXTRA_FLOW_LEVEL = "flow_level"
-
-        const val ACTION_DATA_CHANGED = "com.yima.yimaflutter.WIDGET_DATA_CHANGED"
-        private const val APP_PACKAGE = "com.yima.yimaflutter"
 
         private val DATE_FMT = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     }
@@ -59,6 +56,9 @@ class WidgetActionReceiver : BroadcastReceiver() {
 
             // 操作完成后更新小组件数据
             updateWidgetDataFromDb(context, db)
+
+            // 标记数据已变更，供 App 恢复前台时检查
+            WidgetDataStore.setDataDirty(context, true)
         } catch (e: Exception) {
             Log.e(TAG, "Error handling action: $action", e)
         } finally {
@@ -68,11 +68,16 @@ class WidgetActionReceiver : BroadcastReceiver() {
         // 刷新小组件 UI
         PeriodWidgetProvider.updateAllWidgets(context)
 
-        // 通知 App 数据已变更
-        val notifyIntent = Intent(ACTION_DATA_CHANGED).apply {
-            setPackage(APP_PACKAGE)
+        // 直接通过静态 MethodChannel 通知 Flutter 端刷新数据。
+        // 这比发送广播更可靠：广播在 app 后台时可能被延迟投递，
+        // 而 MethodChannel.invokeMethod 会立即投递到 Dart isolate。
+        // 如果 app 尚未启动（methodChannel 为 null），则跳过；
+        // app 启动时会自然读取最新数据。
+        try {
+            MainActivity.methodChannel?.invokeMethod("dataChanged", null)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to notify Flutter via MethodChannel", e)
         }
-        context.sendBroadcast(notifyIntent)
     }
 
     // ─── 开始经期（与 PeriodProvider.startPeriodWithMerge 对齐）──────────

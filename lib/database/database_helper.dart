@@ -6,6 +6,10 @@ import 'package:path/path.dart';
 /// Allows mocking in tests.
 abstract class DatabaseProvider {
   Future<Database> get database;
+
+  /// 强制刷新数据库连接。
+  /// 默认空实现，只有 [DatabaseHelper] 真正需要刷新。
+  Future<void> refreshConnection() async {}
 }
 
 class DatabaseHelper implements DatabaseProvider {
@@ -139,5 +143,27 @@ class DatabaseHelper implements DatabaseProvider {
     } finally {
       _isClosing = false;
     }
+  }
+
+  /// 强制刷新数据库连接。
+  ///
+  /// 当原生端（小组件）通过另一个 SQLiteDatabase 连接直接修改了数据库时，
+  /// Flutter 端的 sqflite 连接可能读到缓存的旧数据。
+  /// 调用此方法关闭并重新打开连接，确保后续读取能获取最新数据。
+  Future<void> refreshConnection() async {
+    if (_isClosing) return;
+    _isClosing = true;
+    try {
+      final db = _database;
+      if (db != null) {
+        await db.close();
+      }
+      _database = null;
+      _initCompleter = null;
+    } finally {
+      _isClosing = false;
+    }
+    // 重新初始化连接（通过 database getter 触发）
+    await database;
   }
 }

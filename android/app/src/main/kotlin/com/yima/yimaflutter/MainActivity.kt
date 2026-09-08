@@ -1,9 +1,7 @@
 package com.yima.yimaflutter
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
@@ -23,19 +21,13 @@ class MainActivity : FlutterActivity() {
         /// Method Channel 名称
         private const val CHANNEL_NAME = "com.yima.yimaflutter/widget"
 
-        /// 小组件数据变更通知
-        const val ACTION_DATA_CHANGED = "com.yima.yimaflutter.WIDGET_DATA_CHANGED"
-    }
-
-    private var methodChannel: MethodChannel? = null
-
-    /// 监听小组件数据变更的 BroadcastReceiver
-    private val dataChangedReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            Log.d(TAG, "Received data changed broadcast")
-            // 通知 Flutter 端刷新数据
-            methodChannel?.invokeMethod("dataChanged", null)
-        }
+        /// 静态引用 MethodChannel，供 WidgetActionReceiver 等非 Activity 组件
+        /// 直接通知 Flutter 端刷新数据。
+        /// 生命周期：在 [configureFlutterEngine] 中赋值，在 [onDestroy] 中置空。
+        @Volatile
+        @JvmStatic
+        var methodChannel: MethodChannel? = null
+            private set
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,23 +40,30 @@ class MainActivity : FlutterActivity() {
             marker.edit().putBoolean(STALE_STORE_HEALED_KEY, true).apply()
         }
 
-        // 注册数据变更广播接收器
-        val filter = IntentFilter(ACTION_DATA_CHANGED)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(dataChangedReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(dataChangedReceiver, filter)
-        }
-
         super.onCreate(savedInstanceState)
+    }
+
+    /// 拦截返回键：将 app 退到后台而非销毁 Activity。
+    ///
+    /// 默认行为下，按返回键会调用 Activity.onDestroy() 销毁 Activity 和
+    /// FlutterEngine。再次从桌面图标或小组件进入时会重新创建 Activity，
+    /// 导致 app 看起来像被重启（重新显示 splash 画面）。
+    ///
+    /// 覆写为 moveTaskToBack(true) 后，按返回键只是将 app 退到后台，
+    /// Activity 和 FlutterEngine 仍然保留在内存中。再次进入时，
+    /// 配合 singleTop + FLAG_ACTIVITY_SINGLE_TOP 会走 onNewIntent 恢复，
+    /// 不会重新显示 splash。
+    override fun onBackPressed() {
+        moveTaskToBack(true)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
+        methodChannel = channel
 
-        methodChannel?.setMethodCallHandler { call, result ->
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "updateWidget" -> {
                     // Flutter 端请求更新小组件数据
@@ -78,17 +77,39 @@ class MainActivity : FlutterActivity() {
                     PeriodWidgetProvider.updateAllWidgets(this)
                     result.success(true)
                 }
+                "checkWidgetDataDirty" -> {
+                    // Flutter 端检查小组件是否修改了数据库
+                    // 返回 true 表示需要重新加载数据，同时清除标记
+                    val dirty = WidgetDataStore.isDataDirty(this)
+                    if (dirty) {
+                        WidgetDataStore.setDataDirty(this, false)
+                    }
+                    result.success(dirty)
+                }
+                "clearWidgetDataDirty" -> {
+                    // Flutter 端主动清除 dirty 标记
+                    // 当通过 MethodChannel 收到 dataChanged 通知后调用
+                    WidgetDataStore.setDataDirty(this, false)
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
     }
 
+    /// 当 Activity 通过 SINGLE_TOP + FLAG_ACTIVITY_SINGLE_TOP 被复用时调用。
+    ///
+    /// 此处不做 dirty 检查，因为 onNewIntent 后一定会触发
+    /// didChangeAppLifecycleState(resumed)，由 Flutter 端的 checkDataDirty
+    /// 兜底。如果在 onNewIntent 中清除 dirty 标记，会导致 resumed 中的
+    /// checkDataDirty 返回 false，从而不重新加载数据。
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onDestroy() {
-        try {
-            unregisterReceiver(dataChangedReceiver)
-        } catch (e: Exception) {
-            Log.w(TAG, "Receiver not registered", e)
-        }
+        methodChannel = null
         super.onDestroy()
     }
 }

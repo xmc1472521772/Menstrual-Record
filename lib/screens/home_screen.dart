@@ -49,6 +49,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _pageController.addListener(_onPageChanged);
   }
 
+  /// 检查日期是否已跨天，如是则更新 [_today] 并刷新相关 UI。
+  /// 在每次 build 时调用（成本极低——仅比较几个整数），
+  /// 确保 app 长时间在前台时标题栏日期和日历"今天"高亮始终准确。
+  void _checkAndUpdateToday() {
+    final now = DateTime.now();
+    final newToday = DateTime(now.year, now.month, now.day);
+    if (newToday.year != _today.year ||
+        newToday.month != _today.month ||
+        newToday.day != _today.day) {
+      _today = newToday;
+      // 如果当前选中的是"旧今天"，则跟随到新今天
+      if (_selectedDay != null &&
+          _selectedDay!.year == _today.year &&
+          _selectedDay!.month == _today.month &&
+          _selectedDay!.day == _today.day - 1) {
+        _selectedDay = _today;
+      }
+    }
+  }
+
   void _onPageChanged() {
     final page = _pageController.page?.round() ?? _kInitialPage;
     if (page != _currentPage) {
@@ -168,119 +188,127 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 68,
-        titleSpacing: AppDimens.spacingXl,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(AppStrings.appName),
-            const SizedBox(height: 2),
-            Text(
-              '${_today.month}月${_today.day}日 星期${_weekdayLabel(_today.weekday)}',
-              style: AppTheme.bodySmall.copyWith(
-                color: AppColors.inkSecondary,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {
-              // 跳转到设置页的提醒设置区域
-              MainScreen.globalKey.currentState?.jumpToSettings();
-            },
-            icon: const Icon(Icons.notifications_none_rounded, size: 22),
-            color: AppColors.ink,
-            tooltip: AppStrings.notificationTitle,
-          ),
-          const SizedBox(width: AppDimens.spacingSm),
-        ],
-      ),
-      floatingActionButton: ValueListenableBuilder<int>(
-        valueListenable: _selectionVersion,
-        builder: (context, _, __) {
-          final showFab =
-              !_isCurrentMonth || (_selectedDay != null && !_isTodaySelected);
-          if (!showFab) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 80),
-            child: FloatingActionButton.small(
-              onPressed: _jumpToToday,
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: AppColors.white,
-              elevation: AppDimens.elevationLow,
-              child: const Text(
-                AppStrings.todayButton,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-      body: Selector<PeriodProvider, int>(
-        selector: (_, provider) => provider.dataVersion,
-        builder: (context, _, __) {
-          final provider = context.read<PeriodProvider>();
-          final cycleData = provider.cycleData;
+    return Selector<PeriodProvider, int>(
+      selector: (_, provider) => provider.dataVersion,
+      builder: (context, dataVersion, _) {
+        // 跨午夜检测：dataVersion 变化时（午夜自动刷新或手动操作触发），
+        // 同步更新 _today，确保标题栏日期和日历"今天"高亮准确。
+        _checkAndUpdateToday();
 
-          // 错误提示横幅
-          if (provider.lastError != null) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(AppDimens.spacingXl),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline_rounded,
-                        size: 48, color: AppColors.error),
-                    const SizedBox(height: AppDimens.spacingMd),
-                    Text(
-                      provider.lastError!,
-                      textAlign: TextAlign.center,
-                      style: AppTheme.bodyMedium.copyWith(
-                        color: AppColors.error,
-                      ),
-                    ),
-                    const SizedBox(height: AppDimens.spacingLg),
-                    ElevatedButton(
-                      onPressed: () => provider.loadRecords(),
-                      child: const Text('重试'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
+        final provider = context.read<PeriodProvider>();
+        final cycleData = provider.cycleData;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimens.spacingXl,
-              AppDimens.spacingSm,
-              AppDimens.spacingXl,
-              100,
-            ),
-            child: Column(
+        return Scaffold(
+          appBar: AppBar(
+            toolbarHeight: 68,
+            titleSpacing: AppDimens.spacingXl,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // 状态卡内容在数据不变时是静态的：RepaintBoundary 让它滚动时只
-                // 整体平移、不逐帧重录（同时与下方日历的重绘相互隔离）。阴影等
-                // 昂贵绘制已在 _buildStatusHero 内扁平化处理，见其注释。
-                RepaintBoundary(child: _buildStatusHero(cycleData, provider)),
-                const SizedBox(height: AppDimens.spacingLg),
-                _buildQuickActions(provider),
-                const SizedBox(height: AppDimens.spacingLg),
-                // 日历与上方可独立重绘，互不影响；数据变化（添加经期）时
-                // 只重绘本图层内的格子，不会波及上方状态卡片的重绘。
-                RepaintBoundary(child: _buildCalendar(provider)),
+                const Text(AppStrings.appName),
+                const SizedBox(height: 2),
+                Text(
+                  '${_today.month}月${_today.day}日 星期${_weekdayLabel(_today.weekday)}',
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppColors.inkSecondary,
+                  ),
+                ),
               ],
             ),
-          );
-        },
+            actions: [
+              IconButton(
+                onPressed: () {
+                  // 跳转到设置页的提醒设置区域
+                  MainScreen.globalKey.currentState?.jumpToSettings();
+                },
+                icon: const Icon(Icons.notifications_none_rounded, size: 22),
+                color: AppColors.ink,
+                tooltip: AppStrings.notificationTitle,
+              ),
+              const SizedBox(width: AppDimens.spacingSm),
+            ],
+          ),
+          floatingActionButton: ValueListenableBuilder<int>(
+            valueListenable: _selectionVersion,
+            builder: (context, _, __) {
+              final showFab =
+                  !_isCurrentMonth || (_selectedDay != null && !_isTodaySelected);
+              if (!showFab) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 80),
+                child: FloatingActionButton.small(
+                  onPressed: _jumpToToday,
+                  backgroundColor: AppColors.brandPrimary,
+                  foregroundColor: AppColors.white,
+                  elevation: AppDimens.elevationLow,
+                  child: const Text(
+                    AppStrings.todayButton,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          body: _buildBody(provider, cycleData),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(PeriodProvider provider, CycleData? cycleData) {
+    // 错误提示横幅
+    if (provider.lastError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimens.spacingXl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  size: 48, color: AppColors.error),
+              const SizedBox(height: AppDimens.spacingMd),
+              Text(
+                provider.lastError!,
+                textAlign: TextAlign.center,
+                style: AppTheme.bodyMedium.copyWith(
+                  color: AppColors.error,
+                ),
+              ),
+              const SizedBox(height: AppDimens.spacingLg),
+              ElevatedButton(
+                onPressed: () => provider.loadRecords(),
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.spacingXl,
+        AppDimens.spacingSm,
+        AppDimens.spacingXl,
+        100,
+      ),
+      child: Column(
+        children: [
+          // 状态卡内容在数据不变时是静态的：RepaintBoundary 让它滚动时只
+          // 整体平移、不逐帧重录（同时与下方日历的重绘相互隔离）。阴影等
+          // 昂贵绘制已在 _buildStatusHero 内扁平化处理，见其注释。
+          RepaintBoundary(child: _buildStatusHero(cycleData, provider)),
+          const SizedBox(height: AppDimens.spacingLg),
+          _buildQuickActions(provider),
+          const SizedBox(height: AppDimens.spacingLg),
+          // 日历与上方可独立重绘，互不影响；数据变化（添加经期）时
+          // 只重绘本图层内的格子，不会波及上方状态卡片的重绘。
+          RepaintBoundary(child: _buildCalendar(provider)),
+        ],
       ),
     );
   }

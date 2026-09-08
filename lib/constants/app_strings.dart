@@ -200,6 +200,7 @@ class AppStrings {
   static const String aiDataUpdatedHint = '经期数据已更新，建议重新生成报告';
   static const String aiApiKeyNotConfigured = 'API Key 未配置，请联系开发者';
   static const String aiYouMatched = '您当前已符合此情况';
+  static const String aiModelChangedHint = '已切换模型，建议重新生成报告';
 
   // ─── AI Chat ───────────────────────────────────────────────────
   static const String aiChatTitle = '经期问答';
@@ -213,4 +214,9 @@ class AppStrings {
   static const String aiChatQuickQ3 = '如何调理经期？';
   static const String aiChatTabReport = '健康报告';
   static const String aiChatTabQA = '经期问答';
+
+  // ─── AI Model Switch ─────────────────────────────────────────────
+  static const String aiModelSwitch = 'AI模型';
+  static const String aiReportModel = '报告模型';
+  static const String aiChatModel = '问答模型';
 }

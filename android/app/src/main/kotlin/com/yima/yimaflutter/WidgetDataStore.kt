@@ -11,6 +11,7 @@ import org.json.JSONObject
 object WidgetDataStore {
     private const val PREFS_NAME = "yima_widget_prefs"
     private const val KEY_WIDGET_DATA = "widget_data_json"
+    private const val KEY_DATA_DIRTY = "data_dirty_flag"
 
     /// 小组件数据 JSON 的字段名。
     object Keys {
@@ -31,6 +32,23 @@ object WidgetDataStore {
             .edit()
             .putString(KEY_WIDGET_DATA, json)
             .apply()
+    }
+
+    /// 标记数据已变更（小组件操作了数据库后调用）。
+    /// App 恢复前台或收到 MethodChannel 通知时检查此标记，
+    /// 若为 true 则强制重新加载数据。
+    fun setDataDirty(context: Context, dirty: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DATA_DIRTY, dirty)
+            .apply()
+    }
+
+    /// 检查数据是否已变更（小组件操作了数据库）。
+    /// 返回 true 表示需要重新加载 Flutter 端数据。
+    fun isDataDirty(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DATA_DIRTY, false)
     }
 
     fun getWidgetData(context: Context): JSONObject? {

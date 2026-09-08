@@ -206,7 +206,16 @@ class PeriodWidgetProvider : AppWidgetProvider() {
     }
 
     /// 构建打开 App 的 Intent（仅标题区域使用）。
-    /// 使用 SINGLE_TOP 而非 CLEAR_TOP，避免重建 Activity 导致 App 似被重启。
+    ///
+    /// 使用 FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_SINGLE_TOP：
+    /// - NEW_TASK：从桌面小组件（PendingIntent）启动 Activity 必需
+    /// - SINGLE_TOP：配合 manifest 中的 singleTop，如果 app 已在后台，
+    ///   已存在的 Activity 会被复用（走 onNewIntent），不会创建新实例
+    ///
+    /// 之前设置了 taskAffinity="" 导致系统无法匹配已有任务栈，
+    /// 每次都会创建新任务栈，使 app 看起来像被重新启动（重新显示 splash）。
+    /// 移除 taskAffinity="" 后，系统使用包名作为默认 affinity，
+    /// 能正确找到并恢复已有的 app 任务栈。
     private fun buildOpenAppIntent(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)

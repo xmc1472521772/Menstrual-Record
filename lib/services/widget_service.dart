@@ -33,6 +33,37 @@ class WidgetService {
     });
   }
 
+  /// 主动检查小组件是否修改了数据库。
+  ///
+  /// App 恢复前台时调用此方法，通过原生端检查 SharedPreferences 中的
+  /// dirty 标记位。如果为 true，表示小组件在 App 后台期间修改了数据，
+  /// 需要重新加载。
+  /// 返回 true 表示数据已变更，需要重新加载。
+  Future<bool> checkDataDirty() async {
+    try {
+      final dirty = await _channel.invokeMethod<bool>('checkWidgetDataDirty');
+      if (dirty == true) {
+        debugPrint('[WidgetService] data dirty flag was set, need reload');
+      }
+      return dirty ?? false;
+    } catch (e) {
+      debugPrint('[WidgetService] checkDataDirty error: $e');
+      return false;
+    }
+  }
+
+  /// 清除 dirty 标记。
+  ///
+  /// 当通过 MethodChannel 收到 dataChanged 通知并已重新加载数据后调用，
+  /// 避免下次恢复前台时重复加载。
+  Future<void> clearDataDirty() async {
+    try {
+      await _channel.invokeMethod<bool>('clearWidgetDataDirty');
+    } catch (e) {
+      debugPrint('[WidgetService] clearDataDirty error: $e');
+    }
+  }
+
   /// 将当前经期状态发送给原生端，更新小组件 UI。
   Future<void> updateWidget({
     required List<PeriodRecord> records,

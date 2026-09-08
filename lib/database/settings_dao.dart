@@ -71,4 +71,26 @@ class SettingsDao {
     final value = await getValue('merge_threshold');
     return int.tryParse(value ?? '2') ?? 2;
   }
+
+  /// AI 健康报告使用的模型 ID。默认 'glm-4-flash'。
+  Future<String> getReportModel() async {
+    final value = await getValue('ai_report_model');
+    // 兼容旧版单一 ai_model 设置
+    if (value == null) {
+      final old = await getValue('ai_model');
+      return old ?? 'glm-4-flash';
+    }
+    return value;
+  }
+
+  /// AI 经期问答使用的模型 ID。默认 'glm-4-flash'。
+  Future<String> getChatModel() async {
+    final value = await getValue('ai_chat_model');
+    // 兼容旧版单一 ai_model 设置
+    if (value == null) {
+      final old = await getValue('ai_model');
+      return old ?? 'glm-4-flash';
+    }
+    return value;
+  }
 }

@@ -79,8 +79,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       return;
     }
 
+    final modelId = settings.reportModel;
+
     // 检查API Key是否配置
-    if (!AIHealthService.isConfigured) {
+    if (!AIHealthService.isModelConfigured(modelId)) {
       setState(() {
         _error = AppStrings.aiApiKeyNotConfigured;
       });
@@ -103,6 +105,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         dailyFlowMap: provider.dailyFlowMap,
         userCycleLength: settings.cycleLength,
         userPeriodLength: settings.periodLength,
+        modelId: modelId,
       );
 
       if (mounted) {
@@ -111,14 +114,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         });
         // 将报告缓存到 Provider，退出后仍保留
         if (report != null) {
-          provider.cacheReport(report);
+          provider.cacheReport(report, modelId: modelId);
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
-          _error = '$e';
+          _error = '$e'.replaceFirst('Exception: ', '');
         });
       }
     }
@@ -138,6 +141,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     return provider.isReportDataStale;
   }
 
+  bool get _modelChangedSinceReport {
+    final provider = context.read<PeriodProvider>();
+    final settings = context.read<SettingsProvider>();
+    return provider.cachedReport != null &&
+        provider.reportModelId != settings.reportModel;
+  }
+
   // ─── 问答功能（流式）────────────────────────────────────────
 
   Future<void> _sendChatMessage(String text) async {
@@ -149,6 +159,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     if (provider.records.isEmpty || provider.cycleData == null) {
       return;
     }
+
+    final modelId = settings.chatModel;
 
     final chatHistory = provider.chatHistory;
     final userMessage = ChatMessage(
@@ -180,6 +192,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         dailyFlowMap: provider.dailyFlowMap,
         userCycleLength: settings.cycleLength,
         userPeriodLength: settings.periodLength,
+        modelId: modelId,
         // 传不含最后空回答的历史
         chatHistory: chatHistory.sublist(0, chatHistory.length - 1),
       );
@@ -206,13 +219,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       }
     } catch (e) {
       if (mounted) {
+        final errorMsg = '$e'.replaceFirst('Exception: ', '');
         setState(() {
           // 如果有部分内容已经收到，保留它并添加错误标记
           if (_streamingBuffer.isNotEmpty) {
             final lastIndex = chatHistory.length - 1;
             chatHistory[lastIndex] = ChatMessage(
               role: 'assistant',
-              content: '${_streamingBuffer.toString()}\n\n⚠️ $e',
+              content: '${_streamingBuffer.toString()}\n\n⚠️ $errorMsg',
               timestamp: DateTime.now(),
             );
           } else {
@@ -220,7 +234,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             final lastIndex = chatHistory.length - 1;
             chatHistory[lastIndex] = ChatMessage(
               role: 'assistant',
-              content: '回答失败：$e',
+              content: '回答失败：$errorMsg',
               timestamp: DateTime.now(),
             );
           }
@@ -248,6 +262,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       appBar: AppBar(
         title: const Text(AppStrings.aiAssistant),
         actions: [
+          // 模型切换按钮（根据当前 Tab 选择报告或问答模型）
+          _buildModelSelector(),
           if (_currentTab == 0 && context.read<PeriodProvider>().cachedReport != null && !_isAnalyzing)
             IconButton(
               onPressed: _generateReport,
@@ -275,6 +291,108 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             ],
           );
         },
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Model Selector（根据当前 Tab 显示报告或问答的模型选择）
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildModelSelector() {
+    final isReportTab = _currentTab == 0;
+
+    return PopupMenuButton<String>(
+      onSelected: (modelId) {
+        final settings = context.read<SettingsProvider>();
+        if (isReportTab) {
+          settings.setReportModel(modelId);
+          // 切换报告模型时不清除已有报告，而是显示提示
+          setState(() {
+            _error = null;
+          });
+        } else {
+          settings.setChatModel(modelId);
+        }
+      },
+      itemBuilder: (context) {
+        final settings = context.read<SettingsProvider>();
+        final currentModel = isReportTab
+            ? settings.reportModel
+            : settings.chatModel;
+        return AIHealthService.availableModels.map((model) {
+          return PopupMenuItem<String>(
+            value: model.id,
+            child: Row(
+              children: [
+                Icon(
+                  model.id == currentModel
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 18,
+                  color: model.id == currentModel
+                      ? AppColors.brandPrimary
+                      : AppColors.inkTertiary,
+                ),
+                const SizedBox(width: AppDimens.spacingSm),
+                Text(
+                  model.displayName,
+                  style: AppTheme.bodyMedium.copyWith(
+                    color: model.id == currentModel
+                        ? AppColors.brandPrimary
+                        : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: model.id == currentModel
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingSm,
+          vertical: AppDimens.spacingXs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.brandSoft,
+          borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 14,
+              color: AppColors.brandPrimary,
+            ),
+            const SizedBox(width: 4),
+            Consumer<SettingsProvider>(
+              builder: (context, settings, _) {
+                final modelId = isReportTab
+                    ? settings.reportModel
+                    : settings.chatModel;
+                final config = AIHealthService.configFor(modelId);
+                return Text(
+                  config.displayName,
+                  style: AppTheme.labelMedium.copyWith(
+                    color: AppColors.brandPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 2),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 16,
+              color: AppColors.brandPrimary,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -595,6 +713,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
           // ─── 数据更新提示 ───
           if (_dataUpdatedSinceReport) _buildDataUpdatedHint(themeColors),
 
+          // ─── 模型已切换提示 ───
+          if (_modelChangedSinceReport) _buildModelChangedHint(themeColors),
+
           const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 1. 本周期概览 ───
@@ -677,6 +798,38 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             child: Text(
               AppStrings.aiDataUpdatedHint,
               style: AppTheme.bodySmall.copyWith(color: AppColors.warning),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── 模型已切换提示 ──────────────────────────────────────────────
+
+  Widget _buildModelChangedHint(var themeColors) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.spacingMd,
+        vertical: AppDimens.spacingSm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.brandPrimary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.swap_horiz_rounded, size: 14, color: AppColors.brandPrimary),
+          const SizedBox(width: AppDimens.spacingXs),
+          Expanded(
+            child: Text(
+              AppStrings.aiModelChangedHint,
+              style: AppTheme.bodySmall.copyWith(color: AppColors.brandPrimary),
             ),
           ),
         ],
@@ -1364,6 +1517,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ─── 免责声明 ──────────────────────────────────────────────────
 
   Widget _buildDisclaimer(BuildContext context, var themeColors) {
+    final provider = context.read<PeriodProvider>();
+    final disclaimerText = AIHealthService.disclaimerFor(provider.reportModelId);
     return Container(
       padding: const EdgeInsets.all(AppDimens.spacingMd),
       decoration: BoxDecoration(
@@ -1378,7 +1533,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
           const SizedBox(width: AppDimens.spacingSm),
           Expanded(
             child: Text(
-              AppStrings.aiDisclaimer,
+              disclaimerText,
               style: AppTheme.bodySmall.copyWith(
                 color: themeColors.onSurfaceTertiary,
                 height: 1.5,

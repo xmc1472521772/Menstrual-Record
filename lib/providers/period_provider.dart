@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import '../models/daily_flow.dart';
 import '../database/period_dao.dart';
 import '../database/daily_flow_dao.dart';
 import '../database/settings_dao.dart';
+import '../database/database_helper.dart';
 import '../services/prediction_service.dart';
 import '../services/notification_service.dart';
 import '../services/ai_health_service.dart';
@@ -59,6 +61,7 @@ class PeriodProvider with ChangeNotifier {
   final PeriodDao _dao;
   final DailyFlowDao _flowDao;
   final SettingsDao _settingsDao;
+  final DatabaseProvider _dbProvider;
   final bool _scheduleReminders;
   final bool _autoEndEnabled;
 
@@ -70,11 +73,13 @@ class PeriodProvider with ChangeNotifier {
     PeriodDao? periodDao,
     DailyFlowDao? flowDao,
     SettingsDao? settingsDao,
+    DatabaseProvider? dbProvider,
     bool scheduleReminders = true,
     bool autoEndExpiredPeriods = true,
   })  : _dao = periodDao ?? PeriodDao(),
         _flowDao = flowDao ?? DailyFlowDao(),
         _settingsDao = settingsDao ?? SettingsDao(),
+        _dbProvider = dbProvider ?? DatabaseHelper(),
         _scheduleReminders = scheduleReminders,
         _autoEndEnabled = autoEndExpiredPeriods;
 
@@ -106,12 +111,25 @@ class PeriodProvider with ChangeNotifier {
   /// 是否存在进行中的经期，由 [_recalculate] 维护。
   bool _hasOngoing = false;
 
+  /// 上一次 [_recalculate] 时的日期（仅日期，不含时间）。
+  /// 用于检测跨午夜：当前日期与此值不同时需要重算。
+  DateTime? _lastCalcDate;
+
+  /// 跨午夜自动刷新定时器。
+  /// 在 [loadRecords] 完成后启动，在下一个 00:00 触发数据重算。
+  /// 定时器使用 `Timer` 而非 `Stream.periodic`，因为只需要一次精确的
+  /// 午夜触发，之后重新调度下一次，避免累积偏差。
+  Timer? _midnightTimer;
+
   // ─── AI 助手缓存（跨页面持久化）──────────────────────────────
   /// 缓存上次生成的 AI 健康报告。退出 AI 助手页面后仍保留。
   HealthReport? _cachedReport;
 
   /// 报告生成时的 dataVersion，用于判断经期数据是否已更新。
   int _reportDataVersion = 0;
+
+  /// 报告生成时使用的模型 ID，用于判断是否需要重新生成。
+  String _reportModelId = '';
 
   /// 缓存 AI 问答的聊天历史。退出 AI 助手页面后仍保留。
   final List<ChatMessage> _chatHistory = [];
@@ -125,6 +143,13 @@ class PeriodProvider with ChangeNotifier {
   /// 是否存在进行中的经期。缓存以避免 UI 每次构建都遍历一遍记录列表。
   bool get hasOngoingPeriod => _hasOngoing;
 
+  @override
+  void dispose() {
+    _midnightTimer?.cancel();
+    _midnightTimer = null;
+    super.dispose();
+  }
+
   // ─── AI 助手缓存 getter ──────────────────────────────────────
   /// 获取缓存的 AI 健康报告（可能为 null）。
   HealthReport? get cachedReport => _cachedReport;
@@ -132,13 +157,17 @@ class PeriodProvider with ChangeNotifier {
   /// 报告生成时的 dataVersion。
   int get reportDataVersion => _reportDataVersion;
 
+  /// 报告生成时使用的模型 ID。
+  String get reportModelId => _reportModelId;
+
   /// 获取缓存的 AI 聊天历史（可变引用，UI 可直接操作）。
   List<ChatMessage> get chatHistory => _chatHistory;
 
   /// 保存 AI 健康报告到缓存，并持久化到 SQLite。
-  void cacheReport(HealthReport report) {
+  void cacheReport(HealthReport report, {String modelId = ''}) {
     _cachedReport = report;
     _reportDataVersion = _dataVersion;
+    _reportModelId = modelId;
     // 异步持久化，不阻塞 UI
     _persistCachedReport();
   }
@@ -147,9 +176,11 @@ class PeriodProvider with ChangeNotifier {
   void clearCachedReport() {
     _cachedReport = null;
     _reportDataVersion = 0;
+    _reportModelId = '';
     // 异步清除持久化
     _settingsDao.setValue('ai_report_json', '');
     _settingsDao.setValue('ai_report_data_version', '0');
+    _settingsDao.setValue('ai_report_model_id', '');
   }
 
   /// 从 SQLite 加载缓存的 AI 报告。
@@ -161,6 +192,8 @@ class PeriodProvider with ChangeNotifier {
       _cachedReport = HealthReport.fromJson(json);
       final versionStr = await _settingsDao.getValue('ai_report_data_version');
       _reportDataVersion = int.tryParse(versionStr ?? '0') ?? 0;
+      final modelIdStr = await _settingsDao.getValue('ai_report_model_id');
+      _reportModelId = modelIdStr ?? '';
     } catch (e) {
       debugPrint('Error loading cached AI report: $e');
     }
@@ -174,6 +207,7 @@ class PeriodProvider with ChangeNotifier {
       await _settingsDao.setValue('ai_report_json', jsonStr);
       await _settingsDao.setValue(
           'ai_report_data_version', _reportDataVersion.toString());
+      await _settingsDao.setValue('ai_report_model_id', _reportModelId);
     } catch (e) {
       debugPrint('Error persisting AI report: $e');
     }
@@ -220,6 +254,8 @@ class PeriodProvider with ChangeNotifier {
     _dailyFlowMap[AppDateUtils.dayKey(date)] = flowLevel;
     _dataVersion++;
     notifyListeners();
+    // 同步更新桌面小组件（经量等级变化需反映到小组件 UI）
+    _updateWidget();
   }
 
   /// 清除某天的经量记录。
@@ -229,16 +265,28 @@ class PeriodProvider with ChangeNotifier {
     _dailyFlowMap.remove(AppDateUtils.dayKey(date));
     _dataVersion++;
     notifyListeners();
+    // 同步更新桌面小组件
+    _updateWidget();
   }
 
-  Future<void> loadRecords() async {
+  /// 从数据库加载所有记录。
+  ///
+  /// [forceRefresh] 为 true 时，会先关闭并重新打开数据库连接，
+  /// 确保读到原生端（小组件）直接写入的最新数据。
+  /// 在小组件操作数据库后恢复 App 时应设为 true。
+  Future<void> loadRecords({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      debugPrint('[PeriodProvider] forceRefreshing database connection');
+      await _dbProvider.refreshConnection();
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
       _algorithm = await _settingsDao.getPredictionAlgorithm();
       _records = await _dao.getAll();
-      _loadDailyFlows();
+      await _loadDailyFlows();
       _recalculate();
       if (_autoEndEnabled) {
         await _autoEndExpiredPeriods();
@@ -257,12 +305,16 @@ class PeriodProvider with ChangeNotifier {
     // 通知调度涉及 platform channel，刻意不 await —— 它不应阻塞 UI 刷新。
     _scheduleReminderIfNeeded();
     _updateWidget();
+
+    // 启动跨午夜自动刷新定时器。
+    _scheduleMidnightRefresh();
   }
 
   /// 重算派生数据（周期预测 + 经期日索引 + 日类型缓存）。
   void _recalculate() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    _lastCalcDate = today;
     _hasOngoing = _records.any((r) => r.isOngoing);
     _cycleData = PredictionService.calculateCycleData(
       _records,
@@ -944,6 +996,79 @@ class PeriodProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('Widget update error: $e');
     }
+  }
+
+  // ─── 跨午夜自动刷新 ──────────────────────────────────────────────
+
+  /// 安排下一个午夜 00:00 的刷新定时器。
+  ///
+  /// 在 `loadRecords` 完成后调用，计算到下一个 00:00:01 的精确时间差，
+  /// 到点后触发 [_refreshForNewDay]。加 1 秒缓冲确保已跨过午夜。
+  void _scheduleMidnightRefresh() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    // 00:00:01 —— 加 1 秒确保系统时钟已翻到新的一天
+    final midnight = DateTime(
+      tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 1,
+    );
+    final duration = midnight.difference(now);
+    _midnightTimer = Timer(duration, _refreshForNewDay);
+  }
+
+  /// 跨午夜刷新：重新计算派生数据并通知 UI。
+  ///
+  /// 此方法由 [_midnightTimer] 在 00:00:01 触发，也可由
+  /// [checkAndRefreshForNewDay] 在 app 恢复前台等场景手动调用。
+  void _refreshForNewDay() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 如果日期没变（理论上不会，但作为安全阀），不做任何操作
+    if (_lastCalcDate != null &&
+        _lastCalcDate!.year == today.year &&
+        _lastCalcDate!.month == today.month &&
+        _lastCalcDate!.day == today.day) {
+      // 仍然重新调度下一次午夜刷新
+      _scheduleMidnightRefresh();
+      return;
+    }
+
+    debugPrint('[PeriodProvider] Midnight refresh: recalculating for new day');
+
+    // 如果有进行中的经期，可能需要自动结束（超过配置天数）
+    if (_autoEndEnabled) {
+      _autoEndExpiredPeriods().then((_) {
+        _recalculate();
+        notifyListeners();
+        _scheduleReminderIfNeeded();
+        _updateWidget();
+        // 重新调度下一次午夜刷新
+        _scheduleMidnightRefresh();
+      });
+    } else {
+      _recalculate();
+      notifyListeners();
+      _updateWidget();
+      _scheduleMidnightRefresh();
+    }
+  }
+
+  /// 检查日期是否已变化，如变化则立即刷新。
+  ///
+  /// 供外部（如 [MyApp] 的 `didChangeAppLifecycleState`）在 app 从
+  /// 后台恢复前台时调用，确保长时间后台后数据不会过期。
+  /// 也会在 [setAlgorithm] 等方法中隐式调用。
+  void checkAndRefreshForNewDay() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (_lastCalcDate != null &&
+        _lastCalcDate!.year == today.year &&
+        _lastCalcDate!.month == today.month &&
+        _lastCalcDate!.day == today.day) {
+      return; // 日期未变，无需刷新
+    }
+    _refreshForNewDay();
   }
 
   PeriodRecord? getRecordForDate(DateTime date) {

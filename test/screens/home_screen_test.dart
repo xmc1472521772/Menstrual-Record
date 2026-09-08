@@ -177,6 +177,9 @@ class _TestDatabaseProvider implements DatabaseProvider {
   @override
   Future<Database> get database => Future.value(_db);
 
+  @override
+  Future<void> refreshConnection() async {}
+
   Future<void> close() async {
     await _db.close();
   }

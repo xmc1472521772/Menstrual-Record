@@ -196,35 +196,49 @@ class HealthReport {
     required this.healthScore,
   });
 
+  /// 将动态对象安全转换为 Map<String, dynamic>，
+  /// 兼容模型返回的 LinkedHashMap 等非显式 Map 类型。
+  static Map<String, dynamic> _asMap(dynamic e) {
+    if (e is Map<String, dynamic>) return e;
+    if (e is Map) return Map<String, dynamic>.from(e);
+    return <String, dynamic>{};
+  }
+
   factory HealthReport.fromJson(Map<String, dynamic> json) {
     final cycleStatsRaw = json['cycleStats'] as List? ?? [];
     final cycleStats = cycleStatsRaw
-        .map((e) => StatItem.fromJson(e as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((e) => StatItem.fromJson(_asMap(e)))
         .toList();
 
     final symptomTrendsRaw = json['symptomTrends'] as List? ?? [];
     final symptomTrends = symptomTrendsRaw
-        .map((e) => TrendItem.fromJson(e as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((e) => TrendItem.fromJson(_asMap(e)))
         .toList();
 
     final comparisonTrendsRaw = json['comparisonTrends'] as List? ?? [];
     final comparisonTrends = comparisonTrendsRaw
-        .map((e) => TrendItem.fromJson(e as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((e) => TrendItem.fromJson(_asMap(e)))
         .toList();
 
     final attentionsRaw = json['attentions'] as List? ?? [];
     final attentions = attentionsRaw
-        .map((e) => AttentionItem.fromJson(e as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((e) => AttentionItem.fromJson(_asMap(e)))
         .toList();
 
     final nextCycleRaw = json['nextCycleSuggestions'] as List? ?? [];
     final nextCycleSuggestions = nextCycleRaw
-        .map((e) => NextCycleSuggestion.fromJson(e as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((e) => NextCycleSuggestion.fromJson(_asMap(e)))
         .toList();
 
     final medicalRaw = json['medicalReminders'] as List? ?? [];
     final medicalReminders = medicalRaw
-        .map((e) => MedicalReminder.fromJson(e as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((e) => MedicalReminder.fromJson(_asMap(e)))
         .toList();
 
     return HealthReport(
@@ -262,36 +276,94 @@ class HealthReport {
 //  AI健康分析服务
 // ═══════════════════════════════════════════════════════════════
 
+/// 可选的 AI 模型配置。
+class AiModelConfig {
+  final String id;
+  final String displayName;
+  final String apiUrl;
+  final String apiKey;
+  final String model;
+  final String disclaimer;
+
+  const AiModelConfig({
+    required this.id,
+    required this.displayName,
+    required this.apiUrl,
+    required this.apiKey,
+    required this.model,
+    required this.disclaimer,
+  });
+}
+
 /// AI健康分析服务。
 ///
-/// 通过调用智谱GLM-4-flash大模型，基于用户的经期记录、周期数据和每日经量数据，
+/// 支持多模型切换（智谱GLM-4-flash / OpenRouter Ling-3.0），
+/// 基于用户的经期记录、周期数据和每日经量数据，
 /// 进行客观、严谨的数据分析与健康提示。
 class AIHealthService {
-  /// 智谱API端点
-  static const String _apiUrl =
-      'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-
-  /// API Key —— 从编译时环境变量读取，避免硬编码
-  static const String _apiKey = String.fromEnvironment(
+  /// 智谱GLM API Key —— 从编译时环境变量读取，避免硬编码
+  static const String _glmApiKey = String.fromEnvironment(
     'GLM_API_KEY',
     defaultValue: '',
   );
 
-  /// 模型名称
-  static const String _model = 'glm-4-flash';
+  /// OpenRouter API Key —— 从编译时环境变量读取，避免硬编码
+  /// 本地构建时注入：--dart-define=OPENROUTER_API_KEY=你的key
+  static const String _openRouterApiKey = String.fromEnvironment(
+    'OPENROUTER_API_KEY',
+    defaultValue: '',
+  );
 
-  /// API Key 是否已配置
-  static bool get isConfigured => _apiKey.isNotEmpty;
+  /// 所有可用的模型配置
+  static List<AiModelConfig> get availableModels => [
+        const AiModelConfig(
+          id: 'glm-4-flash',
+          displayName: '智谱GLM-4-Flash',
+          apiUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+          apiKey: _glmApiKey,
+          model: 'glm-4-flash',
+          disclaimer: '本报告由智谱GLM-4大模型基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。',
+        ),
+        const AiModelConfig(
+          id: 'ling-3.0-flash-sante',
+          displayName: 'Ling-3.0-Flash-Sante',
+          apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
+          apiKey: _openRouterApiKey,
+          model: 'inclusionai/ling-3.0-flash-sante:free',
+          disclaimer: '本报告由Ling-3.0-Flash-Sante模型（OpenRouter）基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。',
+        ),
+      ];
+
+  /// 默认模型 ID
+  static const String defaultModelId = 'glm-4-flash';
+
+  /// 根据模型 ID 获取配置
+  static AiModelConfig configFor(String modelId) {
+    return availableModels.firstWhere(
+      (m) => m.id == modelId,
+      orElse: () => availableModels.first,
+    );
+  }
+
+  /// 检查指定模型的 API Key 是否已配置
+  static bool isModelConfigured(String modelId) =>
+      configFor(modelId).apiKey.isNotEmpty;
+
+  /// 根据模型 ID 获取免责声明
+  static String disclaimerFor(String modelId) {
+    return configFor(modelId).disclaimer;
+  }
 
   // ─── 健康报告生成 ──────────────────────────────────────────────
 
-  /// 生成完整的健康分析报告（异步，调用智谱GLM API）。
+  /// 生成完整的健康分析报告（异步，调用指定模型的 API）。
   static Future<HealthReport?> generateReport({
     required List<PeriodRecord> records,
     required CycleData cycleData,
     required Map<int, int> dailyFlowMap,
     required int userCycleLength,
     required int userPeriodLength,
+    required String modelId,
   }) async {
     if (records.isEmpty) return null;
 
@@ -300,8 +372,30 @@ class AIHealthService {
     );
     final systemPrompt = _buildSystemPrompt();
     final userMessage = _buildUserMessage(dataText);
-    final response = await _callApi(systemPrompt, userMessage);
-    return _parseResponse(response);
+
+    // 重试机制：最多尝试 3 次
+    // Ling-3.0-Flash-Sante 等免费模型偶尔会返回格式不正确的 JSON
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await _callApi(systemPrompt, userMessage, modelId);
+        return _parseResponse(response);
+      } on Exception catch (e) {
+        lastError = e;
+        final msg = e.toString();
+        // 仅对「格式不正确」类错误进行重试
+        if (msg.contains('格式不正确') || msg.contains('格式异常') ||
+            msg.contains('未返回有效内容')) {
+          if (attempt < 2) {
+            await Future.delayed(Duration(seconds: 1 * (attempt + 1)));
+            continue;
+          }
+        }
+        // 其他错误直接抛出
+        rethrow;
+      }
+    }
+    throw lastError ?? Exception('AI 返回的数据格式不正确，请稍后重试');
   }
 
   // ─── 问答功能 ──────────────────────────────────────────────────
@@ -317,6 +411,7 @@ class AIHealthService {
     required Map<int, int> dailyFlowMap,
     required int userCycleLength,
     required int userPeriodLength,
+    required String modelId,
     List<ChatMessage> chatHistory = const [],
   }) async {
     final dataText = _buildUserDataText(
@@ -341,7 +436,7 @@ class AIHealthService {
     // 当前问题
     messages.add({'role': 'user', 'content': question});
 
-    return _callApiWithMessages(messages);
+    return _callApiWithMessages(messages, modelId);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -979,6 +1074,7 @@ $dataText
     required Map<int, int> dailyFlowMap,
     required int userCycleLength,
     required int userPeriodLength,
+    required String modelId,
     List<ChatMessage> chatHistory = const [],
   }) async* {
     final dataText = _buildUserDataText(
@@ -1003,78 +1099,124 @@ $dataText
     // 当前问题
     messages.add({'role': 'user', 'content': question});
 
-    yield* _callApiStream(messages);
+    yield* _callApiStream(messages, modelId);
   }
 
   // ═══════════════════════════════════════════════════════════════
   //  API调用
   // ═══════════════════════════════════════════════════════════════
 
-  /// 调用智谱GLM API（单轮：system + user），返回模型生成的文本内容。
-  static Future<String> _callApi(String systemPrompt, String userMessage) async {
+  /// 调用AI API（单轮：system + user），返回模型生成的文本内容。
+  static Future<String> _callApi(String systemPrompt, String userMessage, String modelId) async {
     return _callApiWithMessages([
       {'role': 'system', 'content': systemPrompt},
       {'role': 'user', 'content': userMessage},
-    ]);
+    ], modelId);
   }
 
-  /// 调用智谱GLM API（多轮消息），返回模型生成的文本内容。
+  /// 调用AI API（多轮消息），返回模型生成的文本内容。
   static Future<String> _callApiWithMessages(
     List<Map<String, String>> messages,
+    String modelId,
   ) async {
-    if (_apiKey.isEmpty) {
-      throw Exception('API Key 未配置，请使用 --dart-define=GLM_API_KEY=xxx 编译');
+    final config = configFor(modelId);
+    if (config.apiKey.isEmpty) {
+      throw Exception('当前模型的 API Key 未配置');
     }
 
-    final response = await http.post(
-      Uri.parse(_apiUrl),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _model,
-        'messages': messages,
-        'temperature': 0.3,
-        'max_tokens': 4096,
-      }),
-    ).timeout(const Duration(seconds: 120));
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${config.apiKey}',
+    };
+
+    // OpenRouter 需要额外的 header
+    if (config.id == 'ling-3.0-flash-sante') {
+      headers['HTTP-Referer'] = 'https://yima.app';
+      headers['X-Title'] = 'Yima';
+    }
+
+    http.Response response;
+    try {
+      response = await http.post(
+        Uri.parse(config.apiUrl),
+        headers: headers,
+        body: jsonEncode({
+          'model': config.model,
+          'messages': messages,
+          'temperature': 0.3,
+          'max_tokens': 4096,
+        }),
+      ).timeout(const Duration(seconds: 120));
+    } catch (e) {
+      if (e.toString().contains('TimeoutException') ||
+          e.toString().contains('timeout')) {
+        throw Exception('请求超时，请检查网络连接后重试');
+      }
+      throw Exception('网络连接失败，请检查网络后重试');
+    }
 
     if (response.statusCode != 200) {
-      final errorBody = response.body;
-      throw Exception(
-        'AI请求失败（HTTP ${response.statusCode}）${errorBody.isNotEmpty ? ': $errorBody' : ''}',
-      );
+      throw Exception(_friendlyError(response.statusCode, response.body));
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final choices = body['choices'] as List?;
     if (choices == null || choices.isEmpty) {
-      throw Exception('AI返回数据格式异常');
+      throw Exception('AI 返回数据格式异常，请稍后重试');
     }
 
-    final content = choices[0]['message']['content'] as String?;
+    // 兼容不同模型的返回结构：
+    // - 标准格式：choices[0].message.content (String)
+    // - 部分模型：choices[0].message.content 可能是 List (含 reasoning + content)
+    // - 部分模型：choices[0].message.reasoning + choices[0].message.content
+    final message = choices[0]['message'];
+    String? content;
+    if (message is Map) {
+      final rawContent = message['content'];
+      if (rawContent is String) {
+        content = rawContent;
+      } else if (rawContent is List) {
+        // 某些模型返回 content 为数组形式
+        content = rawContent
+            .whereType<Map>()
+            .map((e) => e['text'] as String?)
+            .where((t) => t != null)
+            .join();
+      }
+    }
     if (content == null || content.isEmpty) {
-      throw Exception('AI返回数据为空');
+      throw Exception('AI 未返回有效内容，请稍后重试');
     }
 
     return content;
   }
 
-  /// 调用智谱GLM API（流式SSE），逐块 yield 回答文本。
+  /// 调用AI API（流式SSE），逐块 yield 回答文本。
   static Stream<String> _callApiStream(
     List<Map<String, String>> messages,
+    String modelId,
   ) async* {
-    if (_apiKey.isEmpty) {
-      throw Exception('API Key 未配置，请使用 --dart-define=GLM_API_KEY=xxx 编译');
+    final config = configFor(modelId);
+    if (config.apiKey.isEmpty) {
+      throw Exception('当前模型的 API Key 未配置');
     }
 
-    final request = http.Request('POST', Uri.parse(_apiUrl));
-    request.headers['Content-Type'] = 'application/json';
-    request.headers['Authorization'] = 'Bearer $_apiKey';
-    request.headers['Accept'] = 'text/event-stream';
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${config.apiKey}',
+      'Accept': 'text/event-stream',
+    };
+
+    // OpenRouter 需要额外的 header
+    if (config.id == 'ling-3.0-flash-sante') {
+      headers['HTTP-Referer'] = 'https://yima.app';
+      headers['X-Title'] = 'Yima';
+    }
+
+    final request = http.Request('POST', Uri.parse(config.apiUrl));
+    request.headers.addAll(headers);
     request.body = jsonEncode({
-      'model': _model,
+      'model': config.model,
       'messages': messages,
       'temperature': 0.3,
       'max_tokens': 4096,
@@ -1082,16 +1224,32 @@ $dataText
     });
 
     final client = http.Client();
-    final response = await client.send(request)
-        .timeout(const Duration(seconds: 120));
+    http.StreamedResponse response;
+    try {
+      response = await client.send(request)
+          .timeout(const Duration(seconds: 120));
+    } catch (e) {
+      client.close();
+      if (e.toString().contains('TimeoutException') ||
+          e.toString().contains('timeout')) {
+        throw Exception('请求超时，请检查网络连接后重试');
+      }
+      throw Exception('网络连接失败，请检查网络后重试');
+    }
 
     if (response.statusCode != 200) {
       client.close();
-      throw Exception('AI请求失败（HTTP ${response.statusCode}）');
+      // 读取错误内容用于友好提示
+      String errorBody = '';
+      try {
+        errorBody = await response.stream.bytesToString();
+      } catch (_) {}
+      throw Exception(_friendlyError(response.statusCode, errorBody));
     }
 
     // SSE 数据格式：以 data: 开头，每行一个 JSON chunk
     // 最后一个 chunk 的 data: [DONE] 表示结束
+    // OpenRouter 可能会发送以 : 开头的注释行，需要跳过
     var buffer = '';
     await for (final chunk in response.stream.transform(
       utf8.decoder,
@@ -1105,6 +1263,8 @@ $dataText
         buffer = buffer.substring(newlineIndex + 1);
 
         if (line.isEmpty) continue;
+        // 跳过 OpenRouter 的注释行（以 : 开头）
+        if (line.startsWith(':')) continue;
         if (!line.startsWith('data:')) continue;
 
         final data = line.substring(5).trim();
@@ -1157,23 +1317,180 @@ $dataText
   //  响应解析
   // ═══════════════════════════════════════════════════════════════
 
-  static HealthReport _parseResponse(String content) {
-    String jsonStr = content;
-
-    final jsonBlockMatch = RegExp(
-      r'```(?:json)?\s*([\s\S]*?)```',
-    ).firstMatch(content);
-    if (jsonBlockMatch != null) {
-      jsonStr = jsonBlockMatch.group(1)!.trim();
-    } else {
-      final firstBrace = content.indexOf('{');
-      final lastBrace = content.lastIndexOf('}');
-      if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
-        jsonStr = content.substring(firstBrace, lastBrace + 1);
+  /// 将 HTTP 状态码和错误体转换为用户友好的提示信息。
+  static String _friendlyError(int statusCode, String errorBody) {
+    // 尝试从 errorBody 中提取可读信息
+    String detail = '';
+    if (errorBody.isNotEmpty) {
+      try {
+        final json = jsonDecode(errorBody) as Map<String, dynamic>;
+        final error = json['error'];
+        if (error is Map) {
+          detail = error['message'] as String? ?? '';
+        } else if (error is String) {
+          detail = error;
+        }
+      } catch (_) {
+        // 非 JSON 错误体，截取前 100 字符
+        detail = errorBody.length > 100
+            ? errorBody.substring(0, 100)
+            : errorBody;
       }
     }
 
-    final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-    return HealthReport.fromJson(json);
+    if (statusCode == 401) {
+      return 'API Key 无效或已过期，请联系开发者';
+    } else if (statusCode == 429) {
+      return '请求过于频繁，请稍后重试';
+    } else if (statusCode == 500 || statusCode == 502 || statusCode == 503) {
+      return 'AI 服务暂时不可用，请稍后重试';
+    } else if (statusCode == 400) {
+      return '请求参数有误，请稍后重试${detail.isNotEmpty ? '（$detail）' : ''}';
+    } else {
+      return 'AI 服务请求失败（$statusCode），请稍后重试';
+    }
+  }
+
+  /// 尝试从模型返回的文本中提取 JSON 字符串。
+  ///
+  /// 按优先级依次尝试以下策略：
+  /// 1. 提取 ```json ... ``` 代码块
+  /// 2. 提取 ``` ... ``` 代码块（无语言标记）
+  /// 3. 提取第一个 `{` 到最后一个 `}` 之间的内容
+  /// 4. 原文直接尝试
+  static String? _extractJsonString(String content) {
+    // 策略1：```json ... ```
+    final jsonBlockMatch = RegExp(
+      r'```json\s*([\s\S]*?)```',
+      caseSensitive: false,
+    ).firstMatch(content);
+    if (jsonBlockMatch != null) {
+ final candidate = jsonBlockMatch.group(1)!.trim();
+      if (candidate.isNotEmpty) return candidate;
+    }
+
+    // 策略2：``` ... ```（无语言标记）
+    final genericBlockMatch = RegExp(
+      r'```\s*([\s\S]*?)```',
+    ).firstMatch(content);
+    if (genericBlockMatch != null) {
+      final candidate = genericBlockMatch.group(1)!.trim();
+      if (candidate.isNotEmpty && candidate.startsWith('{')) return candidate;
+    }
+
+    // 策略3：第一个 `{` 到最后一个 `}`
+    final firstBrace = content.indexOf('{');
+    final lastBrace = content.lastIndexOf('}');
+    if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+      return content.substring(firstBrace, lastBrace + 1);
+    }
+
+    // 策略4：原文
+    final trimmed = content.trim();
+    if (trimmed.startsWith('{')) return trimmed;
+
+    return null;
+  }
+
+  /// 对提取出的 JSON 字符串进行常见格式修复。
+  ///
+  /// 处理以下问题：
+  /// - 去除单行注释 (// ... 和 # ...)
+  /// - 去除多行注释 (/* ... */)
+  /// - 去除尾部逗号（trailing comma）
+  /// - 将单引号转换为双引号（仅键值引用）
+  static String _repairJsonString(String jsonStr) {
+    var result = jsonStr;
+
+    // 去除单行注释（// ...）
+    result = result.replaceAll(
+      RegExp(r'//[^\n\r]*'),
+      '',
+    );
+
+    // 去除单行注释（# ...）
+    result = result.replaceAll(
+      RegExp(r'#[^\n\r]*'),
+      '',
+    );
+
+    // 去除多行注释（/* ... */）
+    result = result.replaceAll(
+      RegExp(r'/\*[\s\S]*?\*/'),
+      '',
+    );
+
+    // 去除尾部逗号：}, ] 或 }, } 或 , ] 或 , }
+    result = result.replaceAll(
+      RegExp(r',\s*([}\]])'),
+      r'$1',
+    );
+
+    // 修复单引号包裹的键和值 -> 双引号
+    // 仅在未被转义的情况下替换
+    result = result.replaceAll(
+      RegExp(r"(?<!\\)'"),
+      '"',
+    );
+
+    return result;
+  }
+
+  static HealthReport _parseResponse(String content) {
+    final jsonStr = _extractJsonString(content);
+
+    if (jsonStr == null) {
+      throw Exception('AI 返回的数据格式不正确，请稍后重试');
+    }
+
+    // 第一次尝试：直接解析
+    try {
+      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return HealthReport.fromJson(json);
+    } catch (_) {
+      // 继续尝试修复
+    }
+
+    // 第二次尝试：修复常见格式问题后解析
+    try {
+      final repaired = _repairJsonString(jsonStr);
+      final json = jsonDecode(repaired) as Map<String, dynamic>;
+      return HealthReport.fromJson(json);
+    } catch (_) {
+      // 继续尝试
+    }
+
+    // 第三次尝试：逐字符匹配花括号，找到最长的可解析 JSON 片段
+    final firstBrace = jsonStr.indexOf('{');
+    if (firstBrace != -1) {
+      var depth = 0;
+      var lastValidBrace = -1;
+      for (var i = firstBrace; i < jsonStr.length; i++) {
+        final ch = jsonStr[i];
+        if (ch == '{') depth++;
+        if (ch == '}') {
+          depth--;
+          if (depth == 0) lastValidBrace = i;
+        }
+      }
+      if (lastValidBrace > firstBrace) {
+        final subStr = jsonStr.substring(firstBrace, lastValidBrace + 1);
+        try {
+          final json = jsonDecode(subStr) as Map<String, dynamic>;
+          return HealthReport.fromJson(json);
+        } catch (_) {
+          // 尝试修复后解析
+          try {
+            final repaired = _repairJsonString(subStr);
+            final json = jsonDecode(repaired) as Map<String, dynamic>;
+            return HealthReport.fromJson(json);
+          } catch (_) {
+            // 放弃
+          }
+        }
+      }
+    }
+
+    throw Exception('AI 返回的数据格式不正确，请稍后重试');
   }
 }
