@@ -40,7 +40,8 @@ class DailyFlow {
   factory DailyFlow.fromJson(Map<String, dynamic> json) {
     return DailyFlow(
       date: json['date'] as String,
-      flowLevel: (json['flowLevel'] as num?)?.toInt() ?? 0,
+      // 范围校验：导入的越界脏数据钳制到合法区间 0-3
+      flowLevel: ((json['flowLevel'] as num?)?.toInt() ?? 0).clamp(0, 3).toInt(),
     );
   }
 }

@@ -34,9 +34,14 @@ class DatabaseHelper implements DatabaseProvider {
       _database = await _initDatabase();
       _initCompleter!.complete(_database!);
       return _database!;
-    } catch (e) {
-      _initCompleter!.completeError(e);
+    } catch (e, st) {
+      final completer = _initCompleter;
       _initCompleter = null;
+      if (completer != null && !completer.isCompleted) {
+        completer.completeError(e, st);
+        // 若无并发等待者，ignore 兜底防止 unhandled exception
+        completer.future.ignore();
+      }
       rethrow;
     }
   }
@@ -125,7 +130,7 @@ class DatabaseHelper implements DatabaseProvider {
     await db.insert('settings', {'key': 'reminder_days', 'value': '2'});
     await db.insert('settings', {'key': 'reminder_hour', 'value': '9'});
     await db.insert(
-        'settings', {'key': 'prediction_algorithm', 'value': 'simple'});
+        'settings', {'key': 'prediction_algorithm', 'value': 'adaptive'});
     await db.insert(
         'settings', {'key': 'merge_threshold', 'value': '2'});
   }
@@ -134,12 +139,18 @@ class DatabaseHelper implements DatabaseProvider {
     if (_isClosing) return;
     _isClosing = true;
     try {
+      // 先置空再关闭：关闭期间新来的 database getter 会走重建路径，
+      // 而不是拿到一个正在关闭的连接
       final db = _database;
-      if (db != null) {
-        await db.close();
-      }
       _database = null;
       _initCompleter = null;
+      if (db != null) {
+        try {
+          await db.close();
+        } catch (_) {
+          // 关闭失败（如原生端并发已关闭）不应阻塞重建
+        }
+      }
     } finally {
       _isClosing = false;
     }
@@ -150,16 +161,23 @@ class DatabaseHelper implements DatabaseProvider {
   /// 当原生端（小组件）通过另一个 SQLiteDatabase 连接直接修改了数据库时，
   /// Flutter 端的 sqflite 连接可能读到缓存的旧数据。
   /// 调用此方法关闭并重新打开连接，确保后续读取能获取最新数据。
+  @override
   Future<void> refreshConnection() async {
     if (_isClosing) return;
     _isClosing = true;
     try {
+      // 先置空再关闭：关闭期间新来的 database getter 会走重建路径，
+      // 而不是拿到一个正在关闭的连接
       final db = _database;
-      if (db != null) {
-        await db.close();
-      }
       _database = null;
       _initCompleter = null;
+      if (db != null) {
+        try {
+          await db.close();
+        } catch (_) {
+          // 关闭失败（如原生端并发已关闭）不应阻塞重建
+        }
+      }
     } finally {
       _isClosing = false;
     }

@@ -79,9 +79,21 @@ class PeriodRecord {
     if (startDateStr == null || startDateStr is! String || startDateStr.isEmpty) {
       throw const FormatException('缺少必填字段 startDate');
     }
+    // endDate 防护：空字符串视为未设置；非法日期或早于起点的脏数据
+    // 统一归一化为 ongoing（endDate=null），避免后续 DateTime.parse 崩溃
+    final endDateRaw = json['endDate'];
+    String? endDate =
+        (endDateRaw is String && endDateRaw.isNotEmpty) ? endDateRaw : null;
+    if (endDate != null) {
+      final start = DateTime.tryParse(startDateStr);
+      final end = DateTime.tryParse(endDate);
+      if (end == null || (start != null && end.isBefore(start))) {
+        endDate = null;
+      }
+    }
     return PeriodRecord(
       startDate: startDateStr,
-      endDate: json['endDate'] as String?,
+      endDate: endDate,
       cycleLength: json['cycleLength'] as int?,
       periodLength: json['periodLength'] as int?,
       flowLevel: json['flowLevel'] as int?,

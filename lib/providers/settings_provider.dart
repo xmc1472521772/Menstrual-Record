@@ -157,4 +157,12 @@ class SettingsProvider with ChangeNotifier {
       return false;
     }
   }
+
+  @override
+  void dispose() {
+    // 取消未触发的防抖写入，避免 dispose 后 Timer 回调仍访问 _dao
+    _cycleLengthDebounce?.cancel();
+    _periodLengthDebounce?.cancel();
+    super.dispose();
+  }
 }
