@@ -324,9 +324,23 @@ class PeriodProvider with ChangeNotifier {
       notifyListeners();
 
       try {
-        _algorithm = await _settingsDao.getPredictionAlgorithm();
-        _userCycleLength = await _settingsDao.getCycleLength();
-        _userPeriodLength = await _settingsDao.getPeriodLength();
+        // 同源单查询：冷启动原先串行 3 次设置查询（algorithm/cycle/period，
+        // 每次 DB 往返），改为一次 getAll() 后按 key 取值，与
+        // SettingsProvider.loadSettings 的单查询策略一致。
+        // 刻意不从 SettingsProvider 内存取值（省掉这唯一一次查询）：
+        // ① 本 Provider 的构造注入模式（测试只注入 DAO）不能依赖
+        //    SettingsProvider 实例；② 两份内存值的一致性由「同一张表 +
+        //    加载时刻同源读取」保证，读写路径仍然各管各的写入。
+        final all = await _settingsDao.getAll();
+        final algorithmValue = all['prediction_algorithm'];
+        // 兼容旧版：'weighted' 统一映射为 'adaptive'
+        // （原 SettingsDao.getPredictionAlgorithm 内的映射逻辑）
+        _algorithm = algorithmValue == 'weighted'
+            ? 'adaptive'
+            : (algorithmValue ?? 'adaptive');
+        _userCycleLength = int.tryParse(all['avg_cycle_length'] ?? '28') ?? 28;
+        _userPeriodLength =
+            int.tryParse(all['avg_period_length'] ?? '5') ?? 5;
         _records = await _dao.getAll();
         await _loadDailyFlows();
         _recalculate();

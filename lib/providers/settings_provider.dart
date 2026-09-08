@@ -44,14 +44,28 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> loadSettings() async {
     try {
-      _cycleLength = await _dao.getCycleLength();
-      _periodLength = await _dao.getPeriodLength();
-      _reminderDays = await _dao.getReminderDays();
-      _reminderHour = await _dao.getReminderHour();
-      _algorithm = await _dao.getPredictionAlgorithm();
-      _mergeThreshold = await _dao.getMergeThreshold();
-      _reportModel = await _dao.getReportModel();
-      _chatModel = await _dao.getChatModel();
+      // 同源单查询：冷启动路径原先串行 8 次 getValue()（每次一次 DB 往返），
+      // 现改为一次 getAll() 取回全部设置项后按 key 解析，DB 往返 8 → 1。
+      // 各字段的解析与默认值回退逻辑与 [SettingsDao] 中对应 getter 保持
+      // 一致（包括 'weighted'→'adaptive' 兼容映射与 ai_model 旧 key 回退），
+      // 未来新增设置项时两处需同步维护——取舍：设置项总数个位数且变动
+      // 极少，单查询带来的启动收益远大于双处维护的成本。
+      final all = await _dao.getAll();
+
+      _cycleLength = int.tryParse(all['avg_cycle_length'] ?? '28') ?? 28;
+      _periodLength = int.tryParse(all['avg_period_length'] ?? '5') ?? 5;
+      _reminderDays = int.tryParse(all['reminder_days'] ?? '2') ?? 2;
+      _reminderHour = int.tryParse(all['reminder_hour'] ?? '9') ?? 9;
+      final algorithmValue = all['prediction_algorithm'];
+      // 兼容旧版：'weighted' 统一映射为 'adaptive'
+      // （原 SettingsDao.getPredictionAlgorithm 内的映射逻辑）
+      _algorithm = algorithmValue == 'weighted'
+          ? 'adaptive'
+          : (algorithmValue ?? 'adaptive');
+      _mergeThreshold = int.tryParse(all['merge_threshold'] ?? '2') ?? 2;
+      // 兼容旧版单一 ai_model 设置
+      _reportModel = all['ai_report_model'] ?? all['ai_model'] ?? 'glm-4-flash';
+      _chatModel = all['ai_chat_model'] ?? all['ai_model'] ?? 'glm-4-flash';
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
