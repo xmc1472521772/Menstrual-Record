@@ -686,10 +686,35 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: canSave
-                        ? () {
+                        ? () async {
+                            final ranges = _buildRanges();
+                            // 保存前二次校验：未来起点的记录会破坏周期预测
+                            // （sortedRecords.last 被指向未来）。多段补录场景
+                            // 仍允许刻意保存，但必须经用户明确确认，防止误触。
+                            final hasFutureStart = ranges.any((r) => r.$1.isAfter(widget.today));
+                            if (hasFutureStart) {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text(AppStrings.futureRangeConfirmTitle),
+                                  content: const Text(AppStrings.futureRangeConfirmBody),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text(AppStrings.cancel),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text(AppStrings.confirm),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed != true) return;
+                            }
                             // 只做取数 + 关闭页面，DB 写入交给 RecordScreen 在后台执行，
                             // 这样点击「确定」后页面立刻返回，不会有等待感。
-                            final ranges = _buildRanges();
+                            if (!mounted) return;
                             Navigator.pop(context, ranges);
                           }
                         : null,

@@ -130,6 +130,8 @@ void main() {
       periodDao: PeriodDao(dbHelper: dbHelper),
       flowDao: DailyFlowDao(dbHelper: dbHelper),
       settingsDao: SettingsDao(dbHelper: dbHelper),
+      // 与 DAO 同库，避免默认 DatabaseHelper() 单例指向另一个数据库
+      dbProvider: dbHelper,
       scheduleReminders: false,
       autoEndExpiredPeriods: false,
     );
