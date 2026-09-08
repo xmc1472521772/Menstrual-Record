@@ -7,6 +7,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/ai_health_service.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/ai_assistant_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
@@ -69,8 +70,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<PeriodProvider>();
+      final aiProvider = context.read<AiAssistantProvider>();
       // 只有第一次（没有缓存报告）才自动生成
-      if (provider.cachedReport == null &&
+      if (aiProvider.cachedReport == null &&
           provider.records.isNotEmpty &&
           provider.cycleData != null) {
         _generateReport();
@@ -90,6 +92,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   Future<void> _generateReport() async {
     final provider = context.read<PeriodProvider>();
     final settings = context.read<SettingsProvider>();
+    final aiProvider = context.read<AiAssistantProvider>();
 
     if (provider.records.isEmpty || provider.cycleData == null) {
       return;
@@ -127,7 +130,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       if (report != null) {
         // 无论用户是否已退出页面都缓存报告（service 层操作，不依赖 mounted），
         // 避免已成功生成（已消耗 API 调用）的报告被白白丢弃。
-        provider.cacheReport(report, modelId: modelId);
+        // dataVersion 以缓存时刻为准：生成期间数据若变化，下次进入时
+        // 会显示"数据已更新"提示。
+        aiProvider.cacheReport(
+          report,
+          modelId: modelId,
+          dataVersion: provider.dataVersion,
+        );
       }
 
       if (mounted) {
@@ -156,14 +165,15 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   bool get _dataUpdatedSinceReport {
     final provider = context.read<PeriodProvider>();
-    return provider.isReportDataStale;
+    final aiProvider = context.read<AiAssistantProvider>();
+    return aiProvider.isReportDataStale(provider.dataVersion);
   }
 
   bool get _modelChangedSinceReport {
-    final provider = context.read<PeriodProvider>();
+    final aiProvider = context.read<AiAssistantProvider>();
     final settings = context.read<SettingsProvider>();
-    return provider.cachedReport != null &&
-        provider.reportModelId != settings.reportModel;
+    return aiProvider.cachedReport != null &&
+        aiProvider.reportModelId != settings.reportModel;
   }
 
   // ─── 问答功能（流式）────────────────────────────────────────
@@ -219,7 +229,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
     final modelId = settings.chatModel;
 
-    final chatHistory = provider.chatHistory;
+    final aiProvider = context.read<AiAssistantProvider>();
+    final chatHistory = aiProvider.chatHistory;
     final userMessage = ChatMessage(
       role: 'user',
       content: text.trim(),
@@ -280,6 +291,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         });
         _scrollChatToBottom();
       }
+      // 整轮问答完成后持久化聊天历史（流式过程中不写库）
+      aiProvider.persistChatHistory();
     } catch (e) {
       // 异常路径：取消补刷定时器，避免 timer 随后用无错误标记的内容
       // 覆盖下方写入的错误提示；buffer 内容在下方统一处理。
@@ -307,6 +320,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
           _isChatLoading = false;
         });
       }
+      // 出错落库同样持久化（错误标记已含在最后一条消息中）
+      aiProvider.persistChatHistory();
     }
   }
 
@@ -330,7 +345,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         actions: [
           // 模型切换按钮（根据当前 Tab 选择报告或问答模型）
           _buildModelSelector(),
-          if (_currentTab == 0 && context.read<PeriodProvider>().cachedReport != null && !_isAnalyzing)
+          if (_currentTab == 0 && context.read<AiAssistantProvider>().cachedReport != null && !_isAnalyzing)
             IconButton(
               onPressed: _generateReport,
               icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -535,14 +550,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildReportTab(BuildContext context) {
-    final provider = context.read<PeriodProvider>();
+    final aiProvider = context.read<AiAssistantProvider>();
     if (_isAnalyzing) {
       return _buildAnalyzingState(context);
     }
     if (_error != null) {
       return _buildErrorState(context);
     }
-    if (provider.cachedReport == null) {
+    if (aiProvider.cachedReport == null) {
       return _buildGenerateButton(context);
     }
     return _buildReport(context);
@@ -759,7 +774,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildReport(BuildContext context) {
-    final report = context.read<PeriodProvider>().cachedReport!;
+    final report = context.read<AiAssistantProvider>().cachedReport!;
     final themeColors = context.themeColors;
 
     return SingleChildScrollView(
@@ -1583,8 +1598,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ─── 免责声明 ──────────────────────────────────────────────────
 
   Widget _buildDisclaimer(BuildContext context, var themeColors) {
-    final provider = context.read<PeriodProvider>();
-    final disclaimerText = AIHealthService.disclaimerFor(provider.reportModelId);
+    final aiProvider = context.read<AiAssistantProvider>();
+    final disclaimerText = AIHealthService.disclaimerFor(aiProvider.reportModelId);
     return Container(
       padding: const EdgeInsets.all(AppDimens.spacingMd),
       decoration: BoxDecoration(
@@ -1617,8 +1632,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   Widget _buildChatTab(BuildContext context) {
     final themeColors = context.themeColors;
-    final provider = context.read<PeriodProvider>();
-    final chatHistory = provider.chatHistory;
+    final aiProvider = context.read<AiAssistantProvider>();
+    final chatHistory = aiProvider.chatHistory;
     // 判断是否为初始空状态（没有任何消息）
     final isEmpty = chatHistory.isEmpty;
 

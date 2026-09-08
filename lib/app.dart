@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'providers/period_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/ai_assistant_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/record_screen.dart';
 import 'screens/stats_screen.dart';
@@ -32,6 +33,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   /// 回调直接引用字段即可。
   late final PeriodProvider _periodProvider;
   late final SettingsProvider _settingsProvider;
+  late final AiAssistantProvider _aiAssistantProvider;
 
   @override
   void initState() {
@@ -42,6 +44,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // 等页面时设置/记录数据尚未加载完成的竞态。
     _periodProvider = PeriodProvider()..loadRecords();
     _settingsProvider = SettingsProvider()..ensureLoaded();
+    // AI 报告/聊天历史缓存（ensureLoaded 从 SQLite 恢复持久化内容）
+    _aiAssistantProvider = AiAssistantProvider()..ensureLoaded();
 
     // 注册小组件数据变更回调
     // 当小组件按钮直接操作数据库后，原生端会发送 dataChanged 通知
@@ -81,6 +85,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // 不会被其自动 dispose），需要在这里手动释放。
     _periodProvider.dispose();
     _settingsProvider.dispose();
+    _aiAssistantProvider.dispose();
     super.dispose();
   }
 
@@ -114,6 +119,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     providers: [
       ChangeNotifierProvider<PeriodProvider>.value(value: _periodProvider),
       ChangeNotifierProvider<SettingsProvider>.value(value: _settingsProvider),
+      ChangeNotifierProvider<AiAssistantProvider>.value(
+          value: _aiAssistantProvider),
     ],
     child: MaterialApp(
         title: AppStrings.appName,

@@ -21,6 +21,21 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
   });
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    return ChatMessage(
+      role: json['role'] as String? ?? 'user',
+      content: json['content'] as String? ?? '',
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'role': role,
+        'content': content,
+        'timestamp': timestamp.toIso8601String(),
+      };
 }
 
 /// 统计数据项（键值对形式，用于周期趋势等区域展示）。

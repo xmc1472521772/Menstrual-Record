@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
 import '../models/daily_flow.dart';
@@ -12,7 +10,7 @@ import '../database/settings_dao.dart';
 import '../database/database_helper.dart';
 import '../services/prediction_service.dart';
 import '../services/notification_service.dart';
-import '../services/ai_health_service.dart';
+import '../services/backup_service.dart';
 import '../services/widget_service.dart';
 import '../utils/date_utils.dart';
 import '../utils/period_validation.dart';
@@ -134,18 +132,7 @@ class PeriodProvider with ChangeNotifier {
   /// 午夜触发，之后重新调度下一次，避免累积偏差。
   Timer? _midnightTimer;
 
-  // ─── AI 助手缓存（跨页面持久化）──────────────────────────────
-  /// 缓存上次生成的 AI 健康报告。退出 AI 助手页面后仍保留。
-  HealthReport? _cachedReport;
-
-  /// 报告生成时的 dataVersion，用于判断经期数据是否已更新。
-  int _reportDataVersion = 0;
-
-  /// 报告生成时使用的模型 ID，用于判断是否需要重新生成。
-  String _reportModelId = '';
-
-  /// 缓存 AI 问答的聊天历史。退出 AI 助手页面后仍保留。
-  final List<ChatMessage> _chatHistory = [];
+  // ─── 跨午夜自动刷新定时器 ─────────────────────────────────────
 
   List<PeriodRecord> get records => _records;
   CycleData? get cycleData => _cycleData;
@@ -160,88 +147,10 @@ class PeriodProvider with ChangeNotifier {
   void dispose() {
     _midnightTimer?.cancel();
     _midnightTimer = null;
+    // 取消尚未触发的自动备份（本 Provider 是备份数据源，dispose 后
+    // 不应再被定时器访问）。
+    BackupService.instance.cancel();
     super.dispose();
-  }
-
-  // ─── AI 助手缓存 getter ──────────────────────────────────────
-  /// 获取缓存的 AI 健康报告（可能为 null）。
-  HealthReport? get cachedReport => _cachedReport;
-
-  /// 报告生成时的 dataVersion。
-  int get reportDataVersion => _reportDataVersion;
-
-  /// 报告生成时使用的模型 ID。
-  String get reportModelId => _reportModelId;
-
-  /// 获取缓存的 AI 聊天历史（可变引用，UI 可直接操作）。
-  List<ChatMessage> get chatHistory => _chatHistory;
-
-  /// 保存 AI 健康报告到缓存，并持久化到 SQLite。
-  void cacheReport(HealthReport report, {String modelId = ''}) {
-    _cachedReport = report;
-    _reportDataVersion = _dataVersion;
-    _reportModelId = modelId;
-    // 异步持久化，不阻塞 UI
-    _persistCachedReport();
-  }
-
-  /// 清除缓存的 AI 健康报告（如用户手动刷新或数据变更后）。
-  void clearCachedReport() {
-    _cachedReport = null;
-    _reportDataVersion = 0;
-    _reportModelId = '';
-    // 异步清除持久化（失败静默，与 [_persistCachedReport] 策略一致）
-    _clearPersistedReport();
-  }
-
-  /// 清除 SQLite 中持久化的 AI 报告。
-  Future<void> _clearPersistedReport() async {
-    try {
-      await _settingsDao.setValue('ai_report_json', '');
-      await _settingsDao.setValue('ai_report_data_version', '0');
-      await _settingsDao.setValue('ai_report_model_id', '');
-    } catch (e) {
-      debugPrint('Error clearing persisted AI report: $e');
-    }
-  }
-
-  /// 从 SQLite 加载缓存的 AI 报告。
-  Future<void> _loadCachedReport() async {
-    try {
-      final jsonStr = await _settingsDao.getValue('ai_report_json');
-      if (jsonStr == null || jsonStr.isEmpty) return;
-      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-      _cachedReport = HealthReport.fromJson(json);
-      final versionStr = await _settingsDao.getValue('ai_report_data_version');
-      _reportDataVersion = int.tryParse(versionStr ?? '0') ?? 0;
-      final modelIdStr = await _settingsDao.getValue('ai_report_model_id');
-      _reportModelId = modelIdStr ?? '';
-    } catch (e) {
-      debugPrint('Error loading cached AI report: $e');
-    }
-  }
-
-  /// 将缓存的 AI 报告持久化到 SQLite。
-  Future<void> _persistCachedReport() async {
-    try {
-      if (_cachedReport == null) return;
-      final jsonStr = jsonEncode(_cachedReport!.toJson());
-      await _settingsDao.setValue('ai_report_json', jsonStr);
-      await _settingsDao.setValue(
-          'ai_report_data_version', _reportDataVersion.toString());
-      await _settingsDao.setValue('ai_report_model_id', _reportModelId);
-    } catch (e) {
-      debugPrint('Error persisting AI report: $e');
-    }
-  }
-
-  /// 判断自上次报告生成后数据是否已更新。
-  bool get isReportDataStale =>
-      _reportDataVersion != 0 && _reportDataVersion != _dataVersion;
-
-  /// 清除聊天历史。
-  void clearChatHistory() {
-    _chatHistory.clear();
   }
 
   /// 获取某天的经量等级。返回 null 表示无记录。
@@ -347,8 +256,6 @@ class PeriodProvider with ChangeNotifier {
         if (_autoEndEnabled) {
           await _autoEndExpiredPeriods();
         }
-        // 从本地存储加载缓存的 AI 报告
-        await _loadCachedReport();
         _lastError = null;
       } catch (e) {
         debugPrint('Error loading records: $e');
@@ -396,45 +303,11 @@ class PeriodProvider with ChangeNotifier {
   void _commitMutation() {
     _recalculate();
     notifyListeners();
-    _autoBackup();
+    // 自动备份改由 BackupService 统一调度（P0-2）：30 秒 trailing 去抖，
+    // 窗口内连续变更合并为一次全量导出；dispose 时由本类取消。
+    BackupService.instance.schedule(exportData);
     _scheduleReminderIfNeeded();
     _updateWidget();
-  }
-
-  /// 自动备份：将当前数据快照写入应用文档目录。
-  /// 只保留最近 5 份备份，超出时删除最旧的。
-  /// 异常静默处理 —— 备份失败不应影响正常使用。
-  Future<void> _autoBackup() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final backupDir = Directory('${dir.path}/backups');
-      if (!backupDir.existsSync()) {
-        backupDir.createSync(recursive: true);
-      }
-      final now = DateTime.now();
-      final fileName =
-          'auto_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.json';
-      final file = File('${backupDir.path}/$fileName');
-      final jsonData = await exportData();
-      await file.writeAsString(jsonData);
-
-      // 清理旧备份：只保留最近 5 份
-      final backups = backupDir
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.contains('auto_backup_'))
-          .toList()
-        ..sort((a, b) => b.path.compareTo(a.path));
-      if (backups.length > 5) {
-        for (final old in backups.skip(5)) {
-          try {
-            old.deleteSync();
-          } catch (_) {}
-        }
-      }
-    } catch (e) {
-      debugPrint('Auto backup failed: $e');
-    }
   }
 
   /// 按 `start_date DESC` 重新排序，保持与 [PeriodDao.getAll] 一致的顺序。
