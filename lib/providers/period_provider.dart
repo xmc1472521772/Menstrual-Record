@@ -119,6 +119,16 @@ class PeriodProvider with ChangeNotifier {
   /// `zonedSchedule` 是跨进程调用（十毫秒级），预测日期未变时不必重复调度。
   DateTime? _lastScheduledPrediction;
 
+  /// 上一次调度经期预告提醒时的参数快照（"$reminderDays|$reminderHour"）。
+  /// 用户在设置页修改提前天数/提醒时间后，即使预测日期未变也需重排。
+  String? _lastScheduledReminderParams;
+
+  /// 上一次同步每日记录提醒时的状态快照（"$enabled|$ongoing|$hour"）。
+  String? _lastDailyLogState;
+
+  /// 上一次同步排卵提醒时的状态快照（"$enabled|$ovulDayKey|$hour"）。
+  String? _lastOvulationState;
+
   /// 是否存在进行中的经期，由 [_recalculate] 维护。
   bool _hasOngoing = false;
 
@@ -266,7 +276,7 @@ class PeriodProvider with ChangeNotifier {
       notifyListeners();
 
       // 通知调度涉及 platform channel，刻意不 await —— 它不应阻塞 UI 刷新。
-      _scheduleReminderIfNeeded();
+      syncNotifications();
       _updateWidget();
 
       // 启动跨午夜自动刷新定时器。
@@ -306,7 +316,7 @@ class PeriodProvider with ChangeNotifier {
     // 自动备份改由 BackupService 统一调度（P0-2）：30 秒 trailing 去抖，
     // 窗口内连续变更合并为一次全量导出；dispose 时由本类取消。
     BackupService.instance.schedule(exportData);
-    _scheduleReminderIfNeeded();
+    syncNotifications();
     _updateWidget();
   }
 
@@ -384,31 +394,68 @@ class PeriodProvider with ChangeNotifier {
     }
   }
 
-  /// Schedules a notification reminder if a prediction is available.
+  /// 串行化同步链：并发调用共享同一执行链。数据变更路径是 fire-and-forget
+  /// 调用，设置页又可能在任意时刻显式调用——两次并发执行若都穿过「读设置
+  /// → 比对去重键」的异步间隙，会造成同一提醒重复调度。链式串行后，后一次
+  /// 执行总在前一次完成后运行，前一次写入的去重键即可短路后一次。
+  Future<void> _syncChain = Future<void>.value();
+
+  /// 同步全部提醒通知到当前数据/设置状态。
+  ///
+  /// 供内部数据变更路径与设置页（开关切换、提醒时间修改后）调用，
+  /// 确保通知立即生效而无需等待下一次数据变化。
+  ///
+  /// 内部拆为三个独立子同步，各自维护去重状态、互不短路：
+  /// - 经期预告提醒（ID 0，预测日前 N 天单次）
+  /// - 经期每日记录提醒（ID 1，经期中每天重复）
+  /// - 排卵日提示（ID 2，排卵日当天单次）
   ///
   /// Safe to call without `await`: all failures are swallowed internally.
-  Future<void> _scheduleReminderIfNeeded() async {
-    if (!_scheduleReminders) return;
+  Future<void> syncNotifications() {
+    if (!_scheduleReminders) return Future<void>.value();
+    _syncChain = _syncChain.then((_) async {
+      await _syncPeriodReminder();
+      await _syncDailyLogReminder();
+      await _syncOvulationReminder();
+    });
+    return _syncChain;
+  }
+
+  /// 子同步 1：经期预告提醒。
+  ///
+  /// 依赖预测结果；无预测（无任何记录）时按 ID 精确取消残留提醒，
+  /// 避免过期闹钟误弹（不能用 cancelAll —— 会误伤每日/排卵提醒）。
+  Future<void> _syncPeriodReminder() async {
     final predicted = _cycleData?.predictedNextPeriod;
     if (predicted == null) {
-      // 无预测（无任何记录）时清掉残留的已注册提醒，避免过期闹钟误弹。
+      final changed = _lastScheduledPrediction != null ||
+          _lastScheduledReminderParams != null;
       _lastScheduledPrediction = null;
-      try {
-        await NotificationService().cancelAll();
-      } catch (e) {
-        debugPrint('Error cancelling stale reminder: $e');
+      _lastScheduledReminderParams = null;
+      if (changed) {
+        try {
+          await NotificationService().cancel(
+              NotificationService.periodReminderNotificationId);
+        } catch (e) {
+          debugPrint('Error cancelling stale reminder: $e');
+        }
       }
       return;
     }
 
-    // 预测日期未变化则跳过重复调度（zonedSchedule 需要跨进程调用）。
-    // 比较逻辑收敛到 [needsReschedule]（T9 纯函数抽取），此处只做调度。
-    if (!needsReschedule(_lastScheduledPrediction, predicted)) return;
-    _lastScheduledPrediction = predicted;
-
     try {
       final reminderDays = await _settingsDao.getReminderDays();
       final reminderHour = await _settingsDao.getReminderHour();
+
+      // 预测日期与提醒参数均未变化则跳过重复调度（zonedSchedule 需要跨
+      // 进程调用）。日期比较复用 [needsReschedule]（T9 纯函数抽取）。
+      final paramsKey = '$reminderDays|$reminderHour';
+      if (!needsReschedule(_lastScheduledPrediction, predicted) &&
+          _lastScheduledReminderParams == paramsKey) {
+        return;
+      }
+      _lastScheduledPrediction = predicted;
+      _lastScheduledReminderParams = paramsKey;
 
       await NotificationService().schedulePeriodReminder(
         predictedDate: predicted,
@@ -417,6 +464,59 @@ class PeriodProvider with ChangeNotifier {
       );
     } catch (e) {
       debugPrint('Error scheduling reminder: $e');
+    }
+  }
+
+  /// 子同步 2：经期每日记录提醒。
+  ///
+  /// 经期进行中且开关开启时调度每日重复通知；经期结束或开关关闭时
+  /// 取消。去重键覆盖「开关 + 经期状态 + 提醒时刻」三元组——仅有
+  /// 经期状态变化（如经期结束但预测日期未变）时也会正确取消。
+  Future<void> _syncDailyLogReminder() async {
+    try {
+      final enabled =
+          (await _settingsDao.getValue('reminder_period_daily') ?? '1') == '1';
+      final reminderHour = await _settingsDao.getReminderHour();
+      final ongoing = _hasOngoing;
+
+      final stateKey = '$enabled|$ongoing|$reminderHour';
+      if (_lastDailyLogState == stateKey) return;
+      _lastDailyLogState = stateKey;
+
+      await NotificationService().syncDailyLogReminder(
+        enabled: enabled,
+        isPeriodOngoing: ongoing,
+        reminderHour: reminderHour,
+      );
+    } catch (e) {
+      debugPrint('Error syncing daily log reminder: $e');
+    }
+  }
+
+  /// 子同步 3：排卵日提示。
+  ///
+  /// 排卵日由预测结果派生（下次预测经期前 14 天）；开关关闭或无预测时
+  /// 取消已有提醒。去重键覆盖「开关 + 排卵日 + 提醒时刻」三元组。
+  Future<void> _syncOvulationReminder() async {
+    try {
+      final enabled =
+          (await _settingsDao.getValue('reminder_ovulation') ?? '1') == '1';
+      final reminderHour = await _settingsDao.getReminderHour();
+      final ovulationDay = _cycleData?.ovulationDay;
+
+      final ovulKey =
+          ovulationDay == null ? -1 : AppDateUtils.dayKey(ovulationDay);
+      final stateKey = '$enabled|$ovulKey|$reminderHour';
+      if (_lastOvulationState == stateKey) return;
+      _lastOvulationState = stateKey;
+
+      await NotificationService().syncOvulationReminder(
+        enabled: enabled,
+        ovulationDate: ovulationDay,
+        reminderHour: reminderHour,
+      );
+    } catch (e) {
+      debugPrint('Error syncing ovulation reminder: $e');
     }
   }
 
@@ -433,7 +533,7 @@ class PeriodProvider with ChangeNotifier {
     _algorithm = algorithm;
     _recalculate();
     notifyListeners();
-    _scheduleReminderIfNeeded();
+    syncNotifications();
     // 算法变化会影响预测结果，同步刷新小组件
     _updateWidget();
   }
@@ -998,7 +1098,7 @@ class PeriodProvider with ChangeNotifier {
       _autoEndExpiredPeriods().then((_) {
         _recalculate();
         notifyListeners();
-        _scheduleReminderIfNeeded();
+        syncNotifications();
         _updateWidget();
         // 重新调度下一次午夜刷新
         _scheduleMidnightRefresh();
@@ -1006,7 +1106,7 @@ class PeriodProvider with ChangeNotifier {
     } else {
       _recalculate();
       notifyListeners();
-      _scheduleReminderIfNeeded();
+      syncNotifications();
       _updateWidget();
       _scheduleMidnightRefresh();
     }

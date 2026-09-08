@@ -129,6 +129,10 @@ class AppStrings {
   static const String cycleParams = '周期参数';
   static const String reminderSettings = '提醒设置';
   static const String reminderTime = '提醒时间';
+  static const String reminderPeriodDaily = '经期记录提醒';
+  static const String reminderPeriodDailyDesc = '经期中每天定时提醒记录当日状态';
+  static const String reminderOvulation = '排卵期提示';
+  static const String reminderOvulationDesc = '排卵日当天提醒，关注身体变化';
   static const String exportSuccessHint = '数据导出成功（明文 JSON，请妥善保管）';
   static const String exportFailed = '导出失败: {}';
   static const String importFailed = '导入失败: {}';

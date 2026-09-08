@@ -39,9 +39,35 @@ class SettingsScreen extends StatelessWidget {
                 _buildPeriodLengthSetting(context, settingsProvider),
                 const SizedBox(height: AppDimens.spacing2xl),
                 _buildSectionTitle(context, AppStrings.reminderSettings),
-                _buildReminderDaysSetting(context, settingsProvider),
+                _buildReminderDaysSetting(
+                    context, settingsProvider, periodProvider),
                 const SizedBox(height: AppDimens.spacingSm),
-                _buildReminderHourSetting(context, settingsProvider),
+                _buildReminderHourSetting(
+                    context, settingsProvider, periodProvider),
+                const SizedBox(height: AppDimens.spacingSm),
+                _buildReminderToggleSetting(
+                  context,
+                  icon: Icons.edit_note_rounded,
+                  title: AppStrings.reminderPeriodDaily,
+                  subtitle: AppStrings.reminderPeriodDailyDesc,
+                  value: settingsProvider.reminderPeriodDaily,
+                  onChanged: (v) async {
+                    await settingsProvider.setReminderPeriodDaily(v);
+                    periodProvider.syncNotifications();
+                  },
+                ),
+                const SizedBox(height: AppDimens.spacingSm),
+                _buildReminderToggleSetting(
+                  context,
+                  icon: Icons.favorite_rounded,
+                  title: AppStrings.reminderOvulation,
+                  subtitle: AppStrings.reminderOvulationDesc,
+                  value: settingsProvider.reminderOvulation,
+                  onChanged: (v) async {
+                    await settingsProvider.setReminderOvulation(v);
+                    periodProvider.syncNotifications();
+                  },
+                ),
                 const SizedBox(height: AppDimens.spacing2xl),
                 _buildSectionTitle(context, AppStrings.dataManagement),
                 _buildExportButton(context, periodProvider),
@@ -195,7 +221,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget _buildReminderDaysSetting(
-      BuildContext context, SettingsProvider provider) {
+      BuildContext context, SettingsProvider provider, PeriodProvider periodProvider) {
     return _buildSliderSetting(
       context: context,
       title: AppStrings.reminderDays,
@@ -203,12 +229,16 @@ class SettingsScreen extends StatelessWidget {
       value: provider.reminderDays,
       min: 1,
       max: 7,
-      onChanged: (v) => provider.setReminderDays(v.round()),
+      onChanged: (v) async {
+        await provider.setReminderDays(v.round());
+        // 提前天数变化影响已排提醒的触发时刻，立即同步
+        periodProvider.syncNotifications();
+      },
     );
   }
 
-  Widget _buildReminderHourSetting(
-      BuildContext context, SettingsProvider provider) {
+  Widget _buildReminderHourSetting(BuildContext context,
+      SettingsProvider provider, PeriodProvider periodProvider) {
     final hour = provider.reminderHour;
     final timeStr =
         '${hour.toString().padLeft(2, '0')}:00';
@@ -260,13 +290,13 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
         ),
-        onTap: () => _pickReminderTime(context, provider),
+        onTap: () => _pickReminderTime(context, provider, periodProvider),
       ),
     );
   }
 
-  Future<void> _pickReminderTime(
-      BuildContext context, SettingsProvider provider) async {
+  Future<void> _pickReminderTime(BuildContext context,
+      SettingsProvider provider, PeriodProvider periodProvider) async {
     final initialTime = TimeOfDay(hour: provider.reminderHour, minute: 0);
     final picked = await showTimePicker(
       context: context,
@@ -324,6 +354,68 @@ class SettingsScreen extends StatelessWidget {
     );
     if (picked == null) return;
     await provider.setReminderHour(picked.hour);
+    // 提醒时间变化影响全部提醒的触发时刻，立即同步
+    periodProvider.syncNotifications();
+  }
+
+  /// 提醒开关设置项（经期记录提醒 / 排卵期提示）。
+  ///
+  /// 切换后由调用方通过 [onChanged] 持久化并触发通知同步，
+  /// 开关状态由 [value]（SettingsProvider 内存值）驱动，随重建刷新。
+  Widget _buildReminderToggleSetting(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingMd,
+          vertical: AppDimens.spacingXs,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.brandSoft,
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+              ),
+              child: Icon(icon, color: AppColors.brandPrimary, size: 16),
+            ),
+            const SizedBox(width: AppDimens.spacingSm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTheme.titleMedium.copyWith(
+                      color: context.themeColors.onSurface,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: AppTheme.bodySmall.copyWith(
+                      color: context.themeColors.onSurfaceSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              activeThumbColor: AppColors.brandPrimary,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildExportButton(BuildContext context, PeriodProvider provider) {

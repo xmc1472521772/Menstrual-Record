@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'package:yimaflutter/providers/period_provider.dart';
 import 'package:yimaflutter/providers/settings_provider.dart';
@@ -9,6 +12,7 @@ import 'package:yimaflutter/database/daily_flow_dao.dart';
 import 'package:yimaflutter/database/settings_dao.dart';
 import 'package:yimaflutter/database/database_helper.dart';
 import 'package:yimaflutter/models/period_record.dart';
+import 'package:yimaflutter/services/notification_service.dart';
 import 'package:yimaflutter/services/prediction_service.dart';
 
 void main() {
@@ -75,7 +79,8 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('dexterous.com/flutter/local_notifications'),
-      (call) async => null,
+      // 插件 initialize() 的返回值声明为 Future<bool>，必须回 true
+      (call) async => call.method == 'initialize' ? true : null,
     );
 
     // Create a test DatabaseProvider that returns our in-memory DB
@@ -623,6 +628,141 @@ void main() {
           .savePeriodRecord(DateTime(2024, 12, 20), DateTime(2024, 12, 25));
       expect(backfill, isTrue);
       expect(provider.records, hasLength(2));
+    });
+  });
+
+  // ─── 提醒体系升级（1.34.0）：三子同步独立去重 ──────────────────────
+
+  group('PeriodProvider - notification sync', () {
+    setUp(() async {
+      // 生产环境由 main.dart 的 NotificationService.initialize() 完成三项
+      // 前置：timezone 数据初始化（tz.local 未设置时 TZDateTime.local 抛
+      // LateInitializationError）、插件平台实例注册（测试环境不执行
+      // GeneratedPluginRegistrant，FlutterLocalNotificationsPlatform.instance
+      // 未设置时 initialize/cancel/zonedSchedule 均抛错）与插件 initialize。
+      tz_data.initializeTimeZones();
+      tz.setLocalLocation(tz.UTC);
+      FlutterLocalNotificationsPlatform.instance =
+          AndroidFlutterLocalNotificationsPlugin();
+      await NotificationService().initialize();
+    });
+
+    /// 通知通道各 ID（与 NotificationService 常量对应）。
+    /// 0 = 经期预告，1 = 经期每日记录提醒，2 = 排卵日提示。
+    const periodReminderId = 0;
+    const dailyLogId = 1;
+    const ovulationId = 2;
+
+    /// 安装录制版通知通道 mock，返回可断言的调用列表。
+    List<MethodCall> installRecorder() {
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('dexterous.com/flutter/local_notifications'),
+        // initialize 的返回值声明为 Future<bool>，必须回 true
+        (call) async {
+          calls.add(call);
+          return call.method == 'initialize' ? true : null;
+        },
+      );
+      return calls;
+    }
+
+    /// 从 MethodCall 提取通知 ID：zonedSchedule 参数是含 'id' 的 Map，
+    /// cancel 参数是裸 int。
+    int? idOf(MethodCall call) {
+      final args = call.arguments;
+      if (args is Map) return args['id'] as int?;
+      if (args is int) return args;
+      return null;
+    }
+
+    /// 创建开启通知调度的 Provider（setUp 中的主实例关闭了调度）。
+    PeriodProvider buildNotifyingProvider() => PeriodProvider(
+          periodDao: periodDao,
+          flowDao: dailyFlowDao,
+          settingsDao: settingsDao,
+          dbProvider: dbHelper,
+          scheduleReminders: true,
+          autoEndExpiredPeriods: false,
+        );
+
+    test('经期开始后调度经期预告、每日记录提醒与排卵提醒', () async {
+      final notifying = buildNotifyingProvider();
+      final calls = installRecorder();
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final ok = await notifying.startPeriod(today);
+      expect(ok, isTrue);
+      // 显式 await 同步链，确保 fire-and-forget 调用已完成
+      await notifying.syncNotifications();
+
+      final scheduledIds = calls
+          .where((c) => c.method == 'zonedSchedule')
+          .map(idOf)
+          .toSet();
+      expect(scheduledIds, containsAll([periodReminderId, dailyLogId, ovulationId]));
+    });
+
+    test('经期结束后每日记录提醒被取消', () async {
+      final notifying = buildNotifyingProvider();
+      final calls = installRecorder();
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      await notifying.startPeriod(today);
+      await notifying.syncNotifications();
+
+      calls.clear();
+      await notifying.endPeriod(today);
+      await notifying.syncNotifications();
+
+      final cancelledIds =
+          calls.where((c) => c.method == 'cancel').map(idOf).toSet();
+      expect(cancelledIds, contains(dailyLogId));
+    });
+
+    test('关闭每日提醒开关后立即取消', () async {
+      final notifying = buildNotifyingProvider();
+      final calls = installRecorder();
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      await notifying.startPeriod(today);
+      await notifying.syncNotifications();
+
+      // 模拟设置页关闭开关（设置页会持久化后调用 syncNotifications）
+      await settingsDao.setValue('reminder_period_daily', '0');
+      calls.clear();
+      await notifying.syncNotifications();
+
+      final cancelledIds =
+          calls.where((c) => c.method == 'cancel').map(idOf).toSet();
+      expect(cancelledIds, contains(dailyLogId));
+    });
+
+    test('删除唯一记录后无预测，全部提醒按 ID 精确取消', () async {
+      final notifying = buildNotifyingProvider();
+      final calls = installRecorder();
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      await notifying.startPeriod(today);
+      await notifying.syncNotifications();
+
+      calls.clear();
+      await notifying.deleteRecord(notifying.records.first.id!);
+      await notifying.syncNotifications();
+
+      final cancelledIds =
+          calls.where((c) => c.method == 'cancel').map(idOf).toSet();
+      expect(
+        cancelledIds,
+        containsAll([periodReminderId, dailyLogId, ovulationId]),
+      );
+      // 不应再误用 cancelAll（会波及无关通知）
+      expect(calls.where((c) => c.method == 'cancelAll'), isEmpty);
     });
   });
 }

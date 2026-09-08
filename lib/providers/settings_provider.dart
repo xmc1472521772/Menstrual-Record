@@ -17,6 +17,12 @@ class SettingsProvider with ChangeNotifier {
   String _reportModel = 'glm-4-flash';
   String _chatModel = 'glm-4-flash';
 
+  /// 经期每日记录提醒开关（默认开）。
+  bool _reminderPeriodDaily = true;
+
+  /// 排卵期提示开关（默认开）。
+  bool _reminderOvulation = true;
+
   /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
   Future<void>? _loadFuture;
 
@@ -33,6 +39,8 @@ class SettingsProvider with ChangeNotifier {
   int get mergeThreshold => _mergeThreshold;
   String get reportModel => _reportModel;
   String get chatModel => _chatModel;
+  bool get reminderPeriodDaily => _reminderPeriodDaily;
+  bool get reminderOvulation => _reminderOvulation;
 
   /// 确保设置已从 DB 加载完成，返回加载完成的 Future（重复调用安全）。
   ///
@@ -66,6 +74,9 @@ class SettingsProvider with ChangeNotifier {
       // 兼容旧版单一 ai_model 设置
       _reportModel = all['ai_report_model'] ?? all['ai_model'] ?? 'glm-4-flash';
       _chatModel = all['ai_chat_model'] ?? all['ai_model'] ?? 'glm-4-flash';
+      // 提醒开关：'1' 开，其余（'0'/缺失历史前的旧数据）按默认开处理
+      _reminderPeriodDaily = (all['reminder_period_daily'] ?? '1') == '1';
+      _reminderOvulation = (all['reminder_ovulation'] ?? '1') == '1';
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -168,6 +179,32 @@ class SettingsProvider with ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error setting chat model: $e');
+      return false;
+    }
+  }
+
+  /// 设置经期每日记录提醒开关（开关切换无高频写入，不走防抖）。
+  Future<bool> setReminderPeriodDaily(bool value) async {
+    try {
+      await _dao.setValue('reminder_period_daily', value ? '1' : '0');
+      _reminderPeriodDaily = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting reminder period daily: $e');
+      return false;
+    }
+  }
+
+  /// 设置排卵期提示开关。
+  Future<bool> setReminderOvulation(bool value) async {
+    try {
+      await _dao.setValue('reminder_ovulation', value ? '1' : '0');
+      _reminderOvulation = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting reminder ovulation: $e');
       return false;
     }
   }
