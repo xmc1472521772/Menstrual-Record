@@ -71,11 +71,8 @@ class _StatsScreenState extends State<StatsScreen>
             return _buildEmptyState(context);
           }
 
-          // 当数据量变化时（如导入/删除），确保 _displayCount 不越界
-          final totalPeriods = cycleData.recentPeriods.length;
-          if (_displayCount > totalPeriods) {
-            _displayCount = totalPeriods;
-          }
+          // _displayCount 越界防护在使用处 clamp（_buildHistoryList），
+          // 避免在 build 期间修改状态
 
           return TabBarView(
             controller: _tabController,
@@ -643,7 +640,9 @@ class _StatsScreenState extends State<StatsScreen>
 
   Widget _buildHistoryList(BuildContext context, CycleData cycleData) {
     final periods = cycleData.recentPeriods;
-    final displayPeriods = periods.take(_displayCount).toList();
+    // 数据量变化（导入/删除）时 clamp，防止越界取数
+    final displayPeriods =
+        periods.take(_displayCount.clamp(0, periods.length)).toList();
     final hasMore = _displayCount < periods.length;
 
     return Card(

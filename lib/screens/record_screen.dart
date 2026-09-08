@@ -845,6 +845,9 @@ class _RecordScreenState extends State<RecordScreen> {
         ? record.symptoms!.split(',').where((s) => s.isNotEmpty).toList()
         : [];
     String editNotes = record.notes ?? '';
+    // 备注输入控制器：只创建一次，dialog 关闭时 dispose。
+    // 原先在 TextField 处内联 new，每次重建都会丢光标/输入状态。
+    final notesController = TextEditingController(text: editNotes);
 
     // 可选心情列表
     const moodOptions = ['😊', '😐', '😢', '😡', '🥵', '🤒'];
@@ -1246,7 +1249,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   ),
                   const SizedBox(height: AppDimens.spacingSm),
                   TextField(
-                    controller: TextEditingController(text: editNotes),
+                    controller: notesController,
                     maxLines: 2,
                     decoration: InputDecoration(
                       hintText: '记录其他感受...',
@@ -1411,7 +1414,7 @@ class _RecordScreenState extends State<RecordScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(notesController.dispose);
   }
 
   void _showDeleteConfirmDialog(PeriodRecord record, PeriodProvider provider) {

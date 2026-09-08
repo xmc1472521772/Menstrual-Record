@@ -596,8 +596,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─── Quick actions ────────────────────────────────────────────────
 
   /// 处理「开始经期」按钮点击，带自动合并逻辑。
+  /// 不接收 BuildContext 参数，避免参数名遮蔽 State.context，
+  /// 导致 mounted 检查与所用 context 失去关联。
   Future<void> _handleStartPeriod(
-    BuildContext context,
     PeriodProvider provider,
   ) async {
     final settings = context.read<SettingsProvider>();
@@ -610,8 +611,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    // Store context reference before async operations
-    final ctx = context;
     switch (outcome.result) {
       case PeriodStartResult.created:
         // 直接新建成功，无需额外操作
@@ -619,8 +618,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case PeriodStartResult.mergedSilently:
         // 同天静默合并：显示 SnackBar 提示
         if (mounted) {
-          // ignore: use_build_context_synchronously
-          ScaffoldMessenger.of(ctx).showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(AppStrings.mergeSilentDone),
               duration: Duration(seconds: 2),
@@ -632,11 +630,24 @@ class _HomeScreenState extends State<HomeScreen> {
       case PeriodStartResult.needsConfirmation:
         // 间隔在阈值内：弹窗让用户选择
         if (mounted && outcome.mergeInfo != null) {
-          // ignore: use_build_context_synchronously
           await _showMergeConfirmationDialog(
-            ctx,
+            context,
             provider,
             outcome.mergeInfo!,
+          );
+        }
+        break;
+      case PeriodStartResult.alreadyOngoing:
+        // 已有进行中的经期（按钮此时应已禁用，此处兜底），无需操作
+        break;
+      case PeriodStartResult.failed:
+        // 数据库错误/日期冲突：提示用户重试
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(AppStrings.startPeriodFailed),
+              duration: Duration(seconds: 2),
+            ),
           );
         }
         break;
@@ -675,7 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // choice == true → 续接上一段；choice == false → 新经期；null → 取消
     if (choice == true) {
-      await provider.mergeWithLastPeriod(info.newStartDate);
+      await provider.mergeWithLastPeriod();
     } else if (choice == false) {
       await provider.startNewPeriod(info.newStartDate);
     }
@@ -693,7 +704,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: hasOngoing
                   ? null
                   : () async {
-                      await _handleStartPeriod(context, provider);
+                      await _handleStartPeriod(provider);
                     },
               icon: const Icon(Icons.play_arrow_rounded, size: 18),
               label: const Text(AppStrings.startPeriod),
@@ -718,7 +729,18 @@ class _HomeScreenState extends State<HomeScreen> {
             child: OutlinedButton.icon(
               onPressed: hasOngoing
                   ? () async {
-                      await provider.endPeriod(DateTime.now());
+                      final success =
+                          await provider.endPeriod(DateTime.now());
+                      if (!mounted) return;
+                      // 结束失败（无进行中记录/DB 错误）时给出反馈，避免静默失败
+                      if (!success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(AppStrings.endPeriodFailed),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
                     }
                   : null,
               icon: const Icon(Icons.stop_rounded, size: 18),
@@ -1018,9 +1040,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _dayCellNotifiers.putIfAbsent(key, () => ValueNotifier<int>(0));
 
   void _selectDay(DateTime day) {
+    // 翻页动画中途页面被销毁时手势回调仍可能触发，
+    // 此时格子 notifier 已被 _cleanupNotifiers 清理，直接短路避免选中态错乱
+    if (!mounted) return;
     final previous = _selectedDay;
     _selectedDay = day;
     // 只刷新旧选中项和新选中项这两个格子
+    // （null-aware：已清理月份的 key 不在 map 中，静默跳过）
     if (previous != null) {
       _dayCellNotifiers[AppDateUtils.dayKey(previous)]?.value++;
     }

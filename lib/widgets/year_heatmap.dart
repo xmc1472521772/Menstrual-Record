@@ -62,10 +62,9 @@ class _YearHeatmapState extends State<YearHeatmap> {
   @override
   void didUpdateWidget(covariant YearHeatmap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.records != widget.records ||
-        oldWidget.flowMap != widget.flowMap) {
-      _rebuildIndex();
-    }
+    // 无条件重建索引：上游每次传入新 List 实例时身份比较恰好工作，
+    // 但若复用同一实例（内容已变）会显示陈旧数据。重建成本低，安全优先。
+    _rebuildIndex();
   }
 
   void _rebuildIndex() {
