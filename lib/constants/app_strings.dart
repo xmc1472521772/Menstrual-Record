@@ -208,4 +208,28 @@ class AppStrings {
   static const String aiModelSwitch = 'AI模型';
   static const String aiReportModel = '报告模型';
   static const String aiChatModel = '问答模型';
+
+  // ─── P2-2 收敛：散落硬编码文案 ───────────────────────────────────
+  // 记录编辑弹窗字段标签
+  static const String mood = '心情';
+  static const String symptoms = '症状';
+  static const String notes = '备注';
+  static const String notesHint = '记录其他感受...';
+  // 日详情弹窗
+  static const String flowAmount = '经量';
+  static const String daysToNextPeriod = '距下次经期还有 {} 天';
+  static const String predictedStartsToday = '今天预测经期开始';
+  static const String periodRecordLabel = '经期记录：';
+  // AI 报告
+  static const String analysisFailed = '分析失败';
+  static const String scoreHealthy = '健康';
+  static const String scoreGood = '良好';
+  static const String scoreNeedsAttention = '需关注';
+  static const String scoreNeedsDoctor = '需就医';
+  static const String aiChatEmptySubtitle = '基于您的经期数据进行智能问答';
+  // 预测模式标签（统计页预测卡片）
+  static const String predictionModeBaseline = '医学基线';
+  static const String predictionModeWmaRegular = 'WMA-6 加权移动平均';
+  static const String predictionModeWmaVolatile = 'WMA-3 + 剪切均值';
+  static const String predictionModeSimple = '简单平均';
 }

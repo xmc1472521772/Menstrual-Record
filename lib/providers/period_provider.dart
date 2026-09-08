@@ -877,13 +877,9 @@ class PeriodProvider with ChangeNotifier {
     if (_cycleData == null) return false;
     if (isPeriodDay(date) || isPredictedDay(date)) return false;
     if (isOvulationDay(date) || isFertileDay(date)) return false;
-    final lastStart = _cycleData!.lastPeriodStart;
-    final predicted = _cycleData!.predictedNextPeriod;
-    if (lastStart == null) return false;
-    final windowEnd = predicted != null
-        ? predicted.add(const Duration(days: 10))
-        : lastStart.add(Duration(days: _cycleData!.averageCycleLength.round() + 10));
-    return !date.isBefore(lastStart) && !date.isAfter(windowEnd);
+    // 核心判断委托给 [_isSafeDayDirect]，消除两处完全重复的窗口计算
+    // 逻辑（P1-7）：改一处生效一处。
+    return _isSafeDayDirect(date);
   }
 
   String getDayType(DateTime date) {
@@ -913,6 +909,12 @@ class PeriodProvider with ChangeNotifier {
       dayType = 'normal';
     }
 
+    // 防膨胀安全阀（P2-1）：缓存只在数据变更时整体清空，跨月翻页会
+    // 持续累积。正常使用远达不到 5000 条（约 13 年的日历格子），
+    // 超限说明有异常路径漏清，整体清空自愈即可。
+    if (_dayTypeCache.length > 5000) {
+      _dayTypeCache.clear();
+    }
     _dayTypeCache[key] = dayType;
     return dayType;
   }

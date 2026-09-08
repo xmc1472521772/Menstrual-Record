@@ -178,6 +178,25 @@ class _HomeScreenState extends State<HomeScreen> {
     '日',
   ];
 
+  /// 经量选项（标签, 等级）：状态卡快速选择与日详情弹窗共用同一份定义
+  /// （P1-7 收敛，避免"改了弹窗忘了状态卡"）。
+  static const List<(String, int)> _flowOptions = [
+    (AppStrings.flowLabelNone, 0),
+    (AppStrings.flowLabelLight, 1),
+    (AppStrings.flowLabelNormal, 2),
+    (AppStrings.flowLabelHeavy, 3),
+  ];
+
+  /// 日类型 → 中文标签（日详情弹窗展示用，P1-7 收敛）。
+  static const Map<String, String> _dayTypeLabels = {
+    'period': '经期',
+    'predicted': '预测经期',
+    'ovulation': '排卵日',
+    'fertile': '易孕期',
+    'safe': '安全期',
+    'normal': '普通日',
+  };
+
   /// 普通格子的外边距。
   static const EdgeInsets _kDayCellMargin = EdgeInsets.all(3);
 
@@ -452,14 +471,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final currentFlow = provider.getFlowLevel(today);
 
-    // 经量选项：(标签, 等级, 颜色)
-    final flowOptions = <(String, int)>[
-      (AppStrings.flowLabelNone, 0),
-      (AppStrings.flowLabelLight, 1),
-      (AppStrings.flowLabelNormal, 2),
-      (AppStrings.flowLabelHeavy, 3),
-    ];
-
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppDimens.spacingLg,
@@ -485,7 +496,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Row(
-            children: flowOptions.map((item) {
+            children: _flowOptions.map((item) {
               final label = item.$1;
               final level = item.$2;
               final isSelected = currentFlow == level;
@@ -1058,16 +1069,8 @@ class _HomeScreenState extends State<HomeScreen> {
       BuildContext context, DateTime day, String dayType, PeriodProvider provider) {
     final cycleData = provider.cycleData;
 
-    // 日类型中文标签
-    const typeLabels = {
-      'period': '经期',
-      'predicted': '预测经期',
-      'ovulation': '排卵日',
-      'fertile': '易孕期',
-      'safe': '安全期',
-      'normal': '普通日',
-    };
-    final typeLabel = typeLabels[dayType] ?? '普通日';
+    // 日类型中文标签收敛到 [_dayTypeLabels]（P1-7）
+    final typeLabel = _dayTypeLabels[dayType] ?? '普通日';
     final typeColor = AppColors.dayTypeColor(dayType);
 
     // 是否为经期中的日期（可以记录经量）
@@ -1080,9 +1083,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (cycleData != null && cycleData.predictedNextPeriod != null) {
       final diff = cycleData.predictedNextPeriod!.difference(day).inDays;
       if (diff > 0) {
-        daysToNext = '距下次经期还有 $diff 天';
+        daysToNext = AppStrings.daysToNextPeriod.replaceAll('{}', '$diff');
       } else if (diff == 0) {
-        daysToNext = '今天预测经期开始';
+        daysToNext = AppStrings.predictedStartsToday;
       }
     }
 
@@ -1105,14 +1108,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final themeColors = context.themeColors;
     final secondaryColor = themeColors.onSurfaceSecondary;
-
-    // 经量选项：0=无, 1=少, 2=中, 3=多
-    const flowOptions = <(String, int)>[
-      ('无', 0),
-      ('少', 1),
-      ('中', 2),
-      ('多', 3),
-    ];
 
     showDialog(
       context: context,
@@ -1156,13 +1151,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (matchedRecord != null) ...[
                     const SizedBox(height: 12),
                     Text(
-                      '经期记录：${matchedRecord.startDateTime.month}/${matchedRecord.startDateTime.day} - ${matchedRecord.isOngoing ? '进行中' : '${matchedRecord.endDateTime!.month}/${matchedRecord.endDateTime!.day}'}',
+                      '${AppStrings.periodRecordLabel}${matchedRecord.startDateTime.month}/${matchedRecord.startDateTime.day} - ${matchedRecord.isOngoing ? AppStrings.ongoing : '${matchedRecord.endDateTime!.month}/${matchedRecord.endDateTime!.day}'}',
                       style:
                           AppTheme.bodySmall.copyWith(color: secondaryColor),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '持续 ${matchedRecord.periodDays} 天',
+                      '${AppStrings.duration} ${matchedRecord.periodDays} ${AppStrings.days}',
                       style:
                           AppTheme.bodySmall.copyWith(color: secondaryColor),
                     ),
@@ -1170,18 +1165,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         matchedRecord.symptoms != null) ...[
                       const SizedBox(height: 8),
                       if (matchedRecord.mood != null)
-                        Text('心情：${matchedRecord.mood}',
+                        Text('${AppStrings.mood}：${matchedRecord.mood}',
                             style: TextStyle(
                                 fontSize: 16, color: themeColors.onSurface)),
                       if (matchedRecord.symptoms != null)
-                        Text('症状：${matchedRecord.symptoms}',
+                        Text('${AppStrings.symptoms}：${matchedRecord.symptoms}',
                             style: AppTheme.bodySmall
                                 .copyWith(color: secondaryColor)),
                     ],
                     if (matchedRecord.notes != null &&
                         matchedRecord.notes!.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text('备注：${matchedRecord.notes}',
+                      Text('${AppStrings.notes}：${matchedRecord.notes}',
                           style: AppTheme.bodySmall
                               .copyWith(color: secondaryColor)),
                     ],
@@ -1190,7 +1185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (isPeriodDay) ...[
                     const SizedBox(height: 16),
                     Text(
-                      '经量',
+                      AppStrings.flowAmount,
                       style: AppTheme.bodyMedium.copyWith(
                         color: themeColors.onSurface,
                         fontWeight: FontWeight.w600,
@@ -1200,7 +1195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: flowOptions.map((item) {
+                      children: _flowOptions.map((item) {
                         final label = item.$1;
                         final level = item.$2;
                         final isSelected = currentFlow == level;

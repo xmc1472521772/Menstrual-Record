@@ -516,10 +516,10 @@ class _StatsScreenState extends State<StatsScreen>
     final mode = cycleData.predictionMode;
 
     final modeLabel = switch (mode) {
-      PredictionMode.baseline => '医学基线',
-      PredictionMode.wmaRegular => 'WMA-6 加权移动平均',
-      PredictionMode.wmaVolatile => 'WMA-3 + 剪切均值',
-      PredictionMode.simple => '简单平均',
+      PredictionMode.baseline => AppStrings.predictionModeBaseline,
+      PredictionMode.wmaRegular => AppStrings.predictionModeWmaRegular,
+      PredictionMode.wmaVolatile => AppStrings.predictionModeWmaVolatile,
+      PredictionMode.simple => AppStrings.predictionModeSimple,
     };
 
     return Card(

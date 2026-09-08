@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/ai_health_service.dart';
 import '../providers/period_provider.dart';
@@ -11,6 +10,7 @@ import '../providers/ai_assistant_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../widgets/report_cards.dart';
 
 class AIAssistantScreen extends StatefulWidget {
   const AIAssistantScreen({super.key});
@@ -708,7 +708,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             ),
             const SizedBox(height: AppDimens.spacingXl),
             Text(
-              '分析失败',
+              AppStrings.analysisFailed,
               style: AppTheme.headingSmall.copyWith(
                 color: context.themeColors.onSurface,
               ),
@@ -774,8 +774,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildReport(BuildContext context) {
-    final report = context.read<AiAssistantProvider>().cachedReport!;
+    final aiProvider = context.read<AiAssistantProvider>();
+    final report = aiProvider.cachedReport!;
     final themeColors = context.themeColors;
+    final modelId = aiProvider.reportModelId;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -788,839 +790,67 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ─── 健康评分头部 ───
-          _buildScoreHeader(context, report),
+          ReportCards.buildScoreHeader(report),
           const SizedBox(height: AppDimens.spacingSm),
 
           // ─── 数据更新提示 ───
-          if (_dataUpdatedSinceReport) _buildDataUpdatedHint(themeColors),
+          if (_dataUpdatedSinceReport) ReportCards.buildDataUpdatedHint(themeColors),
 
           // ─── 模型已切换提示 ───
-          if (_modelChangedSinceReport) _buildModelChangedHint(themeColors),
+          if (_modelChangedSinceReport) ReportCards.buildModelChangedHint(themeColors),
 
           const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 1. 本周期概览 ───
           if (report.currentOverview.isNotEmpty)
-            _buildCurrentOverviewCard(context, report, themeColors),
+            ReportCards.buildCurrentOverviewCard(report, themeColors),
           if (report.currentOverview.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 2. 周期趋势 ───
           if (report.cycleStats.isNotEmpty || report.cycleTrendSummary.isNotEmpty)
-            _buildCycleTrendCard(context, report, themeColors),
+            ReportCards.buildCycleTrendCard(report, themeColors),
           if (report.cycleStats.isNotEmpty || report.cycleTrendSummary.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 3. 症状趋势 ───
           if (report.symptomTrends.isNotEmpty)
-            _buildSymptomTrendCard(context, report, themeColors),
+            ReportCards.buildSymptomTrendCard(report, themeColors),
           if (report.symptomTrends.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 4. 与过去相比 ───
           if (report.comparisonTrends.isNotEmpty)
-            _buildComparisonCard(context, report, themeColors),
+            ReportCards.buildComparisonCard(report, themeColors),
           if (report.comparisonTrends.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 5. 值得关注的地方 ───
           if (report.attentions.isNotEmpty)
-            _buildAttentionsCard(context, report, themeColors),
+            ReportCards.buildAttentionsCard(report, themeColors),
           if (report.attentions.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 6. 下一周期建议 ───
           if (report.nextCycleSuggestions.isNotEmpty)
-            _buildNextCycleSuggestionsCard(context, report, themeColors),
+            ReportCards.buildNextCycleSuggestionsCard(report, themeColors),
           if (report.nextCycleSuggestions.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 7. 就医提醒 ───
           if (report.medicalReminders.isNotEmpty)
-            _buildMedicalRemindersCard(context, report, themeColors),
+            ReportCards.buildMedicalRemindersCard(report, themeColors),
           if (report.medicalReminders.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 总结 ───
           if (report.conclusion.isNotEmpty)
-            _buildConclusionCard(context, report, themeColors),
+            ReportCards.buildConclusionCard(report, themeColors),
           if (report.conclusion.isNotEmpty)
             const SizedBox(height: AppDimens.spacingLg),
 
           // ─── 免责声明 ───
-          _buildDisclaimer(context, themeColors),
-        ],
-      ),
-    );
-  }
-
-  // ─── 数据更新提示 ──────────────────────────────────────────────
-
-  Widget _buildDataUpdatedHint(var themeColors) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.spacingMd,
-        vertical: AppDimens.spacingSm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-        border: Border.all(
-          color: AppColors.warning.withValues(alpha: 0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.update_rounded, size: 14, color: AppColors.warning),
-          const SizedBox(width: AppDimens.spacingXs),
-          Expanded(
-            child: Text(
-              AppStrings.aiDataUpdatedHint,
-              style: AppTheme.bodySmall.copyWith(color: AppColors.warning),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── 模型已切换提示 ──────────────────────────────────────────────
-
-  Widget _buildModelChangedHint(var themeColors) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.spacingMd,
-        vertical: AppDimens.spacingSm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.brandPrimary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-        border: Border.all(
-          color: AppColors.brandPrimary.withValues(alpha: 0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.swap_horiz_rounded, size: 14, color: AppColors.brandPrimary),
-          const SizedBox(width: AppDimens.spacingXs),
-          Expanded(
-            child: Text(
-              AppStrings.aiModelChangedHint,
-              style: AppTheme.bodySmall.copyWith(color: AppColors.brandPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── 健康评分头部 ──────────────────────────────────────────────
-
-  Widget _buildScoreHeader(BuildContext context, HealthReport report) {
-    final score = report.healthScore;
-    final scoreColor = _scoreColor(score);
-    final scoreLabel = _scoreLabel(score);
-
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingXl),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [scoreColor, scoreColor.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppDimens.radiusXl),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.spacingMd,
-                  vertical: AppDimens.spacingXs + 2,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.insights_rounded,
-                        color: AppColors.white, size: 14),
-                    const SizedBox(width: AppDimens.spacingXs),
-                    Text(
-                      AppStrings.aiHealthReport,
-                      style:
-                          AppTheme.labelMedium.copyWith(color: AppColors.white),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingLg),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$score',
-                style: const TextStyle(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.white,
-                  height: 1.0,
-                ),
-              ),
-              const SizedBox(width: AppDimens.spacingXs),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  '/ 100',
-                  style: AppTheme.bodyMedium.copyWith(
-                    color: AppColors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppDimens.spacingMd),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  scoreLabel,
-                  style: AppTheme.titleLarge.copyWith(color: AppColors.white),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingSm),
-          Text(
-            '${AppStrings.aiReportTime}：${DateFormat('yyyy-MM-dd HH:mm').format(report.generatedAt)}',
-            style: AppTheme.bodySmall.copyWith(
-              color: AppColors.white.withValues(alpha: 0.7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _scoreColor(int score) {
-    if (score >= 85) return AppColors.success;
-    if (score >= 70) return AppColors.brandPrimary;
-    if (score >= 50) return AppColors.warning;
-    return AppColors.error;
-  }
-
-  String _scoreLabel(int score) {
-    if (score >= 85) return '健康';
-    if (score >= 70) return '良好';
-    if (score >= 50) return '需关注';
-    return '需就医';
-  }
-
-  // ─── 1. 本周期概览 ─────────────────────────────────────────────
-
-  Widget _buildCurrentOverviewCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return _ReportCard(
-      title: AppStrings.aiSectionCurrentOverview,
-      icon: Icons.today_rounded,
-      themeColors: themeColors,
-      child: Text(
-        report.currentOverview,
-        style: AppTheme.bodyMedium.copyWith(
-          color: themeColors.onSurfaceSecondary,
-          height: 1.6,
-        ),
-      ),
-    );
-  }
-
-  // ─── 2. 周期趋势 ───────────────────────────────────────────────
-
-  Widget _buildCycleTrendCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return _ReportCard(
-      title: AppStrings.aiSectionCycleTrend,
-      icon: Icons.trending_up_rounded,
-      themeColors: themeColors,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (report.cycleStats.isNotEmpty) ...[
-            Wrap(
-              spacing: AppDimens.spacingSm,
-              runSpacing: AppDimens.spacingSm,
-              children: report.cycleStats.map((stat) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.spacingMd,
-                    vertical: AppDimens.spacingSm,
-                  ),
-                  decoration: BoxDecoration(
-                    color: themeColors.surfaceTile,
-                    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        stat.label,
-                        style: AppTheme.bodySmall.copyWith(
-                          color: themeColors.onSurfaceTertiary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        stat.value,
-                        style: AppTheme.titleMedium.copyWith(
-                          color: themeColors.onSurface,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-            if (report.cycleTrendSummary.isNotEmpty)
-              const SizedBox(height: AppDimens.spacingMd),
-          ],
-          if (report.cycleTrendSummary.isNotEmpty)
-            Text(
-              report.cycleTrendSummary,
-              style: AppTheme.bodyMedium.copyWith(
-                color: themeColors.onSurfaceSecondary,
-                height: 1.6,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ─── 3. 症状趋势 ───────────────────────────────────────────────
-
-  Widget _buildSymptomTrendCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return _ReportCard(
-      title: AppStrings.aiSectionSymptomTrend,
-      icon: Icons.healing_rounded,
-      themeColors: themeColors,
-      child: Column(
-        children: report.symptomTrends.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final item = entry.value;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: idx < report.symptomTrends.length - 1
-                  ? AppDimens.spacingMd
-                  : 0,
-            ),
-            child: _buildTrendItem(item, themeColors),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  // ─── 4. 与过去相比 ─────────────────────────────────────────────
-
-  Widget _buildComparisonCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return _ReportCard(
-      title: AppStrings.aiSectionComparison,
-      icon: Icons.compare_arrows_rounded,
-      themeColors: themeColors,
-      child: Column(
-        children: report.comparisonTrends.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final item = entry.value;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: idx < report.comparisonTrends.length - 1
-                  ? AppDimens.spacingMd
-                  : 0,
-            ),
-            child: _buildTrendItem(item, themeColors),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildTrendItem(TrendItem item, var themeColors) {
-    final statusColor = _trendStatusColor(item.status);
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingMd),
-      decoration: BoxDecoration(
-        color: themeColors.surfaceTile.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  item.name,
-                  style: AppTheme.titleMedium.copyWith(
-                    color: themeColors.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppDimens.spacingSm),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.spacingSm,
-                  vertical: AppDimens.spacingXs,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-                ),
-                child: Text(
-                  item.status,
-                  style: AppTheme.labelMedium.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingXs),
-          Text(
-            item.detail,
-            style: AppTheme.bodySmall.copyWith(
-              color: themeColors.onSurfaceSecondary,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _trendStatusColor(String status) {
-    if (status.contains('增加') || status.contains('变长') || status.contains('减少') || status.contains('变短')) {
-      return AppColors.warning;
-    }
-    if (status.contains('稳定') || status.contains('无明显变化')) {
-      return AppColors.success;
-    }
-    return AppColors.brandPrimary;
-  }
-
-  // ─── 5. 值得关注的地方 ─────────────────────────────────────────
-
-  Widget _buildAttentionsCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return _ReportCard(
-      title: AppStrings.aiSectionAttentions,
-      icon: Icons.visibility_outlined,
-      themeColors: themeColors,
-      child: Column(
-        children: report.attentions.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final item = entry.value;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: idx < report.attentions.length - 1
-                  ? AppDimens.spacingMd
-                  : 0,
-            ),
-            child: _buildAttentionItem(item, themeColors),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildAttentionItem(AttentionItem item, var themeColors) {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-        border: Border.all(
-          color: AppColors.warning.withValues(alpha: 0.15),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.notifications_active_outlined,
-                  size: 16, color: AppColors.warning),
-              const SizedBox(width: AppDimens.spacingXs),
-              Expanded(
-                child: Text(
-                  item.title,
-                  style: AppTheme.titleMedium.copyWith(
-                    color: themeColors.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingXs),
-          Text(
-            item.detail,
-            style: AppTheme.bodySmall.copyWith(
-              color: themeColors.onSurfaceSecondary,
-              height: 1.5,
-            ),
-          ),
-          if (item.evidence.isNotEmpty) ...[
-            const SizedBox(height: AppDimens.spacingXs),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimens.spacingSm,
-                vertical: AppDimens.spacingXs,
-              ),
-              decoration: BoxDecoration(
-                color: themeColors.surfaceTile,
-                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.fact_check_outlined,
-                      size: 12, color: themeColors.onSurfaceTertiary),
-                  const SizedBox(width: AppDimens.spacingXs),
-                  Expanded(
-                    child: Text(
-                      '${AppStrings.aiEvidence}：${item.evidence}',
-                      style: AppTheme.bodySmall.copyWith(
-                        color: themeColors.onSurfaceTertiary,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // ─── 6. 下一周期建议 ───────────────────────────────────────────
-
-  Widget _buildNextCycleSuggestionsCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return _ReportCard(
-      title: AppStrings.aiSectionNextCycleSuggestions,
-      icon: Icons.tips_and_updates_outlined,
-      themeColors: themeColors,
-      child: Column(
-        children: report.nextCycleSuggestions.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final item = entry.value;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: idx < report.nextCycleSuggestions.length - 1
-                  ? AppDimens.spacingMd
-                  : 0,
-            ),
-            child: _buildSuggestionItem(item, themeColors, idx + 1),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildSuggestionItem(
-      NextCycleSuggestion item, var themeColors, int index) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: AppColors.brandPrimary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            '$index',
-            style: AppTheme.labelMedium.copyWith(
-              color: AppColors.brandPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppDimens.spacingMd),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.title,
-                style: AppTheme.titleMedium.copyWith(
-                  color: themeColors.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: AppDimens.spacingXs),
-              Text(
-                item.detail,
-                style: AppTheme.bodySmall.copyWith(
-                  color: themeColors.onSurfaceSecondary,
-                  height: 1.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─── 7. 就医提醒 ───────────────────────────────────────────────
-
-  Widget _buildMedicalRemindersCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingLg),
-      decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        border: Border.all(
-          color: AppColors.error.withValues(alpha: 0.2),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.local_hospital_rounded,
-                  color: AppColors.error, size: 20),
-              const SizedBox(width: AppDimens.spacingSm),
-              Text(
-                AppStrings.aiSectionMedicalReminders,
-                style: AppTheme.titleLarge.copyWith(
-                  color: AppColors.error,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingMd),
-          Column(
-            children: report.medicalReminders.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final reminder = entry.value;
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: idx < report.medicalReminders.length - 1
-                      ? AppDimens.spacingSm
-                      : 0,
-                ),
-                child: _buildMedicalReminderItem(reminder, themeColors),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMedicalReminderItem(
-      MedicalReminder reminder, var themeColors) {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingSm),
-      margin: const EdgeInsets.only(bottom: AppDimens.spacingSm),
-      decoration: BoxDecoration(
-        color: reminder.userMatched
-            ? AppColors.error.withValues(alpha: 0.08)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-        border: reminder.userMatched
-            ? Border.all(color: AppColors.error.withValues(alpha: 0.3))
-            : null,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            reminder.userMatched
-                ? Icons.priority_high_rounded
-                : Icons.flag_rounded,
-            size: 14,
-            color: AppColors.error.withValues(alpha: 0.7),
-          ),
-          const SizedBox(width: AppDimens.spacingSm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        reminder.condition,
-                        style: AppTheme.titleMedium.copyWith(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (reminder.userMatched) ...[
-                      const SizedBox(width: AppDimens.spacingXs),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.error,
-                          borderRadius:
-                              BorderRadius.circular(AppDimens.radiusFull),
-                        ),
-                        child: const Text(
-                          '⚠️ ${AppStrings.aiYouMatched}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  reminder.detail,
-                  style: AppTheme.bodySmall.copyWith(
-                    color: themeColors.onSurfaceSecondary,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── 总结 ──────────────────────────────────────────────────────
-
-  Widget _buildConclusionCard(
-    BuildContext context,
-    HealthReport report,
-    var themeColors,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingLg),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.brandPrimary.withValues(alpha: 0.06),
-            AppColors.brandPrimary.withValues(alpha: 0.02),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        border: Border.all(
-          color: AppColors.brandPrimary.withValues(alpha: 0.15),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.summarize_rounded,
-                  color: AppColors.brandPrimary, size: 20),
-              const SizedBox(width: AppDimens.spacingSm),
-              Text(
-                AppStrings.aiSectionConclusion,
-                style: AppTheme.titleLarge.copyWith(
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingMd),
-          Text(
-            report.conclusion,
-            style: AppTheme.bodyMedium.copyWith(
-              color: themeColors.onSurface,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── 免责声明 ──────────────────────────────────────────────────
-
-  Widget _buildDisclaimer(BuildContext context, var themeColors) {
-    final aiProvider = context.read<AiAssistantProvider>();
-    final disclaimerText = AIHealthService.disclaimerFor(aiProvider.reportModelId);
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingMd),
-      decoration: BoxDecoration(
-        color: themeColors.surfaceTile.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline_rounded,
-              size: 16, color: themeColors.onSurfaceTertiary),
-          const SizedBox(width: AppDimens.spacingSm),
-          Expanded(
-            child: Text(
-              disclaimerText,
-              style: AppTheme.bodySmall.copyWith(
-                color: themeColors.onSurfaceTertiary,
-                height: 1.5,
-              ),
-            ),
-          ),
+          ReportCards.buildDisclaimer(context, themeColors, modelId),
         ],
       ),
     );
@@ -1711,7 +941,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 
-  Widget _buildChatEmptyState(var themeColors) {
+  Widget _buildChatEmptyState(AppThemeColors themeColors) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppDimens.spacing3xl),
@@ -1740,7 +970,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             ),
             const SizedBox(height: AppDimens.spacingXs),
             Text(
-              '基于您的经期数据进行智能问答',
+              AppStrings.aiChatEmptySubtitle,
               style: AppTheme.bodySmall.copyWith(
                 color: themeColors.onSurfaceTertiary,
               ),
@@ -1751,7 +981,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 
-  Widget _buildQuickQuestion(String text, var themeColors) {
+  Widget _buildQuickQuestion(String text, AppThemeColors themeColors) {
     return GestureDetector(
       onTap: () => _sendChatMessage(text),
       child: Container(
@@ -1779,7 +1009,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 
-  Widget _buildChatBubble(ChatMessage msg, var themeColors,
+  Widget _buildChatBubble(ChatMessage msg, AppThemeColors themeColors,
       {bool isStreaming = false}) {
     final isUser = msg.role == 'user';
     final displayContent = msg.content;
@@ -1885,7 +1115,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 
-  Widget _buildChatInput(var themeColors) {
+  Widget _buildChatInput(AppThemeColors themeColors) {
     return Container(
       margin: const EdgeInsets.fromLTRB(
         AppDimens.spacingLg,
@@ -1940,62 +1170,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════
-//  Reusable report card widget
-// ═══════════════════════════════════════════════════════════════════
-
-class _ReportCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Widget child;
-  final dynamic themeColors;
-
-  const _ReportCard({
-    required this.title,
-    required this.icon,
-    required this.child,
-    required this.themeColors,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingLg),
-      decoration: BoxDecoration(
-        color: themeColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        border: Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: AppColors.brandPrimary),
-              const SizedBox(width: AppDimens.spacingSm),
-              Text(
-                title,
-                style: AppTheme.titleLarge.copyWith(
-                  color: themeColors.onSurface,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingMd),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════════
 //  Streaming cursor (闪烁光标，流式输出时使用)
 // ═══════════════════════════════════════════════════════════════════
 
 class _StreamingCursor extends StatefulWidget {
-  final dynamic themeColors;
+  final AppThemeColors themeColors;
 
   const _StreamingCursor({required this.themeColors});
 

@@ -293,12 +293,18 @@ class _GlassNavBar extends StatelessWidget {
                       final item = _items[i];
                       final selected = i == currentIndex;
                       return Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => onTap(i),
-                          child: _NavItemView(
-                            item: item,
-                            selected: selected,
+                        // 无障碍：底部导航项为纯图标+文字的自绘点击区，
+                        // 显式声明语义标签与按钮特征（P2-6）。
+                        child: Semantics(
+                          label: item.label,
+                          button: true,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => onTap(i),
+                            child: _NavItemView(
+                              item: item,
+                              selected: selected,
+                            ),
                           ),
                         ),
                       );
