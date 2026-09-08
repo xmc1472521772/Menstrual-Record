@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_theme.dart';
 import '../models/cycle_data.dart';
+import 'trend_chart_shared.dart';
 
 /// 周期趋势图（基金风格）。
 ///
@@ -20,18 +21,8 @@ class CycleChart extends StatefulWidget {
   State<CycleChart> createState() => _CycleChartState();
 }
 
-enum _TimeRange {
-  threeMonths('3月'),
-  sixMonths('6月'),
-  oneYear('1年'),
-  all('全部');
-
-  final String label;
-  const _TimeRange(this.label);
-}
-
 class _CycleChartState extends State<CycleChart> {
-  _TimeRange _selectedRange = _TimeRange.all;
+  ChartTimeRange _selectedRange = ChartTimeRange.all;
 
   /// 当前选中的数据点索引（点击切换）。null = 无选中。
   int? _selectedIdx;
@@ -47,18 +38,9 @@ class _CycleChartState extends State<CycleChart> {
         widget.periods.where((p) => p.cycleLength != null).toList();
     final ascending = withCycle.reversed.toList();
 
-    if (_selectedRange == _TimeRange.all) return ascending;
+    if (_selectedRange == ChartTimeRange.all) return ascending;
 
-    final now = DateTime.now();
-    // 使用月初作为截断点，避免 now.day 超出目标月天数导致的边界偏移
-    // （如 5月31日减3个月 = 2月31日 → 3月3日）。
-    final cutoff = switch (_selectedRange) {
-      _TimeRange.threeMonths => DateTime(now.year, now.month - 3, 1),
-      _TimeRange.sixMonths => DateTime(now.year, now.month - 6, 1),
-      _TimeRange.oneYear => DateTime(now.year - 1, now.month, 1),
-      _TimeRange.all => DateTime(2000),
-    };
-
+    final cutoff = chartCutoffFor(_selectedRange);
     return ascending.where((p) => !p.startDate.isBefore(cutoff)).toList();
   }
 
@@ -88,7 +70,15 @@ class _CycleChartState extends State<CycleChart> {
                   ),
                 ),
                 const SizedBox(width: AppDimens.spacingSm),
-                _buildRangeChips(),
+                ChartRangeChips(
+                  selected: _selectedRange,
+                  onChanged: (range) {
+                    setState(() {
+                      _selectedRange = range;
+                      _selectedIdx = null;
+                    });
+                  },
+                ),
               ],
             ),
             const SizedBox(height: AppDimens.spacingLg),
@@ -195,56 +185,6 @@ class _CycleChartState extends State<CycleChart> {
     );
   }
 
-  // ─── 筛选条 ───────────────────────────────────────────────
-  Widget _buildRangeChips() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: _TimeRange.values.map((range) {
-        final selected = range == _selectedRange;
-        final isLast = range == _TimeRange.values.last;
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedRange = range;
-              _selectedIdx = null;
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 3,
-            ),
-            margin: EdgeInsets.only(
-              right: isLast ? 0 : 4,
-            ),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.brandPrimary
-                  : context.themeColors.surfaceTile,
-              borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-              border: selected
-                  ? null
-                  : Border.all(
-                      color: context.themeColors.divider,
-                      width: 0.5,
-                    ),
-            ),
-            child: Text(
-              range.label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: selected
-                    ? AppColors.white
-                    : context.themeColors.onSurfaceSecondary,
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
   // ─── 空状态 ───────────────────────────────────────────────
   Widget _buildEmptyChart(BuildContext context) {
     return SizedBox(
@@ -330,14 +270,14 @@ class _CycleChartState extends State<CycleChart> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _formatDate(data.first.startDate),
+                formatChartDate(data.first.startDate),
                 style: TextStyle(
                   fontSize: 11,
                   color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
               Text(
-                _formatDate(data.last.startDate),
+                formatChartDate(data.last.startDate),
                 style: TextStyle(
                   fontSize: 11,
                   color: context.themeColors.onSurfaceTertiary,
@@ -371,10 +311,6 @@ class _CycleChartState extends State<CycleChart> {
     } else {
       setState(() => _selectedIdx = null);
     }
-  }
-
-  String _formatDate(DateTime d) {
-    return '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
   }
 
   // ─── 图例 ─────────────────────────────────────────────────
