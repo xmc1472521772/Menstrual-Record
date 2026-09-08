@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -29,6 +31,19 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   final ScrollController _chatScrollController = ScrollController();
   // 流式回答的实时拼接buffer
   final StringBuffer _streamingBuffer = StringBuffer();
+
+  // ─── 流式渲染节流 ───
+  // SSE chunk 之间通常只隔几毫秒，逐 chunk setState 会以 chunk 频率重建
+  // 整屏并让 MarkdownBody 全文重解析（P0-1 热点）。将 UI 刷新合并为
+  // 最多 ~12.5 次/秒：距上次刷新 ≥80ms 立即刷新，否则安排 trailing 补刷。
+  static const Duration _streamFlushInterval = Duration(milliseconds: 80);
+
+  /// 上一次把流式内容刷新到 UI 的时刻（节流基准）。
+  DateTime? _lastFlushAt;
+
+  /// trailing 补刷定时器：chunk 到达过密时延迟到节流窗口边界一次性刷新，
+  /// 保证窗口内累积的内容最终不丢。
+  Timer? _flushTimer;
 
   // ─── Tab 控制 ───
   int _currentTab = 0;
@@ -65,6 +80,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   @override
   void dispose() {
+    _flushTimer?.cancel();
     _animController.dispose();
     _chatController.dispose();
     _chatScrollController.dispose();
@@ -152,6 +168,45 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   // ─── 问答功能（流式）────────────────────────────────────────
 
+  /// 立即将流式 buffer 刷新到 UI：更新 provider 聊天历史最后一条 AI 消息。
+  void _flushStreamingBuffer(List<ChatMessage> chatHistory) {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _lastFlushAt = DateTime.now();
+    if (!mounted) return;
+    setState(() {
+      final lastIndex = chatHistory.length - 1;
+      chatHistory[lastIndex] = ChatMessage(
+        role: 'assistant',
+        content: _streamingBuffer.toString(),
+        timestamp: DateTime.now(),
+      );
+    });
+    _scrollChatToBottom();
+  }
+
+  /// 节流调度：距上次 UI 刷新 ≥[_streamFlushInterval] 则立即刷新；
+  /// 否则只安排一次 trailing 补刷（已有 pending 时跳过，窗口到点会把
+  /// 当时 buffer 的全部累积内容一次性刷出）。
+  void _scheduleStreamFlush(List<ChatMessage> chatHistory) {
+    final now = DateTime.now();
+    final last = _lastFlushAt;
+    if (last == null || now.difference(last) >= _streamFlushInterval) {
+      _flushStreamingBuffer(chatHistory);
+      return;
+    }
+    _flushTimer ??= Timer(
+      _streamFlushInterval - now.difference(last),
+      () => _flushStreamingBuffer(chatHistory),
+    );
+  }
+
+  /// 取消未触发的 trailing 补刷定时器。
+  void _cancelFlushTimer() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+  }
+
   Future<void> _sendChatMessage(String text) async {
     if (text.trim().isEmpty || _isChatLoading) return;
 
@@ -181,6 +236,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       ));
       _isChatLoading = true;
       _streamingBuffer.clear();
+      // 新一轮流式输出：重置节流基准，确保首个 chunk 立即上屏
+      _lastFlushAt = null;
+      _cancelFlushTimer();
     });
 
     _chatController.clear();
@@ -202,7 +260,15 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       await for (final chunk in stream) {
         if (!mounted) break;
         _streamingBuffer.write(chunk);
-        // 实时更新最后一条AI消息
+        // 节流合并：高频 chunk 不再逐个触发整屏重建 + Markdown 全文重解析
+        _scheduleStreamFlush(chatHistory);
+      }
+
+      // 流正常结束：取消未触发的 trailing 补刷并做最终 flush，
+      // 把节流窗口内累积的剩余内容完整落进聊天历史（与 loading 结束
+      // 合并为一次 setState）。
+      _cancelFlushTimer();
+      if (mounted) {
         setState(() {
           final lastIndex = chatHistory.length - 1;
           chatHistory[lastIndex] = ChatMessage(
@@ -210,16 +276,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             content: _streamingBuffer.toString(),
             timestamp: DateTime.now(),
           );
+          _isChatLoading = false;
         });
         _scrollChatToBottom();
       }
-
-      if (mounted) {
-        setState(() {
-          _isChatLoading = false;
-        });
-      }
     } catch (e) {
+      // 异常路径：取消补刷定时器，避免 timer 随后用无错误标记的内容
+      // 覆盖下方写入的错误提示；buffer 内容在下方统一处理。
+      _cancelFlushTimer();
       if (mounted) {
         final errorMsg = '$e'.replaceFirst('Exception: ', '');
         setState(() {
