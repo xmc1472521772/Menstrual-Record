@@ -1,10 +1,6 @@
 class AppStrings {
   static const String appName = '月事记';
 
-  /// 占位符，用于含参数的字符串模板。
-  static const String nPlaceholder = '{}';
-  static const String nPlaceholder2 = '{}';
-
   static const String home = '首页';
   static const String record = '记录';
   static const String stats = '统计';
@@ -88,12 +84,9 @@ class AppStrings {
   static const String editConflictPrevOverlap = '修改后的开始日期与上一条记录重叠，请调整';
   static const String editConflictNextOverlap = '修改后的结束日期与下一条记录重叠，请调整';
   static const String editConflictStartAfterEnd = '开始日期不能晚于结束日期';
-  static const String editPeriodTooShort = '经期仅{}天，时长偏短，确认是否正确？';
-  static const String editPeriodTooLong = '经期{}天，时长偏长，确认是否正确？';
   static const String editRangeConstraintPrev = '开始日期不能早于上一条记录的结束日期';
   static const String editRangeConstraintNext = '结束日期不能晚于下一条记录的开始日期';
   static const String duration = '持续';
-  static const String nRecords = '共 {} 条';
 
   // ─── Stats screen ────────────────────────────────────────────────
   static const String noStatsData = '暂无统计数据';
@@ -134,7 +127,6 @@ class AppStrings {
   static const String cycleParams = '周期参数';
   static const String reminderSettings = '提醒设置';
   static const String reminderTime = '提醒时间';
-  static const String predictionHint = '当有足够的历史记录时，系统会根据实际记录计算平均值；当记录不足时，会使用以下默认值进行预测。';
   static const String exportSuccessHint = '数据导出成功（明文 JSON，请妥善保管）';
   static const String exportFailed = '导出失败: {}';
   static const String importFailed = '导入失败: {}';
@@ -146,9 +138,9 @@ class AppStrings {
 
   // ─── AddRecordCalendarPage ───────────────────────────────────────
   static const String addPeriodRecordTitle = '添加经期记录';
-  static const String autoSelectHint = '点击日期自动从该天起选中 {} 天，点相邻日期可逐天增减';
-  static const String selectedNDays = '已选 {} 天：{}';
   static const String dateConflict = '所选日期与已有记录冲突';
+  static const String futureRangeConfirmTitle = '包含未来日期';
+  static const String futureRangeConfirmBody = '所选区间包含今天之后的日期，确定要保存吗？未来日期的记录会影响周期预测。';
 
   // ─── Misc ────────────────────────────────────────────────────────
   static const String nDaysUnit = '个';
@@ -159,20 +151,15 @@ class AppStrings {
   static const String mergeAction = '续接上一段';
   static const String newPeriodAction = '开启新经期';
   static const String mergeSilentDone = '已续接上一段经期';
+  static const String startPeriodFailed = '开始经期失败，请重试';
+  static const String endPeriodFailed = '结束经期失败，请重试';
 
   // ─── Misc UI strings ──────────────────────────────────────────────
   static const String ongoing = '进行中';
-  static const String nRecordsCount = '共 $nPlaceholder 条';
-  static const String periodTooShort = '经期仅$nPlaceholder天，时长偏短，确认是否正确？';
-  static const String periodTooLong = '经期$nPlaceholder天，时长偏长，确认是否正确？';
   static const String confirmWarning = '确认异常';
   static const String deleteRecordLabel = '删除记录';
   static const String retry = '重试';
-  static const String avgN = '平均 $nPlaceholder 天';
-  static const String predictionHintText = '当有足够的历史记录时，系统会根据实际记录计算平均值；当记录不足时，会使用以下默认值进行预测。';
   static const String loadFailed = '加载数据失败';
-  static const String autoSelectHintText = '点击日期自动从该天起选中 $nPlaceholder 天，点相邻日期可逐天增减';
-  static const String selectedNDaysText = '已选 $nPlaceholder 天：$nPlaceholder2';
 
   // ─── AI Assistant ──────────────────────────────────────────────
   static const String aiAssistant = 'AI助手';

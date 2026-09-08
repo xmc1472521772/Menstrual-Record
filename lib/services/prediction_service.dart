@@ -51,13 +51,20 @@ class PredictionService {
     List<PeriodRecord> records, {
     String algorithm = 'adaptive',
     DateTime? today,
+    int? userCycleLength,
+    int? userPeriodLength,
   }) {
     final now = today ?? DateTime.now();
 
+    // 冷启动/无数据时的回退值：优先使用用户设置，未提供则用默认常量。
+    // 与设置页提示一致："记录不足时会使用以下默认值进行预测"。
+    final fallbackCycle = (userCycleLength ?? defaultCycleLength).toDouble();
+    final fallbackPeriod = (userPeriodLength ?? defaultPeriodLength).toDouble();
+
     if (records.isEmpty) {
       return CycleData(
-        averageCycleLength: defaultCycleLength.toDouble(),
-        averagePeriodLength: defaultPeriodLength.toDouble(),
+        averageCycleLength: fallbackCycle,
+        averagePeriodLength: fallbackPeriod,
         totalCycles: 0,
         recentPeriods: [],
         today: now,
@@ -102,7 +109,7 @@ class PredictionService {
     // ─── 经期天数平均（简单平均，所有已完成记录） ─────────────
     final avgPeriod = periodLengths.isNotEmpty
         ? periodLengths.reduce((a, b) => a + b) / periodLengths.length
-        : defaultPeriodLength.toDouble();
+        : fallbackPeriod;
 
     // ─── 根据算法选择计算路径 ─────────────────────────────────
     late double avgCycle;
@@ -114,13 +121,13 @@ class PredictionService {
       if (cycleLengths.isNotEmpty) {
         avgCycle = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
       } else {
-        avgCycle = defaultCycleLength.toDouble();
+        avgCycle = fallbackCycle;
       }
       mode = PredictionMode.simple;
       windowDays = 2;
     } else {
       // ── 自适应算法（adaptive / weighted 统一走自适应路径） ──
-      final result = _adaptivePredict(cycleLengths);
+      final result = _adaptivePredict(cycleLengths, fallbackCycle: fallbackCycle);
       avgCycle = result.value;
       mode = result.mode;
       windowDays = result.windowDays;
@@ -151,13 +158,16 @@ class PredictionService {
   // ─── 自适应预测核心 ────────────────────────────────────────────
 
   /// 三段式自适应算法入口。
-  static _AdaptiveResult _adaptivePredict(List<int> cycleLengths) {
+  static _AdaptiveResult _adaptivePredict(
+    List<int> cycleLengths, {
+    required double fallbackCycle,
+  }) {
     final n = cycleLengths.length;
 
     // ── 阶段 1：冷启动（N < 3） ──
     if (n == 0) {
       return _AdaptiveResult(
-        defaultCycleLength.toDouble(),
+        fallbackCycle,
         PredictionMode.baseline,
         5, // 冷启动时窗口稍宽
       );
@@ -209,7 +219,7 @@ class PredictionService {
     // ── 阶段 3：算法分流 ──
     if (isTrendShift || std > _volatileStdThreshold) {
       // 高波动 / 突变 → WMA-3 + 剪切均值
-      return _predictVolatile(cycleLengths);
+      return _predictVolatile(cycleLengths, fallbackCycle: fallbackCycle);
     } else {
       // 规律 / 轻度波动 → WMA-6
       return _predictRegular(recent);
@@ -248,7 +258,10 @@ class PredictionService {
   /// 2. 如果 3 个数据中存在明显离群值（与中位数偏差 > 1.5×IQR），先剔除。
   /// 3. 对剩余数据做加权平均（权重 0.2, 0.3, 0.5）。
   /// 4. 窗口更宽（±3 天），反映不确定性。
-  static _AdaptiveResult _predictVolatile(List<int> cycleLengths) {
+  static _AdaptiveResult _predictVolatile(
+    List<int> cycleLengths, {
+    required double fallbackCycle,
+  }) {
     // 取最近 3 个周期
     final window = cycleLengths.length >= _shortWindowSize
         ? cycleLengths.sublist(cycleLengths.length - _shortWindowSize)
@@ -257,7 +270,7 @@ class PredictionService {
 
     if (n == 0) {
       return _AdaptiveResult(
-        defaultCycleLength.toDouble(),
+        fallbackCycle,
         PredictionMode.wmaVolatile,
         6,
       );

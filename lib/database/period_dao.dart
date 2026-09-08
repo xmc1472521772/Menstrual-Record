@@ -1,3 +1,4 @@
+import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 import '../models/period_record.dart';
 
@@ -116,13 +117,17 @@ class PeriodDao {
   /// Atomically replaces all records with [records] in a single transaction.
   ///
   /// If insertion fails, the original data is preserved.
-  Future<void> replaceAll(List<PeriodRecord> records) async {
-    final db = await _dbHelper.database;
-    await db.transaction((txn) async {
-      await txn.delete('period_records');
+  /// 传入 [txn] 时在调用方的外层事务内执行（用于跨表原子导入），否则自建事务。
+  Future<void> replaceAll(List<PeriodRecord> records, {Transaction? txn}) async {
+    Future<void> body(DatabaseExecutor executor) async {
+      await executor.delete('period_records');
       for (final record in records) {
-        await txn.insert('period_records', record.toMap());
+        await executor.insert('period_records', record.toMap());
       }
-    });
+    }
+
+    if (txn != null) return body(txn);
+    final db = await _dbHelper.database;
+    await db.transaction(body);
   }
 }

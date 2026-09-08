@@ -88,6 +88,9 @@ void main() {
       periodDao: periodDao,
       flowDao: dailyFlowDao,
       settingsDao: settingsDao,
+      // overwrite 导入的事务直接在 dbProvider 上开，必须与 DAO 同库，
+      // 否则事务会写到 DatabaseHelper 单例指向的另一个数据库
+      dbProvider: dbHelper,
       scheduleReminders: false,
       autoEndExpiredPeriods: false,
     );
@@ -517,7 +520,7 @@ void main() {
       await provider.endPeriod(DateTime(2026, 9, 3));
 
       // 用户选择续接
-      final ok = await provider.mergeWithLastPeriod(DateTime(2026, 9, 4));
+      final ok = await provider.mergeWithLastPeriod();
       expect(ok, isTrue);
       expect(provider.records, hasLength(1));
       expect(provider.records.first.isOngoing, isTrue);

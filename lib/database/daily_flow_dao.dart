@@ -74,18 +74,22 @@ class DailyFlowDao {
 
   /// 原子替换：先删全部再批量插入。
   /// 用于导入覆盖模式。
-  Future<void> replaceAll(List<DailyFlow> flows) async {
-    final db = await _dbHelper.database;
-    await db.transaction((txn) async {
-      await txn.delete('daily_flows');
+  /// 传入 [txn] 时在调用方的外层事务内执行（用于跨表原子导入），否则自建事务。
+  Future<void> replaceAll(List<DailyFlow> flows, {Transaction? txn}) async {
+    Future<void> body(DatabaseExecutor executor) async {
+      await executor.delete('daily_flows');
       for (final f in flows) {
-        await txn.insert(
+        await executor.insert(
           'daily_flows',
           f.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-    });
+    }
+
+    if (txn != null) return body(txn);
+    final db = await _dbHelper.database;
+    await db.transaction(body);
   }
 
   /// 批量插入（追加模式，遇到重复日期则替换）。

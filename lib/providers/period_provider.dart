@@ -22,6 +22,8 @@ import '../utils/date_utils.dart';
 /// - [created]：已直接新建一段经期（间隔 > 阈值，或无最近记录）
 /// - [mergedSilently]：同天/间隔 0 天，已静默合并（撤销上次结束状态）
 /// - [needsConfirmation]：间隔在阈值内（1~2 天），需要弹窗让用户选择
+/// - [alreadyOngoing]：已有进行中的经期，未做任何改动
+/// - [failed]：操作失败（数据库错误/日期冲突），未做任何改动
 enum PeriodStartResult {
   /// 直接新建成功
   created,
@@ -29,6 +31,10 @@ enum PeriodStartResult {
   mergedSilently,
   /// 需要弹窗确认（返回 [PeriodMergeInfo] 供 UI 使用）
   needsConfirmation,
+  /// 已有进行中的经期，未做任何改动
+  alreadyOngoing,
+  /// 操作失败，未做任何改动
+  failed,
 }
 
 /// 携带给 UI 的合并上下文信息。
@@ -88,6 +94,12 @@ class PeriodProvider with ChangeNotifier {
   bool _isLoading = false;
   String _algorithm = 'simple';
   String? _lastError;
+
+  /// 用户设置的周期/经期天数（[loadRecords] 时从 SettingsDao 加载）。
+  /// 预测冷启动（无足够历史记录）时作为回退值传入 [PredictionService]，
+  /// 保证与设置页"记录不足时使用以下默认值进行预测"的承诺一致。
+  int _userCycleLength = 28;
+  int _userPeriodLength = 5;
 
   /// 日类型缓存。key 为整数 `yyyyMMdd`（见 [AppDateUtils.dayKey]），
   /// 相比字符串 key 可避免每次日历构建时 40+ 次字符串拼接与哈希。
@@ -177,10 +189,19 @@ class PeriodProvider with ChangeNotifier {
     _cachedReport = null;
     _reportDataVersion = 0;
     _reportModelId = '';
-    // 异步清除持久化
-    _settingsDao.setValue('ai_report_json', '');
-    _settingsDao.setValue('ai_report_data_version', '0');
-    _settingsDao.setValue('ai_report_model_id', '');
+    // 异步清除持久化（失败静默，与 [_persistCachedReport] 策略一致）
+    _clearPersistedReport();
+  }
+
+  /// 清除 SQLite 中持久化的 AI 报告。
+  Future<void> _clearPersistedReport() async {
+    try {
+      await _settingsDao.setValue('ai_report_json', '');
+      await _settingsDao.setValue('ai_report_data_version', '0');
+      await _settingsDao.setValue('ai_report_model_id', '');
+    } catch (e) {
+      debugPrint('Error clearing persisted AI report: $e');
+    }
   }
 
   /// 从 SQLite 加载缓存的 AI 报告。
@@ -274,40 +295,64 @@ class PeriodProvider with ChangeNotifier {
   /// [forceRefresh] 为 true 时，会先关闭并重新打开数据库连接，
   /// 确保读到原生端（小组件）直接写入的最新数据。
   /// 在小组件操作数据库后恢复 App 时应设为 true。
-  Future<void> loadRecords({bool forceRefresh = false}) async {
-    if (forceRefresh) {
-      debugPrint('[PeriodProvider] forceRefreshing database connection');
-      await _dbProvider.refreshConnection();
+  ///
+  /// 带重入保护：已有加载进行中时，非强制请求直接复用其结果；
+  /// 强制请求会等当前加载结束后再执行（避免与 refreshConnection 竞态）。
+  Future<void> loadRecords({bool forceRefresh = false}) {
+    final pending = _loadGate;
+    if (pending != null) {
+      if (!forceRefresh) return pending.future;
+      return pending.future.then((_) => loadRecords(forceRefresh: true));
     }
+    return _performLoad(forceRefresh: forceRefresh);
+  }
 
-    _isLoading = true;
-    notifyListeners();
+  /// 进行中的加载门闩，见 [loadRecords]。
+  Completer<void>? _loadGate;
 
+  Future<void> _performLoad({required bool forceRefresh}) async {
+    final gate = Completer<void>();
+    _loadGate = gate;
     try {
-      _algorithm = await _settingsDao.getPredictionAlgorithm();
-      _records = await _dao.getAll();
-      await _loadDailyFlows();
-      _recalculate();
-      if (_autoEndEnabled) {
-        await _autoEndExpiredPeriods();
+      if (forceRefresh) {
+        debugPrint('[PeriodProvider] forceRefreshing database connection');
+        await _dbProvider.refreshConnection();
       }
-      // 从本地存储加载缓存的 AI 报告
-      await _loadCachedReport();
-      _lastError = null;
-    } catch (e) {
-      debugPrint('Error loading records: $e');
-      _lastError = '加载数据失败：$e';
+
+      _isLoading = true;
+      notifyListeners();
+
+      try {
+        _algorithm = await _settingsDao.getPredictionAlgorithm();
+        _userCycleLength = await _settingsDao.getCycleLength();
+        _userPeriodLength = await _settingsDao.getPeriodLength();
+        _records = await _dao.getAll();
+        await _loadDailyFlows();
+        _recalculate();
+        if (_autoEndEnabled) {
+          await _autoEndExpiredPeriods();
+        }
+        // 从本地存储加载缓存的 AI 报告
+        await _loadCachedReport();
+        _lastError = null;
+      } catch (e) {
+        debugPrint('Error loading records: $e');
+        _lastError = '加载数据失败：$e';
+      }
+
+      _isLoading = false;
+      notifyListeners();
+
+      // 通知调度涉及 platform channel，刻意不 await —— 它不应阻塞 UI 刷新。
+      _scheduleReminderIfNeeded();
+      _updateWidget();
+
+      // 启动跨午夜自动刷新定时器。
+      _scheduleMidnightRefresh();
+    } finally {
+      _loadGate = null;
+      gate.complete();
     }
-
-    _isLoading = false;
-    notifyListeners();
-
-    // 通知调度涉及 platform channel，刻意不 await —— 它不应阻塞 UI 刷新。
-    _scheduleReminderIfNeeded();
-    _updateWidget();
-
-    // 启动跨午夜自动刷新定时器。
-    _scheduleMidnightRefresh();
   }
 
   /// 重算派生数据（周期预测 + 经期日索引 + 日类型缓存）。
@@ -320,6 +365,8 @@ class PeriodProvider with ChangeNotifier {
       _records,
       algorithm: _algorithm,
       today: today,
+      userCycleLength: _userCycleLength,
+      userPeriodLength: _userPeriodLength,
     );
     _clearDayTypeCache();
     _rebuildPeriodDayIndex(today);
@@ -504,6 +551,8 @@ class PeriodProvider with ChangeNotifier {
     _recalculate();
     notifyListeners();
     _scheduleReminderIfNeeded();
+    // 算法变化会影响预测结果，同步刷新小组件
+    _updateWidget();
   }
 
   Future<bool> startPeriod(DateTime startDate) async {
@@ -564,7 +613,7 @@ class PeriodProvider with ChangeNotifier {
     try {
       // 已有进行中的经期 → 不能再开
       if (_hasOngoing) {
-        return const PeriodStartOutcome(PeriodStartResult.created);
+        return const PeriodStartOutcome(PeriodStartResult.alreadyOngoing);
       }
 
       // 获取合并阈值
@@ -583,7 +632,7 @@ class PeriodProvider with ChangeNotifier {
       if (lastEnded == null) {
         final ok = await startPeriod(startDate);
         return PeriodStartOutcome(
-          ok ? PeriodStartResult.created : PeriodStartResult.created,
+          ok ? PeriodStartResult.created : PeriodStartResult.failed,
         );
       }
 
@@ -603,9 +652,9 @@ class PeriodProvider with ChangeNotifier {
 
       // 场景 A：同天（间隔 0 天）→ 静默合并
       if (gapDays <= 0) {
-        final ok = await _mergeWithLastPeriod(startDate);
+        final ok = await _mergeWithLastPeriod();
         return PeriodStartOutcome(
-          ok ? PeriodStartResult.mergedSilently : PeriodStartResult.created,
+          ok ? PeriodStartResult.mergedSilently : PeriodStartResult.failed,
         );
       }
 
@@ -624,18 +673,18 @@ class PeriodProvider with ChangeNotifier {
       // 场景 C：间隔 > 阈值天 → 直接新建
       final ok = await startPeriod(startDate);
       return PeriodStartOutcome(
-        ok ? PeriodStartResult.created : PeriodStartResult.created,
+        ok ? PeriodStartResult.created : PeriodStartResult.failed,
       );
     } catch (e) {
       debugPrint('Error in startPeriodWithMerge: $e');
-      return const PeriodStartOutcome(PeriodStartResult.created);
+      return const PeriodStartOutcome(PeriodStartResult.failed);
     }
   }
 
   /// 合并：撤销上次经期的结束状态，将其恢复为进行中。
   ///
   /// 清空 endDate 和 periodLength，让该记录回到 ongoing 状态。
-  Future<bool> _mergeWithLastPeriod(DateTime newStartDate) async {
+  Future<bool> _mergeWithLastPeriod() async {
     try {
       // 找到最近一条已结束的经期
       PeriodRecord? lastEnded;
@@ -667,8 +716,8 @@ class PeriodProvider with ChangeNotifier {
   }
 
   /// 供 UI 调用：用户选择“续接上一段”时调用。
-  Future<bool> mergeWithLastPeriod(DateTime newStartDate) async {
-    return _mergeWithLastPeriod(newStartDate);
+  Future<bool> mergeWithLastPeriod() async {
+    return _mergeWithLastPeriod();
   }
 
   /// 供 UI 调用：用户选择“开启新经期”时调用。
@@ -854,9 +903,12 @@ class PeriodProvider with ChangeNotifier {
           .toList();
 
       if (overwrite) {
-        // Use atomic replaceAll to avoid data loss on failure
-        await _dao.replaceAll(records);
-        await _flowDao.replaceAll(flows);
+        // 跨两张表的原子替换：任一张表失败则整体回滚，避免数据不一致
+        final db = await _dbProvider.database;
+        await db.transaction((txn) async {
+          await _dao.replaceAll(records, txn: txn);
+          await _flowDao.replaceAll(flows, txn: txn);
+        });
       } else {
         // 追加模式：检测区间重叠，避免重复导入产生重叠记录
         bool hasOverlap(PeriodRecord r) {
@@ -1049,6 +1101,7 @@ class PeriodProvider with ChangeNotifier {
     } else {
       _recalculate();
       notifyListeners();
+      _scheduleReminderIfNeeded();
       _updateWidget();
       _scheduleMidnightRefresh();
     }
@@ -1058,7 +1111,6 @@ class PeriodProvider with ChangeNotifier {
   ///
   /// 供外部（如 [MyApp] 的 `didChangeAppLifecycleState`）在 app 从
   /// 后台恢复前台时调用，确保长时间后台后数据不会过期。
-  /// 也会在 [setAlgorithm] 等方法中隐式调用。
   void checkAndRefreshForNewDay() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
