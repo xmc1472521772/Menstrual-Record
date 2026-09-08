@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' show sqrt;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../models/period_record.dart';
 import '../models/cycle_data.dart';
@@ -278,6 +279,21 @@ class HealthReport {
 //  AI健康分析服务
 // ═══════════════════════════════════════════════════════════════
 
+/// AI 服务异常。
+///
+/// [retryable] 标记该错误是否值得自动重试：
+/// 网络抖动、限流（429）、上游临时故障（5xx）、响应内容为空或
+/// 格式异常等瞬态错误应重试；API Key 未配置等确定性错误不重试。
+class AiServiceException implements Exception {
+  final String message;
+  final bool retryable;
+
+  const AiServiceException(this.message, {this.retryable = false});
+
+  @override
+  String toString() => message;
+}
+
 /// 可选的 AI 模型配置。
 class AiModelConfig {
   final String id;
@@ -287,6 +303,13 @@ class AiModelConfig {
   final String model;
   final String disclaimer;
 
+  /// 单次请求允许的最大输出 token 数（推理 + 正文共享预算）。
+  ///
+  /// Ling-3.0 为混合推理模型，思考与回答共享输出预算；若预算不足，
+  /// 思考会挤占正文导致 content 为空或被截断，是"AI 未返回有效内容"
+  /// 的主要根因之一。不同模型上限不同，按模型分别配置。
+  final int maxOutputTokens;
+
   const AiModelConfig({
     required this.id,
     required this.displayName,
@@ -294,6 +317,7 @@ class AiModelConfig {
     required this.apiKey,
     required this.model,
     required this.disclaimer,
+    this.maxOutputTokens = 4096,
   });
 }
 
@@ -324,6 +348,7 @@ class AIHealthService {
           apiUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
           apiKey: _glmApiKey,
           model: 'glm-4-flash',
+          maxOutputTokens: 4096, // GLM-4-Flash 输出上限（超过会 400）
           disclaimer: '本报告由智谱GLM-4大模型基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。',
         ),
         const AiModelConfig(
@@ -332,6 +357,9 @@ class AIHealthService {
           apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
           apiKey: _openRouterApiKey,
           model: 'inclusionai/ling-3.0-flash-sante:free',
+          // 推理模型：思考与正文共享输出预算，报告 JSON 较长 + 思考消耗，
+          // 4096 极易把正文挤空；提升到 16384 保证正文有足够空间。
+          maxOutputTokens: 16384,
           disclaimer: '本报告由Ling-3.0-Flash-Sante模型（OpenRouter）基于您记录的本地数据生成，仅供参考，不构成医疗诊断。AI分析结果可能存在不准确之处，如有健康疑虑，请及时就医咨询专业医生。',
         ),
       ];
@@ -359,6 +387,9 @@ class AIHealthService {
   // ─── 健康报告生成 ──────────────────────────────────────────────
 
   /// 生成完整的健康分析报告（异步，调用指定模型的 API）。
+  ///
+  /// 内置自动重试：对内容为空、格式异常、限流、上游临时故障、
+  /// 网络抖动等瞬态错误最多尝试 3 次，指数退避。
   static Future<HealthReport?> generateReport({
     required List<PeriodRecord> records,
     required CycleData cycleData,
@@ -375,29 +406,33 @@ class AIHealthService {
     final systemPrompt = _buildSystemPrompt();
     final userMessage = _buildUserMessage(dataText);
 
-    // 重试机制：最多尝试 3 次
-    // Ling-3.0-Flash-Sante 等免费模型偶尔会返回格式不正确的 JSON
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         final response = await _callApi(systemPrompt, userMessage, modelId);
         return _parseResponse(response);
-      } on Exception catch (e) {
+      } on AiServiceException catch (e) {
         lastError = e;
-        final msg = e.toString();
-        // 仅对「格式不正确」类错误进行重试
-        if (msg.contains('格式不正确') || msg.contains('格式异常') ||
-            msg.contains('未返回有效内容')) {
-          if (attempt < 2) {
-            await Future.delayed(Duration(seconds: 1 * (attempt + 1)));
-            continue;
-          }
+        if (e.retryable && attempt < 2) {
+          await Future.delayed(_retryDelay(e, attempt));
+          continue;
         }
-        // 其他错误直接抛出
         rethrow;
       }
     }
-    throw lastError ?? Exception('AI 返回的数据格式不正确，请稍后重试');
+    throw lastError ??
+        const AiServiceException('AI 返回的数据格式不正确，请稍后重试');
+  }
+
+  /// 按错误类型计算重试退避时长。
+  ///
+  /// 限流（免费模型在高峰期很常见）需要更长的恢复时间；
+  /// 其余瞬态错误采用常规指数退避。
+  static Duration _retryDelay(AiServiceException e, int attempt) {
+    if (e.message.contains('频繁') || e.message.contains('限流')) {
+      return Duration(seconds: 5 * (attempt + 1));
+    }
+    return Duration(seconds: 2 * (attempt + 1));
   }
 
   // ─── 问答功能 ──────────────────────────────────────────────────
@@ -1123,7 +1158,7 @@ $dataText
   ) async {
     final config = configFor(modelId);
     if (config.apiKey.isEmpty) {
-      throw Exception('当前模型的 API Key 未配置');
+      throw const AiServiceException('当前模型的 API Key 未配置');
     }
 
     final headers = <String, String>{
@@ -1131,10 +1166,20 @@ $dataText
       'Authorization': 'Bearer ${config.apiKey}',
     };
 
-    // OpenRouter 需要额外的 header
+    final requestBody = <String, dynamic>{
+      'model': config.model,
+      'messages': messages,
+      'temperature': 0.3,
+      'max_tokens': config.maxOutputTokens,
+    };
+
+    // OpenRouter 需要额外的 header；Ling-3.0 为混合推理模型，
+    // 显式关闭推理并排除思考内容，避免思考 token 挤占正文输出预算
+    // （content 为空的主要根因）。OpenRouter 对不支持的模型会安全忽略该统一参数。
     if (config.id == 'ling-3.0-flash-sante') {
       headers['HTTP-Referer'] = 'https://yima.app';
       headers['X-Title'] = 'Yima';
+      requestBody['reasoning'] = {'enabled': false, 'exclude': true};
     }
 
     http.Response response;
@@ -1142,35 +1187,57 @@ $dataText
       response = await http.post(
         Uri.parse(config.apiUrl),
         headers: headers,
-        body: jsonEncode({
-          'model': config.model,
-          'messages': messages,
-          'temperature': 0.3,
-          'max_tokens': 4096,
-        }),
+        body: jsonEncode(requestBody),
       ).timeout(const Duration(seconds: 120));
     } catch (e) {
       if (e.toString().contains('TimeoutException') ||
           e.toString().contains('timeout')) {
-        throw Exception('请求超时，请检查网络连接后重试');
+        throw const AiServiceException('请求超时，请检查网络连接后重试',
+            retryable: true);
       }
-      throw Exception('网络连接失败，请检查网络后重试');
+      throw const AiServiceException('网络连接失败，请检查网络后重试', retryable: true);
     }
 
     if (response.statusCode != 200) {
-      throw Exception(_friendlyError(response.statusCode, response.body));
+      throw AiServiceException(
+        _friendlyError(response.statusCode, response.body),
+        retryable: response.statusCode == 429 || response.statusCode >= 500,
+      );
     }
 
     // 显式类型检查而非 `as` 强转：结构不符时抛 Exception 而非 TypeError，
-    // 保证 generateReport 的 on Exception 重试逻辑能接住。
-    final decodedBody = jsonDecode(response.body);
+    // 保证 generateReport 的重试逻辑能接住。
+    //
+    // 免费模型高峰期网关可能返回 200 但 body 是 HTML 错误页，需保护。
+    dynamic decodedBody;
+    try {
+      decodedBody = jsonDecode(response.body);
+    } on FormatException {
+      throw const AiServiceException('AI 返回数据格式异常，请稍后重试',
+          retryable: true);
+    }
     if (decodedBody is! Map<String, dynamic>) {
-      throw Exception('AI 返回数据格式异常，请稍后重试');
+      throw const AiServiceException('AI 返回数据格式异常，请稍后重试',
+          retryable: true);
     }
     final body = decodedBody;
+
+    // OpenRouter 上游节点异常时可能返回 200 + error 结构（无 choices）
+    final topError = body['error'];
+    if (topError is Map) {
+      final detail = topError['message'] as String? ?? '';
+      throw AiServiceException(
+        detail.isNotEmpty
+            ? 'AI 服务暂时不可用（$detail），请稍后重试'
+            : 'AI 服务暂时不可用，请稍后重试',
+        retryable: true,
+      );
+    }
+
     final choices = body['choices'] as List?;
     if (choices == null || choices.isEmpty) {
-      throw Exception('AI 返回数据格式异常，请稍后重试');
+      throw const AiServiceException('AI 返回数据格式异常，请稍后重试',
+          retryable: true);
     }
 
     // 兼容不同模型的返回结构：
@@ -1178,7 +1245,23 @@ $dataText
     // - 部分模型：choices[0].message.content 可能是 List (含 reasoning + content)
     // - 部分模型：choices[0].message.reasoning + choices[0].message.content
     final message = choices[0]['message'];
+
+    // 上游模型执行失败时 OpenRouter 可能在 message 内嵌 error 对象
+    if (message is Map) {
+      final msgError = message['error'];
+      if (msgError is Map) {
+        final detail = msgError['message'] as String? ?? '';
+        throw AiServiceException(
+          detail.isNotEmpty
+              ? 'AI 服务暂时不可用（$detail），请稍后重试'
+              : 'AI 服务暂时不可用，请稍后重试',
+          retryable: true,
+        );
+      }
+    }
+
     String? content;
+    String? reasoning;
     if (message is Map) {
       final rawContent = message['content'];
       if (rawContent is String) {
@@ -1191,9 +1274,21 @@ $dataText
             .where((t) => t != null)
             .join();
       }
+      // 推理模型的思考内容兜底来源
+      final rawReasoning = message['reasoning'];
+      if (rawReasoning is String && rawReasoning.trim().isNotEmpty) {
+        reasoning = rawReasoning;
+      }
     }
-    if (content == null || content.isEmpty) {
-      throw Exception('AI 未返回有效内容，请稍后重试');
+    if (content == null || content.trim().isEmpty) {
+      // 兜底：推理模型偶发把全部输出放入 reasoning 字段而 content 为空。
+      // 报告场景由 _parseResponse 剥离思考标签并提取 JSON；
+      // 问答场景思考文本中也包含对问题的回答，均优于直接报错。
+      if (reasoning != null) {
+        return reasoning;
+      }
+      throw const AiServiceException('AI 未返回有效内容，请稍后重试',
+          retryable: true);
     }
 
     return content;
@@ -1215,8 +1310,10 @@ $dataText
       'Accept': 'text/event-stream',
     };
 
-    // OpenRouter 需要额外的 header
-    if (config.id == 'ling-3.0-flash-sante') {
+    // OpenRouter 需要额外的 header；Ling-3.0 显式关闭推理，
+    // 避免思考 token 挤占正文输出（与 _callApiWithMessages 一致）。
+    final isLing = config.id == 'ling-3.0-flash-sante';
+    if (isLing) {
       headers['HTTP-Referer'] = 'https://yima.app';
       headers['X-Title'] = 'Yima';
     }
@@ -1227,8 +1324,9 @@ $dataText
       'model': config.model,
       'messages': messages,
       'temperature': 0.3,
-      'max_tokens': 4096,
+      'max_tokens': config.maxOutputTokens,
       'stream': true,
+      if (isLing) 'reasoning': {'enabled': false, 'exclude': true},
     });
 
     final client = http.Client();
@@ -1470,9 +1568,11 @@ $dataText
     result = _stripComments(result);
 
     // 去除尾部逗号：}, ] 或 }, } 或 , ] 或 , }
-    result = result.replaceAll(
+    // 注意：String.replaceAll 不支持 $1 捕获组引用（会插入字面文本 "$1"
+    // 并吞掉原有的 }/]，反而改坏 JSON），必须用 replaceAllMapped。
+    result = result.replaceAllMapped(
       RegExp(r',\s*([}\]])'),
-      r'$1',
+      (m) => m.group(1)!,
     );
 
     // 修复单引号包裹的键和值 -> 双引号
@@ -1485,11 +1585,37 @@ $dataText
     return result;
   }
 
+  /// 剥离推理模型输出中内嵌的 <think>...</think> 思考标签内容。
+  ///
+  /// Ling 系等开源推理模型可能在正文中直接内嵌思考标签，
+  /// 其中的大括号会干扰 JSON 提取（策略3按花括号截取），
+  /// 必须在解析前移除。未闭合的 <think>（输出被截断）同样移除其后全部内容。
+  static String _stripThinkTags(String content) {
+    var result = content.replaceAll(
+      RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false),
+      '',
+    );
+    // 未闭合的 <think>：其后不再有正文，整体移除
+    result = result.replaceAll(
+      RegExp(r'<think>[\s\S]*$', caseSensitive: false),
+      '',
+    );
+    return result.trim();
+  }
+
+  /// 解析 AI 返回的原始文本为 [HealthReport]（仅供测试使用）。
+  @visibleForTesting
+  static HealthReport parseReportResponse(String content) =>
+      _parseResponse(content);
+
   static HealthReport _parseResponse(String content) {
-    final jsonStr = _extractJsonString(content);
+    // 先剥离思考标签，避免其内容干扰 JSON 提取
+    final cleaned = _stripThinkTags(content);
+    final jsonStr = _extractJsonString(cleaned);
 
     if (jsonStr == null) {
-      throw Exception('AI 返回的数据格式不正确，请稍后重试');
+      throw const AiServiceException('AI 返回的数据格式不正确，请稍后重试',
+          retryable: true);
     }
 
     // 第一次尝试：直接解析
@@ -1540,6 +1666,7 @@ $dataText
       }
     }
 
-    throw Exception('AI 返回的数据格式不正确，请稍后重试');
+    throw const AiServiceException('AI 返回的数据格式不正确，请稍后重试',
+        retryable: true);
   }
 }
