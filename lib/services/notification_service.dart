@@ -42,7 +42,7 @@ class NotificationService {
         android: androidSettings,
       );
 
-      await _notifications.initialize(initSettings);
+      await _notifications.initialize(settings: initSettings);
 
       // Initialize timezone data (idempotent)
       if (!_tzInitialized) {
@@ -124,15 +124,12 @@ class NotificationService {
     );
 
     await _notifications.zonedSchedule(
-      _reminderNotificationId,
-      '经期提醒',
-      '预计 $reminderDays 天后将来临，请做好准备',
-      tzDateTime,
-      details,
+      id: _reminderNotificationId,
+      title: '经期提醒',
+      body: '预计 $reminderDays 天后将来临，请做好准备',
+      scheduledDate: tzDateTime,
+      notificationDetails: details,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: null,
     );
     debugPrint('[notify] reminder scheduled: $tzDateTime (本地 $scheduledDate)');
   }
@@ -153,7 +150,12 @@ class NotificationService {
       android: androidDetails,
     );
 
-    await _notifications.show(_reminderNotificationId, title, body, details);
+    await _notifications.show(
+      id: _reminderNotificationId,
+      title: title,
+      body: body,
+      notificationDetails: details,
+    );
   }
 
   Future<void> cancelAll() async {

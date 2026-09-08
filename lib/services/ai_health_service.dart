@@ -212,7 +212,7 @@ class HealthReport {
     required this.healthScore,
   });
 
-  /// 将动态对象安全转换为 Map<String, dynamic>，
+  /// 将动态对象安全转换为 `Map<String, dynamic>`，
   /// 兼容模型返回的 LinkedHashMap 等非显式 Map 类型。
   static Map<String, dynamic> _asMap(dynamic e) {
     if (e is Map<String, dynamic>) return e;
@@ -1600,11 +1600,11 @@ $dataText
     return result;
   }
 
-  /// 剥离推理模型输出中内嵌的 <think>...</think> 思考标签内容。
+  /// 剥离推理模型输出中内嵌的 `<think>...</think>` 思考标签内容。
   ///
   /// Ling 系等开源推理模型可能在正文中直接内嵌思考标签，
   /// 其中的大括号会干扰 JSON 提取（策略3按花括号截取），
-  /// 必须在解析前移除。未闭合的 <think>（输出被截断）同样移除其后全部内容。
+  /// 必须在解析前移除。未闭合的 `<think>`（输出被截断）同样移除其后全部内容。
   static String _stripThinkTags(String content) {
     var result = content.replaceAll(
       RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false),

@@ -389,9 +389,8 @@ class SettingsScreen extends StatelessWidget {
       await file.writeAsString(jsonData);
       if (!context.mounted) return;
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: '经期数据导出',
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], subject: '经期数据导出'),
       );
 
       if (context.mounted) {
@@ -413,14 +412,15 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _importData(
       BuildContext context, PeriodProvider provider) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final picked = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
 
-      if (result == null || result.files.isEmpty) return;
+      final pickedPath = picked?.path;
+      if (pickedPath == null) return;
 
-      final file = File(result.files.first.path!);
+      final file = File(pickedPath);
       final jsonString = await file.readAsString();
 
       if (context.mounted) {
