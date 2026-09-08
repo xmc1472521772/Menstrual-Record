@@ -15,6 +15,7 @@ import '../services/notification_service.dart';
 import '../services/ai_health_service.dart';
 import '../services/widget_service.dart';
 import '../utils/date_utils.dart';
+import '../utils/period_validation.dart';
 
 /// `startPeriodWithMerge` 的返回类型。
 ///
@@ -753,8 +754,28 @@ class PeriodProvider with ChangeNotifier {
     }
   }
 
+  /// 保存一条已完成的经期记录（开始日 + 结束日）。
+  ///
+  /// 写入前执行数据防线校验（规则见 [validateNewPeriodRange]）：
+  /// 结束不早于开始、不允许未来日期、不与已有记录（含进行中的）重叠。
+  /// UI 层在选择/保存时已做同样校验并给出精确提示，此处兜底拦截
+  /// 绕过 UI 状态校验的调用（如选择日期后记录发生变化），防止产生
+  /// 重叠或未来日期的记录破坏周期差分计算。
   Future<bool> savePeriodRecord(DateTime startDate, DateTime endDate) async {
     try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final error = validateNewPeriodRange(
+        start: startDate,
+        end: endDate,
+        today: today,
+        records: _records,
+      );
+      if (error != null) {
+        debugPrint('savePeriodRecord rejected: $error');
+        return false;
+      }
+
       final record = PeriodRecord(
         startDate: startDate.toIso8601String().split('T')[0],
         endDate: endDate.toIso8601String().split('T')[0],

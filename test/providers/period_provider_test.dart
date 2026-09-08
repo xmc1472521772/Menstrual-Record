@@ -563,6 +563,68 @@ void main() {
       expect(provider.records.first.endDate, isNull); // endDate 被清空
     });
   });
+
+  group('PeriodProvider - savePeriodRecord 写入前校验（添加记录数据防线）', () {
+    test('与已有记录重叠时拒绝保存', () async {
+      await provider.startPeriod(DateTime(2025, 1, 10));
+      await provider.endPeriod(DateTime(2025, 1, 14));
+
+      final result = await provider
+          .savePeriodRecord(DateTime(2025, 1, 12), DateTime(2025, 1, 16));
+      expect(result, isFalse);
+      expect(provider.records, hasLength(1));
+    });
+
+    test('与已有记录共享边界日（同一天）时拒绝保存', () async {
+      await provider.startPeriod(DateTime(2025, 1, 10));
+      await provider.endPeriod(DateTime(2025, 1, 14));
+
+      // 1/14 已被上一条记录占用（与编辑对话框口径一致：两段记录不共享任何一天）
+      final result = await provider
+          .savePeriodRecord(DateTime(2025, 1, 14), DateTime(2025, 1, 16));
+      expect(result, isFalse);
+      expect(provider.records, hasLength(1));
+    });
+
+    test('紧邻上一条记录的次日开始时允许保存', () async {
+      await provider.startPeriod(DateTime(2025, 1, 10));
+      await provider.endPeriod(DateTime(2025, 1, 14));
+
+      final result = await provider
+          .savePeriodRecord(DateTime(2025, 1, 15), DateTime(2025, 1, 18));
+      expect(result, isTrue);
+      expect(provider.records, hasLength(2));
+    });
+
+    test('未来日期拒绝保存', () async {
+      final result = await provider
+          .savePeriodRecord(DateTime(2100, 1, 1), DateTime(2100, 1, 3));
+      expect(result, isFalse);
+      expect(provider.records, isEmpty);
+    });
+
+    test('结束日期早于开始日期拒绝保存', () async {
+      final result = await provider
+          .savePeriodRecord(DateTime(2025, 1, 20), DateTime(2025, 1, 18));
+      expect(result, isFalse);
+      expect(provider.records, isEmpty);
+    });
+
+    test('与进行中的经期重叠拒绝，之前的历史区间允许', () async {
+      await provider.startPeriod(DateTime(2025, 1, 10)); // ongoing
+
+      // 进行中记录占用 [1/10, 今天]，1/12-1/15 落在其中 → 拒绝
+      final conflict = await provider
+          .savePeriodRecord(DateTime(2025, 1, 12), DateTime(2025, 1, 15));
+      expect(conflict, isFalse);
+
+      // ongoing 之前的历史补录不重叠 → 允许
+      final backfill = await provider
+          .savePeriodRecord(DateTime(2024, 12, 20), DateTime(2024, 12, 25));
+      expect(backfill, isTrue);
+      expect(provider.records, hasLength(2));
+    });
+  });
 }
 
 /// A test-only DatabaseProvider that wraps an in-memory database.

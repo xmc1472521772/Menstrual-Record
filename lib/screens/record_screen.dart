@@ -7,6 +7,7 @@ import '../providers/settings_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../utils/period_validation.dart';
 import 'add_record_calendar_page.dart';
 
 /// 多选日历默认延展天数（X）的取值规则：
@@ -36,6 +37,11 @@ class RecordScreen extends StatefulWidget {
 class _RecordScreenState extends State<RecordScreen> {
   late DateTime _startDate;
   DateTime? _endDate;
+
+  /// 异常经期长度（<2 天或 >10 天）的保存确认标志。
+  /// 与编辑对话框的「确认异常」口径一致：首次点保存仅提示，
+  /// 用户再次点保存才落库；日期变化后重置。
+  bool _lengthWarningConfirmed = false;
 
   @override
   void initState() {
@@ -248,13 +254,15 @@ class _RecordScreenState extends State<RecordScreen> {
           _buildDateRow(
             label: AppStrings.startDate,
             date: _startDate,
-            onTap: () => _pickDate(isStart: true),
+            onTap: () =>
+                _pickDate(isStart: true, provider: context.read<PeriodProvider>()),
           ),
           const Divider(height: 1),
           _buildDateRow(
             label: AppStrings.endDate,
             date: _endDate,
-            onTap: () => _pickDate(isStart: false),
+            onTap: () => _pickDate(
+                isStart: false, provider: context.read<PeriodProvider>()),
           ),
           const SizedBox(height: AppDimens.spacingLg),
           SizedBox(
@@ -332,13 +340,25 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  Future<void> _pickDate({required bool isStart}) async {
+  /// 弹出日期选择器并应用新增记录的校验规则。
+  ///
+  /// 选择限制：
+  /// - 选择器 `lastDate` 收紧为今天 —— 未来日期在日历上直接灰掉，
+  ///   杜绝「尚未发生的经期」污染周期预测；
+  /// - 结束日期选择器 `firstDate` 为开始日期，从源头保证 end >= start；
+  /// - 选定后立即对整个候选区间做冲突校验（不与已有记录重叠），
+  ///   不通过则提示原因并保持原选择不变。
+  Future<void> _pickDate({
+    required bool isStart,
+    required PeriodProvider provider,
+  }) async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: isStart ? _startDate : (_endDate ?? _startDate),
       firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 1),
+      lastDate: today,
       locale: const Locale('zh', 'CN'),
       builder: (context, child) {
         return _buildDatePickerTheme(context, child);
@@ -346,19 +366,43 @@ class _RecordScreenState extends State<RecordScreen> {
     );
     if (picked == null) return;
 
-    setState(() {
-      if (isStart) {
-        _startDate = picked;
-        if (_endDate != null && _endDate!.isBefore(picked)) {
-          _endDate = null;
-        }
-      } else {
-        if (picked.isBefore(_startDate)) {
-          _endDate = _startDate;
-        } else {
-          _endDate = picked;
-        }
+    // 候选区间：选开始日时若原结束日早于新开始日则联动清空（沿用原逻辑）；
+    // 选结束日时钳制到不早于开始日（选择器已限制，此处防御性兜底）。
+    DateTime candidateStart = _startDate;
+    DateTime? candidateEnd = _endDate;
+    if (isStart) {
+      candidateStart = picked;
+      if (candidateEnd != null && candidateEnd.isBefore(picked)) {
+        candidateEnd = null;
       }
+    } else {
+      candidateEnd = picked.isBefore(_startDate) ? _startDate : picked;
+    }
+
+    // 选定后立即校验：不晚于今天 + 不与已有记录重叠。
+    // 提供精确原因，避免用户到保存时才看到笼统的失败。
+    final error = validateNewPeriodRange(
+      start: candidateStart,
+      end: candidateEnd ?? candidateStart,
+      today: today,
+      records: provider.records,
+    );
+    if (error != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _startDate = candidateStart;
+      _endDate = candidateEnd;
+      // 日期变化后，此前的异常长度确认不再有效
+      _lengthWarningConfirmed = false;
     });
   }
 
@@ -491,9 +535,48 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _saveRange(PeriodProvider provider) async {
     if (_endDate == null) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 保存前全量校验：选择日期后记录可能已变化（如从多选日历返回时
+    // 新增了记录），不能只依赖选择时的判断，必须以最新记录重新校验。
+    final error = validateNewPeriodRange(
+      start: _startDate,
+      end: _endDate!,
+      today: today,
+      records: provider.records,
+    );
+    if (error != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    // 异常长度（<2 天 / >10 天）不直接拦截，首次点保存仅提示，
+    // 需用户再次点击确认，防止误选导致的畸形区间记录。
+    final days = _endDate!.difference(_startDate).inDays + 1;
+    final warning = periodLengthWarning(days);
+    if (warning != null && !_lengthWarningConfirmed) {
+      if (!mounted) return;
+      setState(() => _lengthWarningConfirmed = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$warning 确认无误请再次点击保存'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
     final success =
         await provider.savePeriodRecord(_startDate, _endDate!);
     if (!mounted) return;
+    if (success) _lengthWarningConfirmed = false;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

@@ -86,6 +86,8 @@ class AppStrings {
   static const String editConflictStartAfterEnd = '开始日期不能晚于结束日期';
   static const String editRangeConstraintPrev = '开始日期不能早于上一条记录的结束日期';
   static const String editRangeConstraintNext = '结束日期不能晚于下一条记录的开始日期';
+  static const String dateCannotBeFuture = '不能选择今天之后的日期';
+  static const String dateRangeOverlap = '所选日期与已有记录重叠，请调整';
   static const String duration = '持续';
 
   // ─── Stats screen ────────────────────────────────────────────────
