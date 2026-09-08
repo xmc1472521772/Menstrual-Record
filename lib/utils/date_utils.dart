@@ -83,3 +83,19 @@ class AppDateUtils {
   /// Extract the day component from an integer day key.
   static int dayKeyToDay(int k) => k % 100;
 }
+
+/// 判断经期提醒是否需要重新排期（T9 抽取的纯函数）。
+///
+/// 供 [PeriodProvider] 在调度提醒前短路重复排期（zonedSchedule
+/// 需要跨进程调用，能省则省）。按「年月日」比较，忽略时分秒：
+///
+/// - [predicted] 为 null（无预测）→ 不需要，调用方负责取消已有提醒；
+/// - [lastScheduled] 为 null（从未排过）且有预测 → 需要；
+/// - 两者日期相同 → 不需要（预测未变化）。
+bool needsReschedule(DateTime? lastScheduled, DateTime? predicted) {
+  if (predicted == null) return false;
+  if (lastScheduled == null) return true;
+  return lastScheduled.year != predicted.year ||
+      lastScheduled.month != predicted.month ||
+      lastScheduled.day != predicted.day;
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -85,6 +86,15 @@ class DatabaseHelper implements DatabaseProvider {
         )
       ''');
     }
+  }
+
+  /// 仅供测试：对人工构造的低版本库重放迁移步骤（P1-4/T9）。
+  ///
+  /// 绕过 openDatabase 的 user_version 管理，让迁移测试可以直接
+  /// 验证 [_onUpgrade] 每一步的 DDL 与数据兼容性。
+  @visibleForTesting
+  Future<void> debugUpgrade(Database db, int oldVersion, int newVersion) {
+    return _onUpgrade(db, oldVersion, newVersion);
   }
 
   Future<void> _createTables(Database db) async {

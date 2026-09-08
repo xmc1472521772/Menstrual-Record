@@ -401,14 +401,9 @@ class PeriodProvider with ChangeNotifier {
       return;
     }
 
-    // 预测日期未变化则跳过重复调度（zonedSchedule 需要跨进程调用）
-    final last = _lastScheduledPrediction;
-    if (last != null &&
-        last.year == predicted.year &&
-        last.month == predicted.month &&
-        last.day == predicted.day) {
-      return;
-    }
+    // 预测日期未变化则跳过重复调度（zonedSchedule 需要跨进程调用）。
+    // 比较逻辑收敛到 [needsReschedule]（T9 纯函数抽取），此处只做调度。
+    if (!needsReschedule(_lastScheduledPrediction, predicted)) return;
     _lastScheduledPrediction = predicted;
 
     try {

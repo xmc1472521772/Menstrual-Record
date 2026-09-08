@@ -91,6 +91,31 @@ class WidgetService {
     }
   }
 
+  /// 仅供测试：暴露小组件 JSON 构建纯逻辑，不经过 MethodChannel（T9）。
+  ///
+  /// 三态契约：
+  /// - 经期进行中（存在 isOngoing 记录）
+  /// - 上次经期已结束（取最近一条已结束记录）
+  /// - 空数据（无记录且无统计）
+  @visibleForTesting
+  Map<String, dynamic> buildWidgetJsonForTest({
+    required List<PeriodRecord> records,
+    required CycleData? cycleData,
+    required DateTime today,
+    required int userCycleLength,
+    required int userPeriodLength,
+    int todayFlow = 0,
+  }) {
+    return _buildWidgetJson(
+      records: records,
+      cycleData: cycleData,
+      today: today,
+      userCycleLength: userCycleLength,
+      userPeriodLength: userPeriodLength,
+      todayFlow: todayFlow,
+    );
+  }
+
   /// 构建小组件数据 JSON。
   Map<String, dynamic> _buildWidgetJson({
     required List<PeriodRecord> records,

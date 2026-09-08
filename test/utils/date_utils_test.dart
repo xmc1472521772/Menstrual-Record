@@ -131,4 +131,36 @@ void main() {
       });
     });
   });
+
+  group('needsReschedule', () {
+    test('从未排期且有预测 → 需要排期', () {
+      expect(needsReschedule(null, DateTime(2026, 9, 20)), isTrue);
+    });
+
+    test('预测消失 → 不需要排期', () {
+      expect(needsReschedule(DateTime(2026, 9, 20), null), isFalse);
+      expect(needsReschedule(null, null), isFalse);
+    });
+
+    test('预测未变化（同年月日，忽略时分秒）→ 跳过', () {
+      final scheduled = DateTime(2026, 9, 20, 9, 30);
+      final predicted = DateTime(2026, 9, 20, 0, 0);
+      expect(needsReschedule(scheduled, predicted), isFalse);
+    });
+
+    test('预测日期变化（年/月/日任一）→ 需要排期', () {
+      expect(
+        needsReschedule(DateTime(2026, 9, 20), DateTime(2026, 9, 21)),
+        isTrue,
+      );
+      expect(
+        needsReschedule(DateTime(2026, 9, 20), DateTime(2026, 10, 20)),
+        isTrue,
+      );
+      expect(
+        needsReschedule(DateTime(2026, 12, 20), DateTime(2027, 12, 20)),
+        isTrue,
+      );
+    });
+  });
 }
