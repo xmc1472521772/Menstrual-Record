@@ -4,10 +4,12 @@ import 'package:intl/intl.dart';
 import '../models/cycle_data.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/ai_assistant_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
 import '../widgets/cycle_chart.dart';
+import '../widgets/health_score_trend_chart.dart';
 import '../widgets/period_length_chart.dart';
 import '../widgets/year_heatmap.dart';
 import 'ai_assistant_screen.dart';
@@ -63,8 +65,9 @@ class _StatsScreenState extends State<StatsScreen>
           ],
         ),
       ),
-      body: Consumer2<PeriodProvider, SettingsProvider>(
-        builder: (context, periodProvider, settingsProvider, child) {
+      body: Consumer3<PeriodProvider, SettingsProvider, AiAssistantProvider>(
+        builder: (context, periodProvider, settingsProvider, aiProvider,
+            child) {
           final cycleData = periodProvider.cycleData;
 
           if (cycleData == null || cycleData.totalCycles == 0) {
@@ -78,7 +81,8 @@ class _StatsScreenState extends State<StatsScreen>
             controller: _tabController,
             children: [
               // ─── Tab 1: 概览 ───
-              _buildOverviewTab(context, cycleData, settingsProvider, periodProvider),
+              _buildOverviewTab(context, cycleData, settingsProvider,
+                  periodProvider, aiProvider),
               // ─── Tab 2: 趋势 ───
               _buildTrendTab(context, cycleData, periodProvider),
               // ─── Tab 3: 历史 ───
@@ -99,6 +103,7 @@ class _StatsScreenState extends State<StatsScreen>
     CycleData cycleData,
     SettingsProvider settingsProvider,
     PeriodProvider periodProvider,
+    AiAssistantProvider aiProvider,
   ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -115,6 +120,10 @@ class _StatsScreenState extends State<StatsScreen>
           _buildAlgorithmSelector(context, settingsProvider, periodProvider),
           const SizedBox(height: AppDimens.spacingLg),
           _buildPredictionCard(context, cycleData),
+          // 健康评分趋势卡（1.34.0）：≥2 条报告历史时由卡片自身渲染，
+          // 不足时 shrink 不占位
+          const SizedBox(height: AppDimens.spacingLg),
+          HealthScoreTrendChart(history: aiProvider.reportHistory),
           const SizedBox(height: AppDimens.spacingLg),
           _buildAIAssistantCard(context, cycleData),
         ],

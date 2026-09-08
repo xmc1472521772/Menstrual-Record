@@ -5,6 +5,42 @@ import 'package:flutter/foundation.dart';
 import '../database/settings_dao.dart';
 import '../services/ai_health_service.dart';
 
+/// 单条 AI 报告历史索引（1.34.0 评分趋势数据源）。
+///
+/// 只存趋势图所需的最小字段（评分/生成时间/模型），不缓存完整报告
+/// 正文——完整报告仍以 `ai_report_json` 单条缓存为准，历史列表用于
+/// 观察评分随周期的变化趋势。
+class ReportHistoryEntry {
+  final DateTime generatedAt;
+
+  /// 健康评分（0-100）。
+  final int score;
+
+  /// 生成报告时使用的模型 ID。
+  final String modelId;
+
+  const ReportHistoryEntry({
+    required this.generatedAt,
+    required this.score,
+    required this.modelId,
+  });
+
+  factory ReportHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return ReportHistoryEntry(
+      generatedAt: DateTime.tryParse(json['generatedAt'] as String? ?? '') ??
+          DateTime.now(),
+      score: (json['score'] as num?)?.toInt() ?? 0,
+      modelId: json['modelId'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'generatedAt': generatedAt.toIso8601String(),
+        'score': score,
+        'modelId': modelId,
+      };
+}
+
 /// AI 助手缓存 Provider。
 ///
 /// 从 [PeriodProvider] 迁出的 AI 职责（P1-5）：
@@ -31,6 +67,14 @@ class AiAssistantProvider with ChangeNotifier {
   /// 报告生成时使用的模型 ID，用于判断是否需要重新生成。
   String _reportModelId = '';
 
+  // ─── 报告历史（评分趋势，1.34.0）────────────────────────────
+  /// 历次报告的评分索引，按生成时间升序追加（最后一条最新）。
+  final List<ReportHistoryEntry> _reportHistory = [];
+
+  /// 报告历史持久化保留上限：只保留最近 [maxPersistedReportHistory]
+  /// 条，防止 `ai_report_history_json` 无限膨胀。
+  static const int maxPersistedReportHistory = 30;
+
   // ─── 聊天历史（跨页面持久化）─────────────────────────────────
   /// 缓存 AI 问答的聊天历史。退出 AI 助手页面后仍保留。
   final List<ChatMessage> _chatHistory = [];
@@ -55,6 +99,10 @@ class AiAssistantProvider with ChangeNotifier {
   /// 获取缓存的 AI 聊天历史（可变引用，UI 可直接操作）。
   List<ChatMessage> get chatHistory => _chatHistory;
 
+  /// 历次报告评分索引（只读视图，按时间升序，最后一条最新）。
+  List<ReportHistoryEntry> get reportHistory =>
+      List.unmodifiable(_reportHistory);
+
   /// 确保缓存的 AI 报告/聊天历史已从 DB 加载完成（重复调用安全）。
   ///
   /// 模式仿 SettingsProvider.ensureLoaded：ChangeNotifierProvider 默认懒
@@ -77,6 +125,24 @@ class AiAssistantProvider with ChangeNotifier {
         _reportDataVersion =
             int.tryParse(all['ai_report_data_version'] ?? '0') ?? 0;
         _reportModelId = all['ai_report_model_id'] ?? '';
+      }
+
+      // ── 报告历史（评分趋势，1.34.0）──
+      final historyJson = all['ai_report_history_json'];
+      if (historyJson != null && historyJson.isNotEmpty) {
+        final decoded = jsonDecode(historyJson);
+        if (decoded is List) {
+          _reportHistory.addAll(
+            decoded
+                .whereType<Map<String, dynamic>>()
+                .map(ReportHistoryEntry.fromJson),
+          );
+          // 防御：持久化数据异常超限时丢弃最旧的
+          if (_reportHistory.length > maxPersistedReportHistory) {
+            _reportHistory.removeRange(
+                0, _reportHistory.length - maxPersistedReportHistory);
+          }
+        }
       }
 
       // ── 聊天历史持久化（P1-8）──
@@ -113,9 +179,21 @@ class AiAssistantProvider with ChangeNotifier {
     _cachedReport = report;
     _reportDataVersion = dataVersion;
     _reportModelId = modelId;
+    // 追加评分历史（趋势图数据源）。同一次生成不会重复调用本方法，
+    // 不做内容级去重；上限截断丢弃最旧条目。
+    _reportHistory.add(ReportHistoryEntry(
+      generatedAt: report.generatedAt,
+      score: report.healthScore,
+      modelId: modelId,
+    ));
+    if (_reportHistory.length > maxPersistedReportHistory) {
+      _reportHistory.removeRange(
+          0, _reportHistory.length - maxPersistedReportHistory);
+    }
     notifyListeners();
     // 异步持久化，不阻塞 UI
     _persistCachedReport();
+    _persistReportHistory();
   }
 
   /// 清除缓存的 AI 健康报告（如用户手动刷新或数据变更后）。
@@ -149,6 +227,9 @@ class AiAssistantProvider with ChangeNotifier {
   }
 
   /// 清除 SQLite 中持久化的 AI 报告。
+  ///
+  /// 注意：只清当前报告缓存，不清 [_reportHistory]——历史是趋势数据，
+  /// 重新生成报告不应抹掉评分变化轨迹。
   Future<void> _clearPersistedReport() async {
     try {
       await _settingsDao.setValue('ai_report_json', '');
@@ -156,6 +237,19 @@ class AiAssistantProvider with ChangeNotifier {
       await _settingsDao.setValue('ai_report_model_id', '');
     } catch (e) {
       debugPrint('Error clearing persisted AI report: $e');
+    }
+  }
+
+  /// 将报告评分历史持久化到 SQLite（只保留最近 [maxPersistedReportHistory] 条）。
+  Future<void> _persistReportHistory() async {
+    try {
+      if (_reportHistory.isEmpty) return;
+      final jsonStr = jsonEncode(
+        _reportHistory.map((e) => e.toJson()).toList(),
+      );
+      await _settingsDao.setValue('ai_report_history_json', jsonStr);
+    } catch (e) {
+      debugPrint('Error persisting report history: $e');
     }
   }
 

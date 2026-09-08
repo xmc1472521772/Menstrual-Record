@@ -194,6 +194,7 @@ class AppStrings {
   static const String aiApiKeyNotConfigured = 'API Key 未配置，请联系开发者';
   static const String aiYouMatched = '您当前已符合此情况';
   static const String aiModelChangedHint = '已切换模型，建议重新生成报告';
+  static const String aiScoreTrend = '健康评分趋势';
 
   // ─── AI Chat ───────────────────────────────────────────────────
   static const String aiChatTitle = '经期问答';
