@@ -108,14 +108,16 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         modelId: modelId,
       );
 
+      if (report != null) {
+        // 无论用户是否已退出页面都缓存报告（service 层操作，不依赖 mounted），
+        // 避免已成功生成（已消耗 API 调用）的报告被白白丢弃。
+        provider.cacheReport(report, modelId: modelId);
+      }
+
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
         });
-        // 将报告缓存到 Provider，退出后仍保留
-        if (report != null) {
-          provider.cacheReport(report, modelId: modelId);
-        }
       }
     } catch (e) {
       if (mounted) {

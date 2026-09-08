@@ -242,7 +242,9 @@ class HealthReport {
         .toList();
 
     return HealthReport(
-      generatedAt: DateTime.now(),
+      // 优先解析持久化的生成时间；旧缓存无此字段时回退当前时间
+      generatedAt: DateTime.tryParse(json['generatedAt'] as String? ?? '') ??
+          DateTime.now(),
       currentOverview: json['currentOverview'] as String? ?? '',
       cycleStats: cycleStats,
       cycleTrendSummary: json['cycleTrendSummary'] as String? ?? '',
@@ -425,7 +427,7 @@ class AIHealthService {
       {'role': 'system', 'content': systemPrompt},
     ];
 
-    // 加入历史对话（最多最近6轮）
+    // 加入历史对话（最多最近 12 条消息，即 6 轮对话）
     final recentHistory = chatHistory.length > 12
         ? chatHistory.sublist(chatHistory.length - 12)
         : chatHistory;
@@ -1159,7 +1161,13 @@ $dataText
       throw Exception(_friendlyError(response.statusCode, response.body));
     }
 
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    // 显式类型检查而非 `as` 强转：结构不符时抛 Exception 而非 TypeError，
+    // 保证 generateReport 的 on Exception 重试逻辑能接住。
+    final decodedBody = jsonDecode(response.body);
+    if (decodedBody is! Map<String, dynamic>) {
+      throw Exception('AI 返回数据格式异常，请稍后重试');
+    }
+    final body = decodedBody;
     final choices = body['choices'] as List?;
     if (choices == null || choices.isEmpty) {
       throw Exception('AI 返回数据格式异常，请稍后重试');
@@ -1224,93 +1232,94 @@ $dataText
     });
 
     final client = http.Client();
-    http.StreamedResponse response;
     try {
-      response = await client.send(request)
-          .timeout(const Duration(seconds: 120));
-    } catch (e) {
-      client.close();
-      if (e.toString().contains('TimeoutException') ||
-          e.toString().contains('timeout')) {
-        throw Exception('请求超时，请检查网络连接后重试');
-      }
-      throw Exception('网络连接失败，请检查网络后重试');
-    }
-
-    if (response.statusCode != 200) {
-      client.close();
-      // 读取错误内容用于友好提示
-      String errorBody = '';
+      http.StreamedResponse response;
       try {
-        errorBody = await response.stream.bytesToString();
-      } catch (_) {}
-      throw Exception(_friendlyError(response.statusCode, errorBody));
-    }
-
-    // SSE 数据格式：以 data: 开头，每行一个 JSON chunk
-    // 最后一个 chunk 的 data: [DONE] 表示结束
-    // OpenRouter 可能会发送以 : 开头的注释行，需要跳过
-    var buffer = '';
-    await for (final chunk in response.stream.transform(
-      utf8.decoder,
-    )) {
-      buffer += chunk;
-
-      // 按行分割处理
-      while (buffer.contains('\n')) {
-        final newlineIndex = buffer.indexOf('\n');
-        final line = buffer.substring(0, newlineIndex).trim();
-        buffer = buffer.substring(newlineIndex + 1);
-
-        if (line.isEmpty) continue;
-        // 跳过 OpenRouter 的注释行（以 : 开头）
-        if (line.startsWith(':')) continue;
-        if (!line.startsWith('data:')) continue;
-
-        final data = line.substring(5).trim();
-        if (data == '[DONE]') {
-          client.close();
-          return;
+        response = await client.send(request)
+            .timeout(const Duration(seconds: 120));
+      } catch (e) {
+        if (e.toString().contains('TimeoutException') ||
+            e.toString().contains('timeout')) {
+          throw Exception('请求超时，请检查网络连接后重试');
         }
+        throw Exception('网络连接失败，请检查网络后重试');
+      }
 
+      if (response.statusCode != 200) {
+        // 读取错误内容用于友好提示（必须在关闭 client 之前读取）
+        String errorBody = '';
         try {
-          final json = jsonDecode(data) as Map<String, dynamic>;
-          final choices = json['choices'] as List?;
-          if (choices != null && choices.isNotEmpty) {
-            final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            final content = delta?['content'] as String?;
-            if (content != null && content.isNotEmpty) {
-              yield content;
-            }
+          errorBody = await response.stream.bytesToString();
+        } catch (_) {}
+        throw Exception(_friendlyError(response.statusCode, errorBody));
+      }
+
+      // SSE 数据格式：以 data: 开头，每行一个 JSON chunk
+      // 最后一个 chunk 的 data: [DONE] 表示结束
+      // OpenRouter 可能会发送以 : 开头的注释行，需要跳过
+      var buffer = '';
+      await for (final chunk in response.stream.transform(
+        utf8.decoder,
+      )) {
+        buffer += chunk;
+
+        // 按行分割处理
+        while (buffer.contains('\n')) {
+          final newlineIndex = buffer.indexOf('\n');
+          final line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+
+          if (line.isEmpty) continue;
+          // 跳过 OpenRouter 的注释行（以 : 开头）
+          if (line.startsWith(':')) continue;
+          if (!line.startsWith('data:')) continue;
+
+          final data = line.substring(5).trim();
+          if (data == '[DONE]') {
+            return;
           }
-        } catch (_) {
-          // 忽略无法解析的 chunk
+
+          try {
+            final json = jsonDecode(data) as Map<String, dynamic>;
+            final choices = json['choices'] as List?;
+            if (choices != null && choices.isNotEmpty) {
+              final delta = choices[0]['delta'] as Map<String, dynamic>?;
+              final content = delta?['content'] as String?;
+              if (content != null && content.isNotEmpty) {
+                yield content;
+              }
+            }
+          } catch (_) {
+            // 忽略无法解析的 chunk
+          }
         }
       }
-    }
 
-    // 处理 buffer 中可能残留的最后一行
-    final lastLine = buffer.trim();
-    if (lastLine.startsWith('data:')) {
-      final data = lastLine.substring(5).trim();
-      if (data.isNotEmpty && data != '[DONE]') {
-        try {
-          final json = jsonDecode(data) as Map<String, dynamic>;
-          final choices = json['choices'] as List?;
-          if (choices != null && choices.isNotEmpty) {
-            final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            final content = delta?['content'] as String?;
-            if (content != null && content.isNotEmpty) {
-              yield content;
+      // 处理 buffer 中可能残留的最后一行
+      final lastLine = buffer.trim();
+      if (lastLine.startsWith('data:')) {
+        final data = lastLine.substring(5).trim();
+        if (data.isNotEmpty && data != '[DONE]') {
+          try {
+            final json = jsonDecode(data) as Map<String, dynamic>;
+            final choices = json['choices'] as List?;
+            if (choices != null && choices.isNotEmpty) {
+              final delta = choices[0]['delta'] as Map<String, dynamic>?;
+              final content = delta?['content'] as String?;
+              if (content != null && content.isNotEmpty) {
+                yield content;
+              }
             }
+          } catch (_) {
+            // 忽略
           }
-        } catch (_) {
-          // 忽略
         }
       }
+    } finally {
+      // 无论正常结束、[DONE] 提前返回、流中途异常还是消费方取消订阅，
+      // 都确保关闭底层 client，避免 socket 泄漏。
+      client.close();
     }
-
-    client.close();
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1392,33 +1401,73 @@ $dataText
     return null;
   }
 
+  /// 去除 JSON 文本中的注释，但**跳过字符串字面量内部**的内容。
+  ///
+  /// 逐字符扫描并跟踪是否处于 `"..."` 字符串内（含转义处理），
+  /// 避免误伤字符串值中包含 `https://`、`#` 等合法内容
+  /// （旧实现用 `//[^\n\r]*` 正则会把 URL 截断，反而改坏合法 JSON）。
+  static String _stripComments(String jsonStr) {
+    final out = StringBuffer();
+    var inString = false;
+    var i = 0;
+    while (i < jsonStr.length) {
+      final ch = jsonStr[i];
+      if (inString) {
+        out.write(ch);
+        if (ch == r'\' && i + 1 < jsonStr.length) {
+          out.write(jsonStr[i + 1]);
+          i += 2;
+          continue;
+        }
+        if (ch == '"') inString = false;
+        i++;
+        continue;
+      }
+      if (ch == '"') {
+        inString = true;
+        out.write(ch);
+        i++;
+        continue;
+      }
+      // 单行注释（// ... 或 # ...）：跳到行尾
+      if ((ch == '/' && i + 1 < jsonStr.length && jsonStr[i + 1] == '/') ||
+          ch == '#') {
+        while (i < jsonStr.length && jsonStr[i] != '\n' && jsonStr[i] != '\r') {
+          i++;
+        }
+        continue;
+      }
+      // 多行注释（/* ... */）
+      if (ch == '/' && i + 1 < jsonStr.length && jsonStr[i + 1] == '*') {
+        i += 2;
+        while (i < jsonStr.length) {
+          if (jsonStr[i] == '*' &&
+              i + 1 < jsonStr.length &&
+              jsonStr[i + 1] == '/') {
+            i += 2;
+            break;
+          }
+          i++;
+        }
+        continue;
+      }
+      out.write(ch);
+      i++;
+    }
+    return out.toString();
+  }
+
   /// 对提取出的 JSON 字符串进行常见格式修复。
   ///
   /// 处理以下问题：
-  /// - 去除单行注释 (// ... 和 # ...)
-  /// - 去除多行注释 (/* ... */)
+  /// - 去除注释（// ... 和 # ... 和 /* ... */，不处理字符串字面量内部）
   /// - 去除尾部逗号（trailing comma）
   /// - 将单引号转换为双引号（仅键值引用）
   static String _repairJsonString(String jsonStr) {
     var result = jsonStr;
 
-    // 去除单行注释（// ...）
-    result = result.replaceAll(
-      RegExp(r'//[^\n\r]*'),
-      '',
-    );
-
-    // 去除单行注释（# ...）
-    result = result.replaceAll(
-      RegExp(r'#[^\n\r]*'),
-      '',
-    );
-
-    // 去除多行注释（/* ... */）
-    result = result.replaceAll(
-      RegExp(r'/\*[\s\S]*?\*/'),
-      '',
-    );
+    // 去除注释（基于扫描器，字符串内不处理）
+    result = _stripComments(result);
 
     // 去除尾部逗号：}, ] 或 }, } 或 , ] 或 , }
     result = result.replaceAll(
