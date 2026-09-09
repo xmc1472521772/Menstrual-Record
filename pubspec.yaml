@@ -1,7 +1,7 @@
 name: yimaflutter
 description: "月事记 - 经期记录，本地存储，隐私安全"
 publish_to: 'none'
-version: 1.34.0+109
+version: 1.37.0+116
 
 environment:
   sdk: ^3.5.4
@@ -36,6 +36,21 @@ flutter:
 
   assets:
     - assets/icon/
+
+  # 内置统一中文字体 MiSans（GB2312 常用字子集，4 字重共 ~6.6MB）。
+  # 消除不同 ROM 默认字体（MiSans/HarmonyOS Sans/OPPO Sans）度量差异
+  # 导致的跨机型排版不一致。子集外的生僻字回退系统字体。
+  fonts:
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/MiSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/MiSans-Semibold.ttf
+          weight: 600
+        - asset: assets/fonts/MiSans-Bold.ttf
+          weight: 700
 
 flutter_launcher_icons:
   android: true

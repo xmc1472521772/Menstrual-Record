@@ -23,6 +23,10 @@ class SettingsProvider with ChangeNotifier {
   /// 排卵期提示开关（默认开）。
   bool _reminderOvulation = true;
 
+  /// 首页状态卡紧凑模式（C1）：true 时折叠双均值条，让日历网格
+  /// 在首屏更完整地露出。点击状态卡均值区切换，偏好持久化。
+  bool _heroCompact = false;
+
   /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
   Future<void>? _loadFuture;
 
@@ -41,6 +45,7 @@ class SettingsProvider with ChangeNotifier {
   String get chatModel => _chatModel;
   bool get reminderPeriodDaily => _reminderPeriodDaily;
   bool get reminderOvulation => _reminderOvulation;
+  bool get heroCompact => _heroCompact;
 
   /// 确保设置已从 DB 加载完成，返回加载完成的 Future（重复调用安全）。
   ///
@@ -77,6 +82,8 @@ class SettingsProvider with ChangeNotifier {
       // 提醒开关：'1' 开，其余（'0'/缺失历史前的旧数据）按默认开处理
       _reminderPeriodDaily = (all['reminder_period_daily'] ?? '1') == '1';
       _reminderOvulation = (all['reminder_ovulation'] ?? '1') == '1';
+      // 首页状态卡紧凑模式：默认展开（'0'/缺失）
+      _heroCompact = (all['home_hero_compact'] ?? '0') == '1';
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -205,6 +212,19 @@ class SettingsProvider with ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error setting reminder ovulation: $e');
+      return false;
+    }
+  }
+
+  /// 设置首页状态卡紧凑模式（点击均值区切换，C1）。
+  Future<bool> setHeroCompact(bool value) async {
+    try {
+      await _dao.setValue('home_hero_compact', value ? '1' : '0');
+      _heroCompact = value;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error setting hero compact: $e');
       return false;
     }
   }

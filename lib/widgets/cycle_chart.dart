@@ -616,6 +616,7 @@ class _FundChartPainter extends CustomPainter {
         style: TextStyle(
           color: tooltipSubColor,
           fontSize: 10,
+          fontFamily: AppTheme.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -628,6 +629,7 @@ class _FundChartPainter extends CustomPainter {
           color: tooltipTextColor,
           fontSize: 13,
           fontWeight: FontWeight.w700,
+          fontFamily: AppTheme.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -757,6 +759,7 @@ class _FundChartPainter extends CustomPainter {
           color: color,
           fontSize: fontSize,
           fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+          fontFamily: AppTheme.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,

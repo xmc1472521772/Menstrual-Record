@@ -1,8 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../services/ai_health_service.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
@@ -10,7 +7,10 @@ import '../providers/ai_assistant_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
-import '../widgets/report_cards.dart';
+import '../widgets/ai/ai_chat_bubble.dart';
+import '../widgets/ai/ai_model_selector.dart';
+import '../widgets/ai/ai_report_view.dart';
+import '../widgets/ai/ai_session_sheet.dart';
 
 class AIAssistantScreen extends StatefulWidget {
   const AIAssistantScreen({super.key});
@@ -19,32 +19,21 @@ class AIAssistantScreen extends StatefulWidget {
   State<AIAssistantScreen> createState() => _AIAssistantScreenState();
 }
 
+/// AI 助手主屏（D2 拆分后回落为「状态编排 + 页面装配」）：
+/// - 报告生成/分析动画/错误状态 → 本文件；
+/// - 流式回放节奏（缓冲 + 80ms 节流 flush）→ [AiAssistantProvider]（可单测）；
+/// - 聊天气泡/报告视图/模型选择器/会话弹层 → widgets/ai/ 下独立组件。
 class _AIAssistantScreenState extends State<AIAssistantScreen>
     with SingleTickerProviderStateMixin {
-  // ─── 报告相关状态（仅UI层状态，报告本身缓存在PeriodProvider）───
+  // ─── 报告相关状态（仅UI层状态，报告本身缓存在AiAssistantProvider）───
   bool _isAnalyzing = false;
   String? _error;
   int _analyzingStep = 0;
 
-  // ─── 问答相关状态（聊天历史缓存在PeriodProvider）───
+  // ─── 问答相关状态（聊天会话缓存在 AiAssistantProvider）───
   final TextEditingController _chatController = TextEditingController();
   bool _isChatLoading = false;
   final ScrollController _chatScrollController = ScrollController();
-  // 流式回答的实时拼接buffer
-  final StringBuffer _streamingBuffer = StringBuffer();
-
-  // ─── 流式渲染节流 ───
-  // SSE chunk 之间通常只隔几毫秒，逐 chunk setState 会以 chunk 频率重建
-  // 整屏并让 MarkdownBody 全文重解析（P0-1 热点）。将 UI 刷新合并为
-  // 最多 ~12.5 次/秒：距上次刷新 ≥80ms 立即刷新，否则安排 trailing 补刷。
-  static const Duration _streamFlushInterval = Duration(milliseconds: 80);
-
-  /// 上一次把流式内容刷新到 UI 的时刻（节流基准）。
-  DateTime? _lastFlushAt;
-
-  /// trailing 补刷定时器：chunk 到达过密时延迟到节流窗口边界一次性刷新，
-  /// 保证窗口内累积的内容最终不丢。
-  Timer? _flushTimer;
 
   // ─── Tab 控制 ───
   int _currentTab = 0;
@@ -58,6 +47,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     AppStrings.aiAnalyzing2,
     AppStrings.aiAnalyzing3,
   ];
+
+  /// 流式 flush 发生在 Provider 内，屏幕通过监听其 notifyListeners
+  /// 在 loading 期间跟随滚动到底（接替旧版 flush 内直接滚动的方式）。
+  AiAssistantProvider? _observedAiProvider;
 
   @override
   void initState() {
@@ -81,8 +74,24 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ai = context.read<AiAssistantProvider>();
+    if (!identical(ai, _observedAiProvider)) {
+      _observedAiProvider?.removeListener(_onAiProviderChanged);
+      _observedAiProvider = ai;
+      ai.addListener(_onAiProviderChanged);
+    }
+  }
+
+  /// 流式输出期间每次 Provider 刷新（flush/updateMessage）后跟随滚动到底。
+  void _onAiProviderChanged() {
+    if (_isChatLoading) _scrollChatToBottom();
+  }
+
+  @override
   void dispose() {
-    _flushTimer?.cancel();
+    _observedAiProvider?.removeListener(_onAiProviderChanged);
     _animController.dispose();
     _chatController.dispose();
     _chatScrollController.dispose();
@@ -178,45 +187,6 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
 
   // ─── 问答功能（流式）────────────────────────────────────────
 
-  /// 立即将流式 buffer 刷新到 UI：更新 provider 聊天历史最后一条 AI 消息。
-  void _flushStreamingBuffer(List<ChatMessage> chatHistory) {
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    _lastFlushAt = DateTime.now();
-    if (!mounted) return;
-    setState(() {
-      final lastIndex = chatHistory.length - 1;
-      chatHistory[lastIndex] = ChatMessage(
-        role: 'assistant',
-        content: _streamingBuffer.toString(),
-        timestamp: DateTime.now(),
-      );
-    });
-    _scrollChatToBottom();
-  }
-
-  /// 节流调度：距上次 UI 刷新 ≥[_streamFlushInterval] 则立即刷新；
-  /// 否则只安排一次 trailing 补刷（已有 pending 时跳过，窗口到点会把
-  /// 当时 buffer 的全部累积内容一次性刷出）。
-  void _scheduleStreamFlush(List<ChatMessage> chatHistory) {
-    final now = DateTime.now();
-    final last = _lastFlushAt;
-    if (last == null || now.difference(last) >= _streamFlushInterval) {
-      _flushStreamingBuffer(chatHistory);
-      return;
-    }
-    _flushTimer ??= Timer(
-      _streamFlushInterval - now.difference(last),
-      () => _flushStreamingBuffer(chatHistory),
-    );
-  }
-
-  /// 取消未触发的 trailing 补刷定时器。
-  void _cancelFlushTimer() {
-    _flushTimer?.cancel();
-    _flushTimer = null;
-  }
-
   Future<void> _sendChatMessage(String text) async {
     if (text.trim().isEmpty || _isChatLoading) return;
 
@@ -230,26 +200,26 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     final modelId = settings.chatModel;
 
     final aiProvider = context.read<AiAssistantProvider>();
-    final chatHistory = aiProvider.chatHistory;
     final userMessage = ChatMessage(
       role: 'user',
       content: text.trim(),
       timestamp: DateTime.now(),
     );
 
-    // 立即添加用户消息和空的AI回答消息
+    // 通过 provider 落定消息：无活跃会话时自动新建（标题取首条提问）
+    aiProvider.appendMessage(userMessage);
+    aiProvider.appendMessage(ChatMessage(
+      role: 'assistant',
+      content: '',
+      timestamp: DateTime.now(),
+    ));
+    // 流式写入绑定本轮会话（Provider 内记录 sessionId），
+    // 中途新建/切换会话不影响写入目标
+    final session = aiProvider.activeSession!;
+    aiProvider.beginChatStream(session);
+
     setState(() {
-      chatHistory.add(userMessage);
-      chatHistory.add(ChatMessage(
-        role: 'assistant',
-        content: '',
-        timestamp: DateTime.now(),
-      ));
       _isChatLoading = true;
-      _streamingBuffer.clear();
-      // 新一轮流式输出：重置节流基准，确保首个 chunk 立即上屏
-      _lastFlushAt = null;
-      _cancelFlushTimer();
     });
 
     _chatController.clear();
@@ -265,58 +235,32 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         userPeriodLength: settings.periodLength,
         modelId: modelId,
         // 传不含最后空回答的历史
-        chatHistory: chatHistory.sublist(0, chatHistory.length - 1),
+        chatHistory: session.messages.sublist(0, session.messages.length - 1),
       );
 
       await for (final chunk in stream) {
         if (!mounted) break;
-        _streamingBuffer.write(chunk);
-        // 节流合并：高频 chunk 不再逐个触发整屏重建 + Markdown 全文重解析
-        _scheduleStreamFlush(chatHistory);
+        // 节流合并发生在 Provider 内：高频 chunk 不再逐个触发整屏重建
+        aiProvider.onStreamChunk(session, chunk);
       }
 
-      // 流正常结束：取消未触发的 trailing 补刷并做最终 flush，
-      // 把节流窗口内累积的剩余内容完整落进聊天历史（与 loading 结束
-      // 合并为一次 setState）。
-      _cancelFlushTimer();
+      // 流正常结束：Provider 做最终 flush（节流窗口内累积内容完整落进会话），
+      // 与 loading 结束合并为一次状态更新。
+      aiProvider.finishChatStream(session);
       if (mounted) {
         setState(() {
-          final lastIndex = chatHistory.length - 1;
-          chatHistory[lastIndex] = ChatMessage(
-            role: 'assistant',
-            content: _streamingBuffer.toString(),
-            timestamp: DateTime.now(),
-          );
           _isChatLoading = false;
         });
         _scrollChatToBottom();
       }
-      // 整轮问答完成后持久化聊天历史（流式过程中不写库）
+      // 整轮问答完成后持久化（流式过程中不写库）
       aiProvider.persistChatHistory();
     } catch (e) {
-      // 异常路径：取消补刷定时器，避免 timer 随后用无错误标记的内容
-      // 覆盖下方写入的错误提示；buffer 内容在下方统一处理。
-      _cancelFlushTimer();
+      // 异常路径：Provider 取消补刷定时器并写入错误标记（保留已收内容）
+      final errorMsg = '$e'.replaceFirst('Exception: ', '');
+      aiProvider.abortChatStream(session, errorMsg);
       if (mounted) {
-        final errorMsg = '$e'.replaceFirst('Exception: ', '');
         setState(() {
-          // 如果有部分内容已经收到，保留它并添加错误标记
-          if (_streamingBuffer.isNotEmpty) {
-            final lastIndex = chatHistory.length - 1;
-            chatHistory[lastIndex] = ChatMessage(
-              role: 'assistant',
-              content: '${_streamingBuffer.toString()}\n\n⚠️ $errorMsg',
-              timestamp: DateTime.now(),
-            );
-          } else {
-            // 没收到任何内容，替换为错误提示
-            final lastIndex = chatHistory.length - 1;
-            chatHistory[lastIndex] = ChatMessage(
-              role: 'assistant',
-              content: '回答失败：$errorMsg',
-              timestamp: DateTime.now(),
-            );
-          }
           _isChatLoading = false;
         });
       }
@@ -344,19 +288,35 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
         title: const Text(AppStrings.aiAssistant),
         actions: [
           // 模型切换按钮（根据当前 Tab 选择报告或问答模型）
-          _buildModelSelector(),
+          AiModelSelector(
+            isReportTab: _currentTab == 0,
+            onSelected: (modelId) {
+              final settings = context.read<SettingsProvider>();
+              if (_currentTab == 0) {
+                settings.setReportModel(modelId);
+                // 切换报告模型时不清除已有报告，而是显示提示
+                setState(() {
+                  _error = null;
+                });
+              } else {
+                settings.setChatModel(modelId);
+              }
+            },
+          ),
           if (_currentTab == 0 && context.read<AiAssistantProvider>().cachedReport != null && !_isAnalyzing)
             IconButton(
               onPressed: _generateReport,
               icon: const Icon(Icons.refresh_rounded, size: 22),
-              color: AppColors.ink,
+              color: context.themeColors.onSurface,
               tooltip: AppStrings.aiRegenerateReport,
             ),
+          // 聊天会话管理（仅问答 Tab 显示，1.36.0）
+          if (_currentTab == 1) ..._buildChatSessionActions(),
           const SizedBox(width: AppDimens.spacingSm),
         ],
       ),
-      body: Consumer2<PeriodProvider, SettingsProvider>(
-        builder: (context, provider, settings, _) {
+      body: Consumer3<PeriodProvider, SettingsProvider, AiAssistantProvider>(
+        builder: (context, provider, settings, aiProvider, _) {
           if (provider.records.isEmpty || provider.cycleData == null) {
             return _buildEmptyState(context);
           }
@@ -367,7 +327,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
               Expanded(
                 child: _currentTab == 0
                     ? _buildReportTab(context)
-                    : _buildChatTab(context),
+                    : _buildChatTab(context, aiProvider),
               ),
             ],
           );
@@ -377,105 +337,64 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  Model Selector（根据当前 Tab 显示报告或问答的模型选择）
+  //  Chat session actions（清空 / 新建 / 历史，1.36.0）
   // ═══════════════════════════════════════════════════════════════
 
-  Widget _buildModelSelector() {
-    final isReportTab = _currentTab == 0;
-
-    return PopupMenuButton<String>(
-      onSelected: (modelId) {
-        final settings = context.read<SettingsProvider>();
-        if (isReportTab) {
-          settings.setReportModel(modelId);
-          // 切换报告模型时不清除已有报告，而是显示提示
-          setState(() {
-            _error = null;
-          });
-        } else {
-          settings.setChatModel(modelId);
-        }
-      },
-      itemBuilder: (context) {
-        final settings = context.read<SettingsProvider>();
-        final currentModel = isReportTab
-            ? settings.reportModel
-            : settings.chatModel;
-        return AIHealthService.availableModels.map((model) {
-          return PopupMenuItem<String>(
-            value: model.id,
-            child: Row(
-              children: [
-                Icon(
-                  model.id == currentModel
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 18,
-                  color: model.id == currentModel
-                      ? AppColors.brandPrimary
-                      : AppColors.inkTertiary,
-                ),
-                const SizedBox(width: AppDimens.spacingSm),
-                Text(
-                  model.displayName,
-                  style: AppTheme.bodyMedium.copyWith(
-                    color: model.id == currentModel
-                        ? AppColors.brandPrimary
-                        : Theme.of(context).colorScheme.onSurface,
-                    fontWeight: model.id == currentModel
-                        ? FontWeight.w600
-                        : FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
+  /// 问答 Tab 的 AppBar 动作：清空当前对话（有会话时）+ 新建聊天 + 历史。
+  List<Widget> _buildChatSessionActions() {
+    return [
+      // 清空按钮随会话存在性显隐，用 Consumer 响应会话变化
+      Consumer<AiAssistantProvider>(
+        builder: (context, aiProvider, _) {
+          if (!aiProvider.hasActiveSession) return const SizedBox.shrink();
+          return IconButton(
+            onPressed: _confirmClearCurrentChat,
+            icon: const Icon(Icons.delete_sweep_outlined, size: 22),
+            color: context.themeColors.onSurface,
+            tooltip: AppStrings.aiChatClearMessages,
           );
-        }).toList();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingSm,
-          vertical: AppDimens.spacingXs,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.brandSoft,
-          borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.auto_awesome_rounded,
-              size: 14,
-              color: AppColors.brandPrimary,
+        },
+      ),
+      IconButton(
+        onPressed: () => context.read<AiAssistantProvider>().startNewChat(),
+        icon: const Icon(Icons.add_comment_outlined, size: 22),
+        color: context.themeColors.onSurface,
+        tooltip: AppStrings.aiChatNewChat,
+      ),
+      IconButton(
+        onPressed: () => showAiChatHistorySheet(context),
+        icon: const Icon(Icons.history_rounded, size: 22),
+        color: context.themeColors.onSurface,
+        tooltip: AppStrings.aiChatHistory,
+      ),
+    ];
+  }
+
+  /// 「清空消息」二次确认后仅清除当前会话，其他历史会话不受影响。
+  Future<void> _confirmClearCurrentChat() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text(AppStrings.aiChatClearConfirmTitle),
+        content: const Text(AppStrings.aiChatClearConfirmContent),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text(AppStrings.aiChatCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              AppStrings.aiChatClearConfirmAction,
+              style: TextStyle(color: AppColors.error),
             ),
-            const SizedBox(width: 4),
-            Consumer<SettingsProvider>(
-              builder: (context, settings, _) {
-                final modelId = isReportTab
-                    ? settings.reportModel
-                    : settings.chatModel;
-                final config = AIHealthService.configFor(modelId);
-                return Text(
-                  config.displayName,
-                  style: AppTheme.labelMedium.copyWith(
-                    color: AppColors.brandPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 2),
-            const Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 16,
-              color: AppColors.brandPrimary,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+    if (confirmed != true) return;
+    if (!mounted) return;
+    context.read<AiAssistantProvider>().clearActiveSession();
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -528,7 +447,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             Icon(
               selected ? activeIcon : icon,
               size: 16,
-              color: selected ? AppColors.white : AppColors.inkTertiary,
+              color: selected
+                  ? AppColors.white
+                  : context.themeColors.onSurfaceTertiary,
             ),
             const SizedBox(width: AppDimens.spacingXs),
             Text(
@@ -536,7 +457,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected ? AppColors.white : AppColors.inkTertiary,
+                color: selected
+                    ? AppColors.white
+                    : context.themeColors.onSurfaceTertiary,
               ),
             ),
           ],
@@ -560,7 +483,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     if (aiProvider.cachedReport == null) {
       return _buildGenerateButton(context);
     }
-    return _buildReport(context);
+    return AiReportView(
+      report: aiProvider.cachedReport!,
+      themeColors: context.themeColors,
+      showDataUpdatedHint: _dataUpdatedSinceReport,
+      showModelChangedHint: _modelChangedSinceReport,
+      modelId: aiProvider.reportModelId,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -770,102 +699,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  Full report — 7 部分结构
-  // ═══════════════════════════════════════════════════════════════
-
-  Widget _buildReport(BuildContext context) {
-    final aiProvider = context.read<AiAssistantProvider>();
-    final report = aiProvider.cachedReport!;
-    final themeColors = context.themeColors;
-    final modelId = aiProvider.reportModelId;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppDimens.spacingLg,
-        AppDimens.spacingSm,
-        AppDimens.spacingLg,
-        100,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ─── 健康评分头部 ───
-          ReportCards.buildScoreHeader(report),
-          const SizedBox(height: AppDimens.spacingSm),
-
-          // ─── 数据更新提示 ───
-          if (_dataUpdatedSinceReport) ReportCards.buildDataUpdatedHint(themeColors),
-
-          // ─── 模型已切换提示 ───
-          if (_modelChangedSinceReport) ReportCards.buildModelChangedHint(themeColors),
-
-          const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 1. 本周期概览 ───
-          if (report.currentOverview.isNotEmpty)
-            ReportCards.buildCurrentOverviewCard(report, themeColors),
-          if (report.currentOverview.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 2. 周期趋势 ───
-          if (report.cycleStats.isNotEmpty || report.cycleTrendSummary.isNotEmpty)
-            ReportCards.buildCycleTrendCard(report, themeColors),
-          if (report.cycleStats.isNotEmpty || report.cycleTrendSummary.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 3. 症状趋势 ───
-          if (report.symptomTrends.isNotEmpty)
-            ReportCards.buildSymptomTrendCard(report, themeColors),
-          if (report.symptomTrends.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 4. 与过去相比 ───
-          if (report.comparisonTrends.isNotEmpty)
-            ReportCards.buildComparisonCard(report, themeColors),
-          if (report.comparisonTrends.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 5. 值得关注的地方 ───
-          if (report.attentions.isNotEmpty)
-            ReportCards.buildAttentionsCard(report, themeColors),
-          if (report.attentions.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 6. 下一周期建议 ───
-          if (report.nextCycleSuggestions.isNotEmpty)
-            ReportCards.buildNextCycleSuggestionsCard(report, themeColors),
-          if (report.nextCycleSuggestions.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 7. 就医提醒 ───
-          if (report.medicalReminders.isNotEmpty)
-            ReportCards.buildMedicalRemindersCard(report, themeColors),
-          if (report.medicalReminders.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 总结 ───
-          if (report.conclusion.isNotEmpty)
-            ReportCards.buildConclusionCard(report, themeColors),
-          if (report.conclusion.isNotEmpty)
-            const SizedBox(height: AppDimens.spacingLg),
-
-          // ─── 免责声明 ───
-          ReportCards.buildDisclaimer(context, themeColors, modelId),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
   //  Chat Tab (经期问答)
   // ═══════════════════════════════════════════════════════════════
 
-  Widget _buildChatTab(BuildContext context) {
+  Widget _buildChatTab(
+    BuildContext context,
+    AiAssistantProvider aiProvider,
+  ) {
     final themeColors = context.themeColors;
-    final aiProvider = context.read<AiAssistantProvider>();
-    final chatHistory = aiProvider.chatHistory;
-    // 判断是否为初始空状态（没有任何消息）
-    final isEmpty = chatHistory.isEmpty;
+    final activeSession = aiProvider.activeSession;
+    final chatMessages = aiProvider.chatMessages;
+    // 判断是否为初始空状态（当前会话没有任何消息）
+    final isEmpty = chatMessages.isEmpty;
 
     return Column(
       children: [
@@ -881,15 +726,21 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
                     AppDimens.spacingLg,
                     AppDimens.spacingSm,
                   ),
-                  itemCount: chatHistory.length,
+                  itemCount: chatMessages.length,
                   itemBuilder: (context, index) {
-                    final msg = chatHistory[index];
+                    final msg = chatMessages[index];
                     // 最后一条AI消息正在流式输出时显示打字光标
+                    // （仅限消息所属会话即当前流式目标会话）
                     final isStreaming = _isChatLoading &&
-                        index == chatHistory.length - 1 &&
+                        activeSession != null &&
+                        activeSession.id == aiProvider.streamingSessionId &&
+                        index == chatMessages.length - 1 &&
                         msg.role == 'assistant';
-                    return _buildChatBubble(msg, themeColors,
-                        isStreaming: isStreaming);
+                    return AiChatBubble(
+                      msg: msg,
+                      themeColors: themeColors,
+                      isStreaming: isStreaming,
+                    );
                   },
                 ),
         ),
@@ -1009,112 +860,6 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     );
   }
 
-  Widget _buildChatBubble(ChatMessage msg, AppThemeColors themeColors,
-      {bool isStreaming = false}) {
-    final isUser = msg.role == 'user';
-    final displayContent = msg.content;
-
-    // 流式输出中且内容为空时显示"正在思考…"指示器
-    final showThinking = isStreaming && displayContent.isEmpty;
-
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: AppDimens.spacingMd),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.8,
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingMd,
-          vertical: AppDimens.spacingSm + 2,
-        ),
-        decoration: BoxDecoration(
-          color: isUser
-              ? AppColors.brandPrimary
-              : themeColors.surfaceCard,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(AppDimens.radiusLg),
-            topRight: const Radius.circular(AppDimens.radiusLg),
-            bottomLeft: isUser
-                ? const Radius.circular(AppDimens.radiusLg)
-                : const Radius.circular(2),
-            bottomRight: isUser
-                ? const Radius.circular(2)
-                : const Radius.circular(AppDimens.radiusLg),
-          ),
-          border: isUser
-              ? null
-              : Border.all(color: themeColors.divider.withValues(alpha: 0.3)),
-        ),
-        child: showThinking
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.brandPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: AppDimens.spacingSm),
-                  Text(
-                    AppStrings.aiChatThinking,
-                    style: AppTheme.bodySmall.copyWith(
-                      color: themeColors.onSurfaceTertiary,
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: isUser
-                        ? Text(
-                            displayContent,
-                            style: AppTheme.bodyMedium.copyWith(
-                              color: AppColors.white,
-                              height: 1.5,
-                            ),
-                          )
-                        : MarkdownBody(
-                            data: displayContent,
-                            styleSheet: MarkdownStyleSheet(
-                              p: AppTheme.bodyMedium.copyWith(
-                                color: themeColors.onSurface,
-                                height: 1.5,
-                              ),
-                              strong: AppTheme.bodyMedium.copyWith(
-                                color: themeColors.onSurface,
-                                fontWeight: FontWeight.w700,
-                                height: 1.5,
-                              ),
-                              em: AppTheme.bodyMedium.copyWith(
-                                color: themeColors.onSurface,
-                                fontStyle: FontStyle.italic,
-                                height: 1.5,
-                              ),
-                              listBullet: AppTheme.bodyMedium.copyWith(
-                                color: themeColors.onSurface,
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                  ),
-                  // 流式输出中且内容不为空时，显示闪烁光标
-                  if (isStreaming) ...[
-                    const SizedBox(width: 2),
-                    _StreamingCursor(themeColors: themeColors),
-                  ],
-                ],
-              ),
-      ),
-    );
-  }
-
   Widget _buildChatInput(AppThemeColors themeColors) {
     return Container(
       margin: const EdgeInsets.fromLTRB(
@@ -1163,67 +908,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
                 : () => _sendChatMessage(_chatController.text),
             icon: const Icon(Icons.send_rounded, size: 20),
             color: AppColors.brandPrimary,
-            disabledColor: AppColors.inkTertiary,
+            disabledColor: themeColors.onSurfaceTertiary,
           ),
         ],
       ),
-    );
-  }
-}
-// ═══════════════════════════════════════════════════════════════════
-//  Streaming cursor (闪烁光标，流式输出时使用)
-// ═══════════════════════════════════════════════════════════════════
-
-class _StreamingCursor extends StatefulWidget {
-  final AppThemeColors themeColors;
-
-  const _StreamingCursor({required this.themeColors});
-
-  @override
-  State<_StreamingCursor> createState() => _StreamingCursorState();
-}
-
-class _StreamingCursorState extends State<_StreamingCursor>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
-    _opacity = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _opacity,
-      builder: (context, _) {
-        return Opacity(
-          opacity: _opacity.value,
-          child: Container(
-            width: 3,
-            height: 16,
-            margin: const EdgeInsets.only(bottom: 2),
-            decoration: BoxDecoration(
-              color: AppColors.brandPrimary,
-              borderRadius: BorderRadius.circular(1.5),
-            ),
-          ),
-        );
-      },
     );
   }
 }

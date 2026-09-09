@@ -9,7 +9,7 @@ import '../database/daily_flow_dao.dart';
 import '../database/settings_dao.dart';
 import '../database/database_helper.dart';
 import '../services/prediction_service.dart';
-import '../services/notification_service.dart';
+import '../services/notification_sync_coordinator.dart';
 import '../services/backup_service.dart';
 import '../services/widget_service.dart';
 import '../utils/date_utils.dart';
@@ -70,6 +70,11 @@ class PeriodProvider with ChangeNotifier {
   final bool _scheduleReminders;
   final bool _autoEndEnabled;
 
+  /// 通知同步协调器（D3 拆分）：三路提醒的调度/取消/去重副作用集中
+  /// 到 [NotificationSyncCoordinator]，本类只保留数据状态职责。
+  /// 与本类共享同一个（可注入的）SettingsDao，保证测试注入透明。
+  late final NotificationSyncCoordinator _notificationSync;
+
   /// Allows injecting DAOs for testing.
   /// Set [scheduleReminders] to false in tests to avoid NotificationService calls.
   /// Set [autoEndExpiredPeriods] to false in tests to prevent the provider from
@@ -86,7 +91,10 @@ class PeriodProvider with ChangeNotifier {
         _settingsDao = settingsDao ?? SettingsDao(),
         _dbProvider = dbProvider ?? DatabaseHelper(),
         _scheduleReminders = scheduleReminders,
-        _autoEndEnabled = autoEndExpiredPeriods;
+        _autoEndEnabled = autoEndExpiredPeriods {
+    _notificationSync =
+        NotificationSyncCoordinator(settingsDao: _settingsDao);
+  }
 
   List<PeriodRecord> _records = [];
   CycleData? _cycleData;
@@ -117,17 +125,7 @@ class PeriodProvider with ChangeNotifier {
 
   /// 上一次真正下发到通知插件的预测日期。
   /// `zonedSchedule` 是跨进程调用（十毫秒级），预测日期未变时不必重复调度。
-  DateTime? _lastScheduledPrediction;
-
-  /// 上一次调度经期预告提醒时的参数快照（"$reminderDays|$reminderHour"）。
-  /// 用户在设置页修改提前天数/提醒时间后，即使预测日期未变也需重排。
-  String? _lastScheduledReminderParams;
-
-  /// 上一次同步每日记录提醒时的状态快照（"$enabled|$ongoing|$hour"）。
-  String? _lastDailyLogState;
-
-  /// 上一次同步排卵提醒时的状态快照（"$enabled|$ovulDayKey|$hour"）。
-  String? _lastOvulationState;
+  /// （D3 起去重状态迁移至 [NotificationSyncCoordinator]，此处保留注释说明。）
 
   /// 是否存在进行中的经期，由 [_recalculate] 维护。
   bool _hasOngoing = false;
@@ -394,130 +392,24 @@ class PeriodProvider with ChangeNotifier {
     }
   }
 
-  /// 串行化同步链：并发调用共享同一执行链。数据变更路径是 fire-and-forget
-  /// 调用，设置页又可能在任意时刻显式调用——两次并发执行若都穿过「读设置
-  /// → 比对去重键」的异步间隙，会造成同一提醒重复调度。链式串行后，后一次
-  /// 执行总在前一次完成后运行，前一次写入的去重键即可短路后一次。
-  Future<void> _syncChain = Future<void>.value();
-
   /// 同步全部提醒通知到当前数据/设置状态。
   ///
   /// 供内部数据变更路径与设置页（开关切换、提醒时间修改后）调用，
   /// 确保通知立即生效而无需等待下一次数据变化。
   ///
-  /// 内部拆为三个独立子同步，各自维护去重状态、互不短路：
-  /// - 经期预告提醒（ID 0，预测日前 N 天单次）
-  /// - 经期每日记录提醒（ID 1，经期中每天重复）
-  /// - 排卵日提示（ID 2，排卵日当天单次）
+  /// D3 职责拆分：调度/取消/去重细节已迁移至
+  /// [NotificationSyncCoordinator]（三个子同步独立去重 + _syncChain
+  /// 串行化防并发的语义原样保留），本方法只做数据状态 → 协调器的
+  /// 参数打包委托。
   ///
   /// Safe to call without `await`: all failures are swallowed internally.
   Future<void> syncNotifications() {
     if (!_scheduleReminders) return Future<void>.value();
-    _syncChain = _syncChain.then((_) async {
-      await _syncPeriodReminder();
-      await _syncDailyLogReminder();
-      await _syncOvulationReminder();
-    });
-    return _syncChain;
-  }
-
-  /// 子同步 1：经期预告提醒。
-  ///
-  /// 依赖预测结果；无预测（无任何记录）时按 ID 精确取消残留提醒，
-  /// 避免过期闹钟误弹（不能用 cancelAll —— 会误伤每日/排卵提醒）。
-  Future<void> _syncPeriodReminder() async {
-    final predicted = _cycleData?.predictedNextPeriod;
-    if (predicted == null) {
-      final changed = _lastScheduledPrediction != null ||
-          _lastScheduledReminderParams != null;
-      _lastScheduledPrediction = null;
-      _lastScheduledReminderParams = null;
-      if (changed) {
-        try {
-          await NotificationService().cancel(
-              NotificationService.periodReminderNotificationId);
-        } catch (e) {
-          debugPrint('Error cancelling stale reminder: $e');
-        }
-      }
-      return;
-    }
-
-    try {
-      final reminderDays = await _settingsDao.getReminderDays();
-      final reminderHour = await _settingsDao.getReminderHour();
-
-      // 预测日期与提醒参数均未变化则跳过重复调度（zonedSchedule 需要跨
-      // 进程调用）。日期比较复用 [needsReschedule]（T9 纯函数抽取）。
-      final paramsKey = '$reminderDays|$reminderHour';
-      if (!needsReschedule(_lastScheduledPrediction, predicted) &&
-          _lastScheduledReminderParams == paramsKey) {
-        return;
-      }
-      _lastScheduledPrediction = predicted;
-      _lastScheduledReminderParams = paramsKey;
-
-      await NotificationService().schedulePeriodReminder(
-        predictedDate: predicted,
-        reminderDays: reminderDays,
-        reminderHour: reminderHour,
-      );
-    } catch (e) {
-      debugPrint('Error scheduling reminder: $e');
-    }
-  }
-
-  /// 子同步 2：经期每日记录提醒。
-  ///
-  /// 经期进行中且开关开启时调度每日重复通知；经期结束或开关关闭时
-  /// 取消。去重键覆盖「开关 + 经期状态 + 提醒时刻」三元组——仅有
-  /// 经期状态变化（如经期结束但预测日期未变）时也会正确取消。
-  Future<void> _syncDailyLogReminder() async {
-    try {
-      final enabled =
-          (await _settingsDao.getValue('reminder_period_daily') ?? '1') == '1';
-      final reminderHour = await _settingsDao.getReminderHour();
-      final ongoing = _hasOngoing;
-
-      final stateKey = '$enabled|$ongoing|$reminderHour';
-      if (_lastDailyLogState == stateKey) return;
-      _lastDailyLogState = stateKey;
-
-      await NotificationService().syncDailyLogReminder(
-        enabled: enabled,
-        isPeriodOngoing: ongoing,
-        reminderHour: reminderHour,
-      );
-    } catch (e) {
-      debugPrint('Error syncing daily log reminder: $e');
-    }
-  }
-
-  /// 子同步 3：排卵日提示。
-  ///
-  /// 排卵日由预测结果派生（下次预测经期前 14 天）；开关关闭或无预测时
-  /// 取消已有提醒。去重键覆盖「开关 + 排卵日 + 提醒时刻」三元组。
-  Future<void> _syncOvulationReminder() async {
-    try {
-      final enabled =
-          (await _settingsDao.getValue('reminder_ovulation') ?? '1') == '1';
-      final reminderHour = await _settingsDao.getReminderHour();
-      final ovulationDay = _cycleData?.ovulationDay;
-
-      final ovulKey =
-          ovulationDay == null ? -1 : AppDateUtils.dayKey(ovulationDay);
-      final stateKey = '$enabled|$ovulKey|$reminderHour';
-      if (_lastOvulationState == stateKey) return;
-      _lastOvulationState = stateKey;
-
-      await NotificationService().syncOvulationReminder(
-        enabled: enabled,
-        ovulationDate: ovulationDay,
-        reminderHour: reminderHour,
-      );
-    } catch (e) {
-      debugPrint('Error syncing ovulation reminder: $e');
-    }
+    return _notificationSync.syncAll(
+      predictedNextPeriod: _cycleData?.predictedNextPeriod,
+      ovulationDay: _cycleData?.ovulationDay,
+      hasOngoing: _hasOngoing,
+    );
   }
 
   /// Recalculates cycle data using the given algorithm.
@@ -1034,25 +926,18 @@ class PeriodProvider with ChangeNotifier {
   }
 
   /// 将当前经期状态同步到桌面小组件。
+  ///
+  /// D3 职责拆分：默认值兜底 / Web 短路 / 异常吞并细节已下沉
+  /// [WidgetService.pushCycleSnapshot]，本方法只负责当月经量的取值。
   /// 仅 Android 平台有效，其他平台静默失败。
   Future<void> _updateWidget() async {
-    if (kIsWeb) return; // Web 平台无小组件
-    try {
-      final cycleLen = _cycleData?.averageCycleLength.round() ?? 28;
-      final periodLen = _cycleData?.averagePeriodLength.round() ?? 5;
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final todayFlow = getFlowLevel(today) ?? 0;
-      await WidgetService.instance.updateWidget(
-        records: _records,
-        cycleData: _cycleData,
-        userCycleLength: cycleLen,
-        userPeriodLength: periodLen,
-        todayFlow: todayFlow,
-      );
-    } catch (e) {
-      debugPrint('Widget update error: $e');
-    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    await WidgetService.instance.pushCycleSnapshot(
+      records: _records,
+      cycleData: _cycleData,
+      todayFlow: getFlowLevel(today) ?? 0,
+    );
   }
 
   // ─── 跨午夜自动刷新 ──────────────────────────────────────────────

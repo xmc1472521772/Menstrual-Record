@@ -114,4 +114,38 @@ void main() {
       expect(glm.maxOutputTokens, 4096); // GLM-4-Flash 上限内
     });
   });
+
+  group('流式内容平滑放行（大 delta 打字机回放）', () {
+    test('token 级小 delta 直接透传（单块产出，无节流延迟）', () async {
+      final sw = Stopwatch()..start();
+      final chunks = await AIHealthService.revealContentChunk('月经周期正常').toList();
+      sw.stop();
+
+      expect(chunks, ['月经周期正常']); // 原样单块透传
+      expect(sw.elapsedMilliseconds, lessThan(500)); // 未走打字机节奏
+    });
+
+    test('超大 delta 平滑放行：多块产出、内容完整、有节奏延迟', () async {
+      final big = '这是一段被上游攒在缓冲里一次性吐出的超长回答。' * 8; // 336 字
+      final sw = Stopwatch()..start();
+      final chunks = await AIHealthService.revealContentChunk(big).toList();
+      sw.stop();
+
+      expect(chunks.length, greaterThan(3)); // 拆成多块
+      expect(chunks.join(), big); // 内容不丢失
+      // 336 字 @ 200字/秒 ≈ 1.7s；宽边界 [600ms, 5s) 防止 CI 抖动误报
+      expect(sw.elapsedMilliseconds, greaterThan(600));
+      expect(sw.elapsedMilliseconds, lessThan(5000));
+    });
+
+    test('超大 delta 自动提速：单块放行时长不超过 6 秒', () async {
+      final big = '字' * 3000; // 3000 字若按基准 200 字/秒需 15s，必须提速
+      final sw = Stopwatch()..start();
+      final chunks = await AIHealthService.revealContentChunk(big).toList();
+      sw.stop();
+
+      expect(chunks.join(), big);
+      expect(sw.elapsedMilliseconds, lessThan(6000));
+    });
+  });
 }

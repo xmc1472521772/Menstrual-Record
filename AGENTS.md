@@ -29,14 +29,14 @@ flutter analyze
 Flat Provider-based structure. No BLoC, no Clean Architecture layers, **no code generation** (`build_runner`, `freezed`, `json_serializable` are not used).
 
 - `main.dart` → `MyApp` (initializes `NotificationService`)
-- `app.dart` → `MaterialApp` + `MultiProvider` (`PeriodProvider`, `SettingsProvider`) + `SplashScreen` → `MainScreen` bottom nav (4 tabs)
+- `app.dart` → root assembly only (`MaterialApp` + `MultiProvider` (`PeriodProvider`, `SettingsProvider`, `AiAssistantProvider`) + lifecycle + global text-scaling clamp); the bottom-nav shell lives in `screens/main_screen.dart` (`MainScreen`, entered from `SplashScreen`)
 - `models/` → plain Dart classes with **manual** `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith`
 - `database/` → `DatabaseProvider` (abstract interface), `DatabaseHelper` (SQLite singleton, `onUpgrade` migration), `PeriodDao`, `SettingsDao`
-- `providers/` → `ChangeNotifier` subclasses with **constructor injection** support for testing
-- `screens/` → widget trees consuming providers via `Consumer`/`Consumer2`
-- `widgets/` → reusable components (`SectionCard`, `StatCircle`, `EmptyState`, `LegendItem`)
-- `services/` → `PredictionService` (static methods), `NotificationService` (singleton, timezone-aware scheduling)
-- `constants/` → `AppColors` (brand/functional/calendar colors), `AppDimens` (spacing/radius/elevation tokens), `AppThemeColors` (ThemeExtension for theme-aware semantic colors), `AppStrings`, `AppTheme`
+- `providers/` → `ChangeNotifier` subclasses with **constructor injection** support for testing. `PeriodProvider` = data state only; notification scheduling is delegated to `services/notification_sync_coordinator.dart` (`NotificationSyncCoordinator`), widget pushes to `WidgetService.pushCycleSnapshot`. `AiAssistantProvider` owns the chat streaming replay pacing (80ms throttled flush, `beginChatStream` / `onStreamChunk` / `finishChatStream` / `abortChatStream`).
+- `screens/` → widget trees consuming providers via `Consumer`/`Selector`. HomeScreen takes an injected `onOpenSettings` callback (no global keys for cross-tab navigation).
+- `widgets/` → reusable components (`SectionCard`, `StatCircle`, `EmptyState`, `LegendItem` in `common_widgets.dart`), 4 CustomPainter charts, plus `calendar/calendar_core.dart` (shared month math + weekday header used by both the home single-select calendar and the multi-select calendar) and `ai/` (chat bubble, report view, model selector, session sheet).
+- `services/` → `PredictionService` (static methods), `NotificationService` (singleton, timezone-aware scheduling), `NotificationSyncCoordinator` (3-way reminder sync with dedup + serialized chain), `WidgetService`, `BackupService`, `AiHealthService`.
+- `constants/` → `app_colors.dart` contains **`AppColors` + `AppShadows` + `AppDimens` + `AppThemeColors`** (ThemeExtension); `app_strings.dart` (all user-facing strings — do not inline Chinese literals); `app_theme.dart` (text styles + light/dark ThemeData); `app_breakpoints.dart` (`AppBreakpoints.wide=600 / desktop=840`, reserved for future wide-screen layouts).
 
 ### Navigation
 
@@ -84,5 +84,8 @@ Standard `package:flutter_lints/flutter.yaml` via `analysis_options.yaml`. No cu
 
 ## Known Traps
 
-- **`table_calendar`** has been removed from dependencies. The custom calendar is the only calendar implementation.
+- **Dark-mode contrast rule**: `AppColors.ink / inkSecondary / inkTertiary / canvas / tile / hairline` are **light-theme fixed values**. Never use them on theme-dependent surfaces (AppBar, `themeColors.surfaceCard/surfaceTile`, Card theme). Use `context.themeColors.onSurface*` / `divider` instead. Fixed light surfaces (`AppColors.brandSurface`, `brandSoft`) may keep them.
+- **`table_calendar`** has been removed from dependencies. The custom calendar is the only calendar implementation (two UIs share `widgets/calendar/calendar_core.dart`).
 - **Static text styles in `record_screen.dart`** are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors. They cannot be `const`.
+- **Provider 生命周期回调**：`app.dart` 的 `_MyAppState` 在 `initState` 创建 Provider 并以 `.value` 注入；回调里禁止 `context.read`（context 在 MultiProvider 之上）。
+- **通知同步**：改提醒开关/提前天数/提醒时间后必须调用 `periodProvider.syncNotifications()`；禁止 `cancelAll`，一律按 ID 精确取消（见 `NotificationSyncCoordinator`）。

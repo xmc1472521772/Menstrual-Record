@@ -202,12 +202,27 @@ class AppStrings {
   static const String aiChatSend = '发送';
   static const String aiChatThinking = '正在思考…';
   static const String aiChatError = '回答失败，请重试';
+  /// 流式回答异常时的消息前缀（后接具体错误信息）。
+  static const String aiChatFailedPrefix = '回答失败：';
   static const String aiChatDisclaimer = 'AI回答仅供参考，不构成医疗诊断。如有健康疑虑请就医。';
   static const String aiChatQuickQ1 = '我的周期规律吗？';
   static const String aiChatQuickQ2 = '经量正常吗？';
   static const String aiChatQuickQ3 = '如何调理经期？';
   static const String aiChatTabReport = '健康报告';
   static const String aiChatTabQA = '经期问答';
+  // 聊天会话管理（1.36.0）
+  static const String aiChatNewChat = '新建聊天';
+  static const String aiChatHistory = '历史聊天';
+  static const String aiChatClearMessages = '清空消息';
+  static const String aiChatHistoryTitle = '历史聊天记录';
+  static const String aiChatHistoryEmpty = '暂无历史聊天记录';
+  static const String aiChatCurrentTag = '当前';
+  static const String aiChatClearConfirmTitle = '清空当前对话？';
+  static const String aiChatClearConfirmContent =
+      '将清除当前对话的全部消息，此操作无法恢复。其他历史聊天不会受影响。';
+  static const String aiChatClearConfirmAction = '清空';
+  static const String aiChatCancel = '取消';
+  static String aiChatMessageCount(int count) => '$count 条消息';
 
   // ─── AI Model Switch ─────────────────────────────────────────────
   static const String aiModelSwitch = 'AI模型';
@@ -237,4 +252,31 @@ class AppStrings {
   static const String predictionModeWmaRegular = 'WMA-6 加权移动平均';
   static const String predictionModeWmaVolatile = 'WMA-3 + 剪切均值';
   static const String predictionModeSimple = '简单平均';
+
+  // ─── 二次确认与数据管理补充文案（E2 收敛）────────────────────────
+  /// 异常经期长度提示的二次确认后缀（与 [periodLengthWarning] 组合使用）。
+  static const String lengthWarningConfirm = '确认无误请再次点击保存';
+  static const String restoreBackup = '恢复自动备份';
+  static const String noBackupYet = '暂无自动备份';
+  static const String selectBackup = '选择备份';
+  static const String latestBadge = '最新';
+  static const String backupRestored = '备份已恢复';
+  static const String restoreFailed = '恢复失败';
+
+  // ─── 统计页 AI 入口卡（E2 收敛）─────────────────────────────────
+  static const String aiAssistantCardTitle = 'AI健康助手';
+  static const String aiAssistantCardSubtitle = '基于您的周期数据生成健康分析报告';
+  static const String aiAssistantCardNeedsData = '记录数据后即可使用';
+
+  // ─── 统计页预测卡补充（E2 收敛）─────────────────────────────────
+  static const String predictionWindowPrefix = '预测窗口：';
+  static const String to = '至';
+  static const String cycleLengthN = '周期 {} 天';
+
+  // ─── C2 口径统一：统计页历史计的是「周期」而非「记录」────────────
+  static const String cyclesCount = '共 {} 个周期';
+
+  // ─── 首页状态卡（C1 紧凑开关）────────────────────────────────────
+  static const String heroStatsToggle = '切换均值显示';
+  static const String heroStatsExpand = '展开均值显示';
 }

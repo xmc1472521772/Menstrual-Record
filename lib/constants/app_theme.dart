@@ -4,6 +4,11 @@ import 'app_colors.dart';
 class AppTheme {
   AppTheme._();
 
+  /// 全局统一字体族：内置 MiSans 子集（见 pubspec.yaml fonts 声明）。
+  /// 所有页面（含 CustomPainter 里 TextPainter 绘制的图表文字）
+  /// 都必须引用此常量，保证不同 ROM 上字体度量完全一致。
+  static const String fontFamily = 'MiSans';
+
   // ─── Light Theme ─────────────────────────────────────────────────
   static ThemeData get lightTheme {
     final colorScheme = ColorScheme.fromSeed(
@@ -22,6 +27,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: fontFamily,
       colorScheme: colorScheme,
       brightness: Brightness.light,
       scaffoldBackgroundColor: AppThemeColors.light.background,
@@ -244,6 +250,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: fontFamily,
       colorScheme: colorScheme,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppThemeColors.dark.background,

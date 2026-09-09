@@ -26,7 +26,7 @@ class SettingsScreen extends StatelessWidget {
               AppDimens.spacingLg,
               AppDimens.spacingLg,
               AppDimens.spacingLg,
-              100,
+              AppDimens.navBarClearance,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -211,7 +211,9 @@ class SettingsScreen extends StatelessWidget {
               divisions: max - min,
               label: '$value 天',
               activeColor: AppColors.brandPrimary,
-              inactiveColor: AppColors.tile,
+              // 走主题语义色：浅色下等价于旧 tile 固定值，
+              // 深色下避免浅米色轨道突兀地盖在深色卡片上。
+              inactiveColor: context.themeColors.surfaceTile,
               onChanged: onChanged,
             ),
           ],
@@ -457,7 +459,7 @@ class SettingsScreen extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: () => _restoreBackup(context, provider),
         icon: const Icon(Icons.history, size: 20),
-        label: const Text('恢复自动备份'),
+        label: const Text(AppStrings.restoreBackup),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(
             vertical: AppDimens.spacingLg,
@@ -495,7 +497,8 @@ class SettingsScreen extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
+          SnackBar(
+              content: Text(AppStrings.exportFailed.replaceAll('{}', '$e'))),
         );
       }
     }
@@ -558,7 +561,8 @@ class SettingsScreen extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text('导入失败: $e')),
+          SnackBar(
+              content: Text(AppStrings.importFailed.replaceAll('{}', '$e'))),
         );
       }
     }
@@ -572,7 +576,7 @@ class SettingsScreen extends StatelessWidget {
       if (!backupDir.existsSync()) {
         if (context.mounted) {
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            const SnackBar(content: Text('暂无自动备份')),
+            const SnackBar(content: Text(AppStrings.noBackupYet)),
           );
         }
         return;
@@ -588,7 +592,7 @@ class SettingsScreen extends StatelessWidget {
       if (backups.isEmpty) {
         if (context.mounted) {
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            const SnackBar(content: Text('暂无自动备份')),
+            const SnackBar(content: Text(AppStrings.noBackupYet)),
           );
         }
         return;
@@ -618,7 +622,7 @@ class SettingsScreen extends StatelessWidget {
               const SizedBox(width: AppDimens.spacingSm),
               Expanded(
                 child: Text(
-                  '选择备份',
+                  AppStrings.selectBackup,
                   style: AppTheme.headingSmall.copyWith(
                     color: context.themeColors.onSurface,
                   ),
@@ -738,7 +742,7 @@ class SettingsScreen extends StatelessWidget {
                                                 AppDimens.radiusFull),
                                       ),
                                       child: const Text(
-                                        '最新',
+                                        AppStrings.latestBadge,
                                         style: TextStyle(
                                           color: AppColors.white,
                                           fontSize: 10,
@@ -787,14 +791,17 @@ class SettingsScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-            content: Text(success ? '备份已恢复' : '恢复失败'),
+            content:
+                Text(success ? AppStrings.backupRestored : AppStrings.restoreFailed),
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text('恢复失败: $e')),
+          SnackBar(
+              content:
+                  Text(AppStrings.restoreFailed.replaceAll('{}', '$e'))),
         );
       }
     }

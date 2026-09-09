@@ -579,7 +579,11 @@ class _PeriodLengthPainter extends CustomPainter {
     final dateTp = TextPainter(
       text: TextSpan(
         text: dateStr,
-        style: TextStyle(color: tooltipSubColor, fontSize: 10),
+        style: TextStyle(
+          color: tooltipSubColor,
+          fontSize: 10,
+          fontFamily: AppTheme.fontFamily,
+        ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -591,6 +595,7 @@ class _PeriodLengthPainter extends CustomPainter {
           color: tooltipTextColor,
           fontSize: 13,
           fontWeight: FontWeight.w700,
+          fontFamily: AppTheme.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -707,6 +712,7 @@ class _PeriodLengthPainter extends CustomPainter {
           color: color,
           fontSize: fontSize,
           fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+          fontFamily: AppTheme.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,

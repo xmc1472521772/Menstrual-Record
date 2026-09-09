@@ -28,6 +28,57 @@ int computeDefaultPeriodDays({
   return settingsPeriodLength;
 }
 
+/// 构建历史记录行的心情/症状标签列表。
+///
+/// 空白安全：mood/symptoms 为非 null 空串或含空白项的历史脏数据
+/// 不会产生任何子项，从而不占行高（[Wrap] 无子项时高度为 0）。
+/// 此前直接判 null，`Text('')` 也会占一行高（约 +25px），表现为
+/// 越靠后的记录行间距越大、行与行错位。
+List<Widget> buildRecordTags(PeriodRecord record) {
+  final moodText = record.mood?.trim();
+  final symptomTexts = (record.symptoms ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  if ((moodText == null || moodText.isEmpty) && symptomTexts.isEmpty) {
+    return const [];
+  }
+
+  return [
+    const SizedBox(height: 4),
+    Wrap(
+      spacing: 4,
+      runSpacing: 2,
+      children: [
+        if (moodText != null && moodText.isNotEmpty)
+          Text(
+            moodText,
+            // 统一走主题样式：裸 TextStyle 无 height，
+            // 不同厂商字体度量不同导致行高不一致。
+            style: AppTheme.bodyMedium,
+          ),
+        ...symptomTexts.map(
+          (s) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: AppColors.brandSurface,
+              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+            ),
+            child: Text(
+              s,
+              style: AppTheme.bodySmall.copyWith(
+                color: AppColors.brandPrimary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  ];
+}
+
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key});
 
@@ -55,7 +106,7 @@ class _RecordScreenState extends State<RecordScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 68,
+        toolbarHeight: AppDimens.appBarHeight,
         titleSpacing: AppDimens.spacingXl,
         title: const Text(AppStrings.record),
         actions: [
@@ -81,7 +132,7 @@ class _RecordScreenState extends State<RecordScreen> {
           AppDimens.spacingXl,
           AppDimens.spacingSm,
           AppDimens.spacingXl,
-          100,
+          AppDimens.navBarClearance,
         ),
         child: Column(
           children: [
@@ -173,17 +224,20 @@ class _RecordScreenState extends State<RecordScreen> {
         borderRadius: BorderRadius.circular(AppDimens.radiusLg),
       ),
       child: Row(
-        children: [
-          _stripIcon(Icons.calendar_today_rounded, AppColors.inkSecondary),
-          const SizedBox(width: AppDimens.spacingMd),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          children: [
+            // 图标位于白色半透明容器内（叠在主题 surfaceTile 上），
+            // 深色模式下容器会随主题变灰，图标色需跟随主题保证对比度。
+            _stripIcon(Icons.calendar_today_rounded,
+                context.themeColors.onSurfaceSecondary),
+            const SizedBox(width: AppDimens.spacingMd),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
                     AppStrings.noOngoingPeriod,
                     style: AppTheme.titleMedium.copyWith(
-                      color: AppColors.ink,
+                      color: context.themeColors.onSurface,
                     ),
                   ),
                 if (predicted != null && daysUntil != null) ...[
@@ -191,7 +245,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   Text(
                     '${AppStrings.predictedNextPeriod} ${predicted.month}月${predicted.day}日 · $daysUntil ${AppStrings.days}后',
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppColors.inkSecondary,
+                      color: context.themeColors.onSurfaceSecondary,
                     ),
                   ),
                 ],
@@ -317,7 +371,7 @@ class _RecordScreenState extends State<RecordScreen> {
             Text(
               label,
               style: AppTheme.bodyMedium.copyWith(
-                color: AppColors.inkSecondary,
+                color: context.themeColors.onSurfaceSecondary,
               ),
             ),
             const Spacer(),
@@ -326,14 +380,14 @@ class _RecordScreenState extends State<RecordScreen> {
               style: AppTheme.titleMedium.copyWith(
                 color: date != null
                     ? context.themeColors.onSurface
-                    : AppColors.inkTertiary,
+                    : context.themeColors.onSurfaceTertiary,
               ),
             ),
             const SizedBox(width: AppDimens.spacingSm),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: AppColors.inkTertiary,
+              color: context.themeColors.onSurfaceTertiary,
             ),
           ],
         ),
@@ -440,7 +494,7 @@ class _RecordScreenState extends State<RecordScreen> {
       setState(() => _lengthWarningConfirmed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$warning 确认无误请再次点击保存'),
+          content: Text('$warning ${AppStrings.lengthWarningConfirm}'),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -512,7 +566,9 @@ class _RecordScreenState extends State<RecordScreen> {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(
-          success ? '已保存 ${ranges.length} 条记录' : AppStrings.saveFailed2,
+          success
+              ? AppStrings.savedNRecords.replaceAll('{}', '${ranges.length}')
+              : AppStrings.saveFailed2,
         ),
         backgroundColor: success ? AppColors.success : AppColors.error,
       ),
@@ -545,9 +601,10 @@ class _RecordScreenState extends State<RecordScreen> {
               ),
               if (records.isNotEmpty)
                 Text(
-                  '共 ${records.length} 条',
+                  AppStrings.recordsCount
+                      .replaceAll('{}', '${records.length}'),
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.inkTertiary,
+                    color: context.themeColors.onSurfaceTertiary,
                   ),
                 ),
             ],
@@ -561,16 +618,16 @@ class _RecordScreenState extends State<RecordScreen> {
               child: Center(
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.history_rounded,
                       size: 36,
-                      color: AppColors.inkTertiary,
+                      color: context.themeColors.onSurfaceTertiary,
                     ),
                     const SizedBox(height: AppDimens.spacingSm),
                     Text(
                       AppStrings.noRecords,
                       style: AppTheme.bodySmall.copyWith(
-                        color: AppColors.inkTertiary,
+                        color: context.themeColors.onSurfaceTertiary,
                       ),
                     ),
                   ],
@@ -581,6 +638,7 @@ class _RecordScreenState extends State<RecordScreen> {
             // 不使用 ListView.separated + shrinkWrap（shrinkWrap 会测量全部子项，
             // 失去懒加载优势）。改为 Column + for 循环直接展开，
             // 记录数量通常不超过几十条，成本可忽略。
+            // 文本缩放已由 app.dart 根节点全局钳制（max 1.3）。
             Column(
               children: [
                 for (int i = 0; i < records.length; i++) ...[
@@ -608,6 +666,11 @@ class _RecordScreenState extends State<RecordScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingMd),
       child: Row(
+        // 顶部锚定对齐：行高由内容决定（心情/症状标签会让文字列比 46 的
+        // 日期徽标高），若用默认的 center 对齐，文字列会相对徽标上下同时
+        // 伸展，首行顶到徽标之上，表现为"右侧信息往上靠、有无标签的行
+        // 对齐不一致"。改为 start 后无论右侧多高，徽标顶边与信息顶边恒对齐。
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 46,
@@ -623,14 +686,18 @@ class _RecordScreenState extends State<RecordScreen> {
               children: [
                 Text(
                   '${start.month}月',
-                  style: const TextStyle(
-                    color: AppColors.inkSecondary,
+                  // 徽标文字不随系统字体缩放：固定容器内跟随缩放会溢出错位，
+                  // 固定字号才能保证所有机型上徽标视觉一致。
+                  textScaler: TextScaler.noScaling,
+                  style: TextStyle(
+                    color: context.themeColors.onSurfaceSecondary,
                     fontSize: 10,
                     height: 1.1,
                   ),
                 ),
                 Text(
                   '${start.day}',
+                  textScaler: TextScaler.noScaling,
                   style: TextStyle(
                     color: isOngoing
                         ? AppColors.brandPrimary
@@ -650,50 +717,27 @@ class _RecordScreenState extends State<RecordScreen> {
               children: [
                 Text(
                   rangeText,
+                  // 单行 + 省略号：窄屏或大字体下禁止换行，
+                  // 避免行高参差不齐导致历史列表排版不齐。
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTheme.titleMedium.copyWith(
                     color: context.themeColors.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '持续 ${record.periodDays} ${AppStrings.days}',
+                  '${AppStrings.duration} ${record.periodDays} ${AppStrings.days}',
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.inkSecondary,
+                    color: context.themeColors.onSurfaceSecondary,
                   ),
                 ),
-                // 心情/症状标签
-                if (record.mood != null || record.symptoms != null) ...[
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 2,
-                    children: [
-                      if (record.mood != null)
-                        Text(
-                          record.mood!,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      if (record.symptoms != null)
-                        ...(record.symptoms!.split(',')
-                            .where((s) => s.isNotEmpty))
-                            .map((s) => Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brandSurface,
-                                    borderRadius: BorderRadius.circular(
-                                        AppDimens.radiusSm),
-                                  ),
-                                  child: Text(
-                                    s,
-                                    style: AppTheme.bodySmall.copyWith(
-                                      color: AppColors.brandPrimary,
-                                    ),
-                                  ),
-                                )),
-                    ],
-                  ),
-                ],
+                // 心情/症状标签：先过滤空白内容再决定是否渲染。
+                // 历史数据里存在 mood/symptoms 为非 null 空串（或含空白项）
+                // 的记录，直接判 null 会让 Wrap 渲染出"看不见的空行"
+                // （Text('') 也占一行高，约 +25px），表现为越靠后的记录
+                // 行间距越大、行与行错位。
+                ...buildRecordTags(record),
               ],
             ),
           ),
@@ -716,10 +760,10 @@ class _RecordScreenState extends State<RecordScreen> {
               ),
             ),
           PopupMenuButton<String>(
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert_rounded,
               size: 18,
-              color: AppColors.inkTertiary,
+              color: context.themeColors.onSurfaceTertiary,
             ),
             onSelected: (value) {
               if (value == 'edit') {

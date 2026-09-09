@@ -5,6 +5,10 @@ import '../constants/app_theme.dart';
 /// A reusable card with an optional title and child content.
 ///
 /// Adapts its background color to the current theme automatically.
+///
+/// A2 表面层级统一：与 [AppTheme] 的 cardTheme 保持同一层级表达 ——
+/// surfaceCard 底 + hairline 描边 + radiusLg（16），不再使用旧的
+/// black 5% 阴影。浅色下 hairline 等价旧观感，深色下描边随主题切换。
 class SectionCard extends StatelessWidget {
   final String? title;
   final Widget child;
@@ -26,14 +30,8 @@ class SectionCard extends StatelessWidget {
       padding: padding ?? const EdgeInsets.all(AppDimens.spacingLg),
       decoration: BoxDecoration(
         color: context.themeColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        border: Border.all(color: context.themeColors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

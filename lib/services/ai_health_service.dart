@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show sqrt;
+import 'dart:math' show sqrt, min;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../models/period_record.dart';
@@ -1399,7 +1399,7 @@ $dataText
               final delta = choices[0]['delta'] as Map<String, dynamic>?;
               final content = delta?['content'] as String?;
               if (content != null && content.isNotEmpty) {
-                yield content;
+                yield* revealContentChunk(content);
               }
             }
           } catch (_) {
@@ -1420,7 +1420,7 @@ $dataText
               final delta = choices[0]['delta'] as Map<String, dynamic>?;
               final content = delta?['content'] as String?;
               if (content != null && content.isNotEmpty) {
-                yield content;
+                yield* revealContentChunk(content);
               }
             }
           } catch (_) {
@@ -1432,6 +1432,34 @@ $dataText
       // 无论正常结束、[DONE] 提前返回、流中途异常还是消费方取消订阅，
       // 都确保关闭底层 client，避免 socket 泄漏。
       client.close();
+    }
+  }
+
+  // ─── 大块内容平滑放行 ────────────────────────────────────────
+
+  /// 判定"上游未真流式"的单 delta 字符数阈值。
+  ///
+  /// 正常 token 级流式的 delta 通常为 1~10 字符；若一个 delta 超过
+  /// 该阈值，说明上游（OpenRouter 免费通道的部分节点）把整段回答
+  /// 攒在缓冲里一次性吐出，直接透传会导致正文"砰"地整屏砸出。
+  @visibleForTesting
+  static const int giantChunkThreshold = 120;
+
+  /// 按需放行一个内容 delta：小 delta 直接透传（真流式）；超大 delta
+  /// 按"打字机"节奏平滑放行，避免正文一次性全部出现。
+  @visibleForTesting
+  static Stream<String> revealContentChunk(String content) async* {
+    if (content.length <= giantChunkThreshold) {
+      yield content;
+      return;
+    }
+    const tickMs = 60;
+    final len = content.length;
+    // 基准 ~200 字/秒（12 字/60ms）；超长块自动提速，单块最长 ~5.4 秒放完
+    final charsPerTick = (len * tickMs / 5400).ceil().clamp(12, len);
+    for (var i = 0; i < len; i += charsPerTick) {
+      yield content.substring(i, min(i + charsPerTick, len));
+      await Future<void>.delayed(const Duration(milliseconds: tickMs));
     }
   }
 

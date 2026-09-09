@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../app.dart';
 import '../models/period_record.dart';
 import '../providers/period_provider.dart';
 import '../providers/settings_provider.dart';
@@ -9,9 +8,15 @@ import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
 import '../utils/date_utils.dart';
+import '../widgets/calendar/calendar_core.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// 跳转到设置页的回调（D4 解耦）：由 MainScreen 以构造参数注入，
+  /// 取代旧版「MainScreen.globalKey.currentState?.jumpToSettings()」
+  /// 的全局 Key 跨页导航（全局可变单例在测试与重构时脆弱）。
+  final VoidCallback? onOpenSettings;
+
+  const HomeScreen({super.key, this.onOpenSettings});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -168,15 +173,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  static const List<String> _weekdayLabels = [
-    '一',
-    '二',
-    '三',
-    '四',
-    '五',
-    '六',
-    '日',
-  ];
+  /// 周一 → 周日 标签（D1 起与多选日历共享 [CalendarWeekdayHeader.labels]）。
+  static String _weekdayLabel(int weekday) =>
+      CalendarWeekdayHeader.labels[weekday - 1];
 
   /// 经量选项（标签, 等级）：状态卡快速选择与日详情弹窗共用同一份定义
   /// （P1-7 收敛，避免"改了弹窗忘了状态卡"）。
@@ -203,8 +202,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 「今天 / 选中」描边格子的外边距。
   static const EdgeInsets _kDaySelectedMargin = EdgeInsets.all(2);
 
-  static String _weekdayLabel(int weekday) => _weekdayLabels[weekday - 1];
-
   @override
   Widget build(BuildContext context) {
     return Selector<PeriodProvider, int>(
@@ -219,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            toolbarHeight: 68,
+            toolbarHeight: AppDimens.appBarHeight,
             titleSpacing: AppDimens.spacingXl,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   '${_today.month}月${_today.day}日 星期${_weekdayLabel(_today.weekday)}',
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.inkSecondary,
+                    color: context.themeColors.onSurfaceSecondary,
                   ),
                 ),
               ],
@@ -238,11 +235,11 @@ class _HomeScreenState extends State<HomeScreen> {
             actions: [
               IconButton(
                 onPressed: () {
-                  // 跳转到设置页的提醒设置区域
-                  MainScreen.globalKey.currentState?.jumpToSettings();
+                  // 跳转到设置页的提醒设置区域（回调由 MainScreen 注入）
+                  widget.onOpenSettings?.call();
                 },
                 icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                color: AppColors.ink,
+                color: context.themeColors.onSurface,
                 tooltip: AppStrings.notificationTitle,
               ),
               const SizedBox(width: AppDimens.spacingSm),
@@ -255,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   !_isCurrentMonth || (_selectedDay != null && !_isTodaySelected);
               if (!showFab) return const SizedBox.shrink();
               return Padding(
-                padding: const EdgeInsets.only(bottom: 80),
+                padding: const EdgeInsets.only(bottom: AppDimens.fabLift),
                 child: FloatingActionButton.small(
                   onPressed: _jumpToToday,
                   backgroundColor: AppColors.brandPrimary,
@@ -300,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: AppDimens.spacingLg),
               ElevatedButton(
                 onPressed: () => provider.loadRecords(),
-                child: const Text('重试'),
+                child: const Text(AppStrings.retry),
               ),
             ],
           ),
@@ -313,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
         AppDimens.spacingXl,
         AppDimens.spacingSm,
         AppDimens.spacingXl,
-        100,
+        AppDimens.navBarClearance,
       ),
       child: Column(
         children: [
@@ -338,6 +335,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildEmptyHero();
     }
 
+    // C1 紧凑开关：watch 使点击折叠后本卡随设置值重建。
+    final settings = context.watch<SettingsProvider>();
     final daysUntil = cycleData.daysUntilPredicted;
     final currentDay = cycleData.currentCycleDay;
     final hasOngoing = provider.hasOngoingPeriod;
@@ -422,35 +421,88 @@ class _HomeScreenState extends State<HomeScreen> {
             style: AppTheme.headingLarge.copyWith(color: AppColors.white),
           ),
           const SizedBox(height: AppDimens.spacingXl),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppDimens.spacingLg,
-              vertical: AppDimens.spacingMd,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildHeroStat(
-                    AppStrings.averageCycle,
-                    '${cycleData.averageCycleLength.toStringAsFixed(1)} ${AppStrings.days}',
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: AppColors.white.withValues(alpha: 0.22),
-                ),
-                Expanded(
-                  child: _buildHeroStat(
-                    AppStrings.averagePeriod,
-                    '${cycleData.averagePeriodLength.toStringAsFixed(1)} ${AppStrings.days}',
-                  ),
-                ),
-              ],
+          // ── 双均值条（C1 紧凑开关）──
+          // 点击折叠/展开；折叠后仅保留一行纤细的"展开"入口，
+          // 为下方日历网格让出首屏空间。偏好持久化（home_hero_compact）。
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => settings.setHeroCompact(!settings.heroCompact),
+            child: Semantics(
+              button: true,
+              label: AppStrings.heroStatsToggle,
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: settings.heroCompact
+                    ? Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppDimens.spacingXs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.white.withValues(alpha: 0.14),
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radiusMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.expand_more_rounded,
+                              size: 14,
+                              color: AppColors.white.withValues(alpha: 0.7),
+                            ),
+                            const SizedBox(width: AppDimens.spacingXs),
+                            Text(
+                              AppStrings.heroStatsExpand,
+                              style: AppTheme.labelMedium.copyWith(
+                                color: AppColors.white.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppDimens.spacingLg,
+                          vertical: AppDimens.spacingMd,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.white.withValues(alpha: 0.14),
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radiusMd),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _buildHeroStat(
+                                AppStrings.averageCycle,
+                                '${cycleData.averageCycleLength.toStringAsFixed(1)} ${AppStrings.days}',
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: AppColors.white.withValues(alpha: 0.22),
+                            ),
+                            Expanded(
+                              child: _buildHeroStat(
+                                AppStrings.averagePeriod,
+                                '${cycleData.averagePeriodLength.toStringAsFixed(1)} ${AppStrings.days}',
+                              ),
+                            ),
+                            Icon(
+                              Icons.expand_less_rounded,
+                              size: 16,
+                              color: AppColors.white.withValues(alpha: 0.7),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
             ),
           ),
           // ── 经期进行中：今日经量快速选择 ──
@@ -722,8 +774,10 @@ class _HomeScreenState extends State<HomeScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: AppColors.white,
-                disabledBackgroundColor: AppColors.tile,
-                disabledForegroundColor: AppColors.inkTertiary,
+                disabledBackgroundColor:
+                    context.themeColors.surfaceTile,
+                disabledForegroundColor:
+                    context.themeColors.onSurfaceTertiary,
                 elevation: AppDimens.elevationNone,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
@@ -758,11 +812,12 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text(AppStrings.endPeriod),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.brandPrimary,
-                disabledForegroundColor: AppColors.inkTertiary,
+                disabledForegroundColor:
+                    context.themeColors.onSurfaceTertiary,
                 side: BorderSide(
                   color: hasOngoing
                       ? AppColors.brandPrimary
-                      : AppColors.hairline,
+                      : context.themeColors.divider,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
@@ -795,7 +850,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: context.themeColors.surfaceCard,
         borderRadius: border,
-        border: Border.all(color: AppColors.hairline),
+        border: Border.all(color: context.themeColors.divider),
       ),
       child: ClipRRect(
         borderRadius: border,
@@ -819,7 +874,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       1,
                     )),
                     icon: const Icon(Icons.chevron_left_rounded),
-                    color: AppColors.inkSecondary,
+                    color: context.themeColors.onSurfaceSecondary,
                     iconSize: 26,
                   ),
                   AnimatedSwitcher(
@@ -846,33 +901,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       1,
                     )),
                     icon: const Icon(Icons.chevron_right_rounded),
-                    color: AppColors.inkSecondary,
+                    color: context.themeColors.onSurfaceSecondary,
                     iconSize: 26,
                   ),
                 ],
               ),
             ),
             // ── 星期标题行 ──
-            Padding(
-              padding: const EdgeInsets.symmetric(
+            // D1：共享 CalendarWeekdayHeader（默认样式 bodySmall +
+            // onSurfaceTertiary，与旧实现视觉一致），替代本地 Row 实现。
+            const Padding(
+              padding: EdgeInsets.symmetric(
                 horizontal: AppDimens.spacingMd,
               ),
-              child: Row(
-                children: _weekdayLabels
-                    .map(
-                      (day) => Expanded(
-                        child: Center(
-                          child: Text(
-                            day,
-                            style: AppTheme.bodySmall.copyWith(
-                              color: AppColors.inkTertiary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
+              child: CalendarWeekdayHeader(),
             ),
             const SizedBox(height: AppDimens.spacingSm),
             // ── PageView 日历网格（安卓原生翻页） ──
@@ -934,12 +976,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCalendarGridForMonth(
       PeriodProvider provider, DateTime month) {
-    final firstDay = DateTime(month.year, month.month, 1);
-    final lastDay = DateTime(month.year, month.month + 1, 0);
-
-    final weekday = firstDay.weekday;
-    final daysInMonth = lastDay.day;
-    final prevMonthDays = weekday - 1;
+    // D1：月份格子序列（固定 6 行 42 格，行优先）由共享核心生成，
+    // 与多选日历共用同一份周首偏移/月天数数学，替代本地双份实现。
+    final cells = buildMonthCells(month);
 
     final now = _today;
     final todayStart = DateTime(now.year, now.month, now.day);
@@ -965,36 +1004,18 @@ class _HomeScreenState extends State<HomeScreen> {
           return Expanded(
             child: Row(
               children: List<Widget>.generate(7, (col) {
-                final index = row * 7 + col;
-                final dayOffset = index - prevMonthDays;
+                final day = cells[row * 7 + col];
+                final inMonth =
+                    day.year == month.year && day.month == month.month;
 
-                // ── 非本月日期：用上下月日期填充并置灰 ──
-                if (dayOffset < 0) {
-                  // 上个月末尾日期
-                  final prevDay = DateTime(
-                    month.year,
-                    month.month,
-                    dayOffset + 1, // dayOffset 为负，DateTime 会自动回退到上月
-                  );
+                // ── 非本月日期（上月末尾 / 下月开头）：置灰显示 ──
+                if (!inMonth) {
                   return Expanded(
-                    child: _buildOtherMonthCell(prevDay, palette),
-                  );
-                }
-                if (dayOffset >= daysInMonth) {
-                  // 下个月开头日期
-                  final nextDay = DateTime(
-                    month.year,
-                    month.month,
-                    dayOffset + 1, // 超出本月天数，DateTime 会自动前进到下月
-                  );
-                  return Expanded(
-                    child: _buildOtherMonthCell(nextDay, palette),
+                    child: _buildOtherMonthCell(day, palette),
                   );
                 }
 
                 // ── 本月日期 ──
-                final day =
-                    DateTime(month.year, month.month, dayOffset + 1);
                 final dayType = provider.getDayType(day);
                 final isToday = _isSameDay(now, day);
 
@@ -1344,8 +1365,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildLegend() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingMd),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      // B2 防溢出：用可换行的 Wrap 替代不换行的 Row——360dp 以下
+      // 小屏或系统字体放大到 1.3 倍时，5 个图例项可能超宽导致
+      // RenderFlex overflow。Wrap 在超宽时自动折到第二行居中。
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        runSpacing: AppDimens.spacingXs,
         children: [
           _buildLegendItem(color: AppColors.brandPrimary, label: AppStrings.legendPeriod),
           _buildLegendItem(
@@ -1384,7 +1409,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(
             label,
             style: AppTheme.bodySmall.copyWith(
-              color: AppColors.inkSecondary,
+              color: context.themeColors.onSurfaceSecondary,
               fontSize: 11,
             ),
           ),

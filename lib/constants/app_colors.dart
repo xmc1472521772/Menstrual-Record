@@ -45,6 +45,11 @@ class AppColors {
   static const Color flowNormal = Color(0xFFD97065); // 中：中暖红
   static const Color flowHeavy = Color(0xFF8E3F3A);  // 多：深酒红
 
+  // ─── AI 功能卡（统计页 AI 助手入口渐变，A3 收敛进色板）────────────
+  // 深浅主题共用暖紫渐变：与陶土红形成功能区分色，深色下提亮一档。
+  static const Color aiCardStart = Color(0xFF6B5B95);
+  static const Color aiCardEnd = Color(0xFF8B7AB8);
+
   // ─── Commonly Used ───────────────────────────────────────────────
   static const Color white = Colors.white;
   static final Color white90 = Colors.white.withValues(alpha: 0.9);
@@ -147,6 +152,20 @@ class AppDimens {
   static const double elevationLow = 1;
   static const double elevationMedium = 2;
   static const double elevationHigh = 4;
+
+  // ─── 布局尺寸 Tokens（C3 收敛：互相咬合的魔法数统一归口）──────────
+  /// 玻璃底部导航栏高度（main_screen 的 _GlassNavBar 与主题 NavigationBarTheme 保持一致）。
+  static const double navBarHeight = 64.0;
+
+  /// 页面滚动内容底部预留空间：需容纳悬浮导航栏（[navBarHeight]）+
+  /// SafeArea 边距 + 呼吸空间，避免最后一张卡片被导航栏遮住。
+  static const double navBarClearance = 100.0;
+
+  /// 首页/记录页大标题 AppBar 高度（双行标题需要比默认更高的工具栏）。
+  static const double appBarHeight = 68.0;
+
+  /// 「回到今天」FAB 相对屏幕底部的抬升量（导航栏高度 + 间隙）。
+  static const double fabLift = 80.0;
 }
 
 /// Theme-dependent semantic colors registered as a [ThemeExtension].

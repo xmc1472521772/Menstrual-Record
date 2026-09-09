@@ -314,6 +314,7 @@ class _ScoreLinePainter extends CustomPainter {
           color: color,
           fontSize: fontSize,
           fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+          fontFamily: AppTheme.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,

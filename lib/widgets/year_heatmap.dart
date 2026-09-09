@@ -643,7 +643,11 @@ class _MonthLabelPainter extends CustomPainter {
       final label = '$month月';
       textPainter.text = TextSpan(
         text: label,
-        style: TextStyle(fontSize: 10, color: textColor),
+        style: TextStyle(
+          fontSize: 10,
+          color: textColor,
+          fontFamily: AppTheme.fontFamily,
+        ),
       );
       textPainter.layout();
       // 文字左对齐到月份起始位置

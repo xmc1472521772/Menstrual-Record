@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../constants/app_strings.dart';
 import '../database/settings_dao.dart';
 import '../services/ai_health_service.dart';
 
@@ -41,11 +43,64 @@ class ReportHistoryEntry {
       };
 }
 
+/// 单个聊天会话（1.36.0 会话化改造）。
+///
+/// 每次「新建聊天」产生一个独立会话，会话之间消息完全隔离；
+/// 「清空消息」只作用于当前会话；历史会话通过 [openSession] 回看。
+class ChatSession {
+  final String id;
+
+  /// 会话标题：取本会话第一条用户消息截断生成。
+  String title;
+
+  /// 本会话的全部消息（按时间升序，最后一条最新）。
+  final List<ChatMessage> messages;
+
+  final DateTime createdAt;
+  DateTime updatedAt;
+
+  ChatSession({
+    required this.id,
+    required this.title,
+    required this.messages,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory ChatSession.fromJson(Map<String, dynamic> json) {
+    final rawMessages = json['messages'];
+    final messages = rawMessages is List
+        ? rawMessages
+            .whereType<Map<String, dynamic>>()
+            .map(ChatMessage.fromJson)
+            .toList()
+        : <ChatMessage>[];
+    return ChatSession(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      messages: messages,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'messages': messages.map((m) => m.toJson()).toList(),
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+}
+
 /// AI 助手缓存 Provider。
 ///
 /// 从 [PeriodProvider] 迁出的 AI 职责（P1-5）：
 /// - AI 健康报告缓存（内存 + SQLite 持久化，key：`ai_report_json` 等）
-/// - AI 问答聊天历史（内存 + SQLite 持久化，key：`ai_chat_json`，P1-8）
+/// - AI 问答聊天会话（内存 + SQLite 持久化，key：`ai_chat_sessions_json`，
+///   1.36.0 起会话化存储，旧扁平格式 `ai_chat_json` 自动迁移）
 ///
 /// 拆分动机：聊天/报告状态变更不再耦合经期数据监听链，AI 缓存可独立
 /// 单测；本 Provider 不依赖 [PeriodProvider] —— 报告过期判断所需的
@@ -75,16 +130,48 @@ class AiAssistantProvider with ChangeNotifier {
   /// 条，防止 `ai_report_history_json` 无限膨胀。
   static const int maxPersistedReportHistory = 30;
 
-  // ─── 聊天历史（跨页面持久化）─────────────────────────────────
-  /// 缓存 AI 问答的聊天历史。退出 AI 助手页面后仍保留。
-  final List<ChatMessage> _chatHistory = [];
+  // ─── 聊天会话（跨页面持久化，1.36.0 会话化）──────────────────
+  /// 全部聊天会话，按 updatedAt 降序（最新会话在前）。
+  final List<ChatSession> _sessions = [];
 
-  /// 聊天历史持久化保留上限：只保留最近 [maxPersistedChatMessages] 条，
-  /// 防止长期使用后 `ai_chat_json` 无限膨胀。
-  static const int maxPersistedChatMessages = 50;
+  /// 当前活跃会话 id；null 表示处于「新建聊天」空状态。
+  String? _activeSessionId;
+
+  /// 聊天会话持久化保留上限：只保留最近 [maxPersistedChatSessions] 个
+  /// 会话，防止 `ai_chat_sessions_json` 无限膨胀。
+  static const int maxPersistedChatSessions = 20;
+
+  /// 单个会话内消息保留上限（写入持久化时截断最旧消息）。
+  static const int maxMessagesPerSession = 50;
 
   /// 首次 [ensureLoaded] 时创建的加载任务；并发调用共享同一份 Future。
   Future<void>? _loadFuture;
+
+  // ─── 流式回放（D2 自 UI 层下沉）──────────────────────────────
+  // SSE chunk 之间通常只隔几毫秒，逐 chunk notifyListeners 会以 chunk
+  // 频率重建整屏并让 MarkdownBody 全文重解析（P0-1 热点）。将 UI 刷新
+  // 合并为最多 ~12.5 次/秒：距上次刷新 ≥80ms 立即刷新，否则安排
+  // trailing 补刷。回放节奏此前沉在 AI 屏 State 的定时器里（不可单测），
+  // 1.37.0 起移入本 Provider —— 回放参数调整不再触碰 UI 文件。
+  final StringBuffer _streamBuffer = StringBuffer();
+
+  /// 正在流式输出的会话 id：流式写入始终绑定发起时的会话，
+  /// 中途新建/切换会话不会串写其他会话（数据隔离）。
+  String? _streamingSessionId;
+
+  /// 流式渲染节流窗口。
+  static const Duration streamFlushInterval = Duration(milliseconds: 80);
+
+  /// 上一次把流式内容刷新到 UI 的时刻（节流基准）。
+  DateTime? _lastFlushAt;
+
+  /// trailing 补刷定时器：chunk 到达过密时延迟到节流窗口边界一次性刷新，
+  /// 保证窗口内累积的内容最终不丢。
+  Timer? _flushTimer;
+
+  /// 当前流式输出绑定的会话 id（供 UI 判断"最后一条 AI 消息是否正在
+  /// 流式输出"）。非流式期间为 null。
+  String? get streamingSessionId => _streamingSessionId;
 
   // ─── getter ──────────────────────────────────────────────────
   /// 获取缓存的 AI 健康报告（可能为 null）。
@@ -96,8 +183,27 @@ class AiAssistantProvider with ChangeNotifier {
   /// 报告生成时使用的模型 ID。
   String get reportModelId => _reportModelId;
 
-  /// 获取缓存的 AI 聊天历史（可变引用，UI 可直接操作）。
-  List<ChatMessage> get chatHistory => _chatHistory;
+  /// 获取当前活跃会话（可能为 null，表示新建聊天空状态）。
+  ChatSession? get activeSession {
+    if (_activeSessionId == null) return null;
+    for (final s in _sessions) {
+      if (s.id == _activeSessionId) return s;
+    }
+    return null;
+  }
+
+  /// 当前活跃会话的消息列表（无活跃会话时为空列表）。
+  ///
+  /// 直接引用会话内部列表（与旧 chatHistory 语义一致），供 UI 渲染；
+  /// 结构性修改请走本 Provider 的方法，保证排序与持久化正确。
+  List<ChatMessage> get chatMessages =>
+      activeSession?.messages ?? const [];
+
+  /// 全部历史会话（只读视图，updatedAt 降序，最新在前）。
+  List<ChatSession> get sessions => List.unmodifiable(_sessions);
+
+  /// 是否存在当前会话（用于「清空消息」入口的显隐）。
+  bool get hasActiveSession => activeSession != null;
 
   /// 历次报告评分索引（只读视图，按时间升序，最后一条最新）。
   List<ReportHistoryEntry> get reportHistory =>
@@ -145,22 +251,41 @@ class AiAssistantProvider with ChangeNotifier {
         }
       }
 
-      // ── 聊天历史持久化（P1-8）──
-      final chatJson = all['ai_chat_json'];
+      // ── 聊天会话持久化（1.36.0 会话化）──
+      final chatJson = all['ai_chat_sessions_json'];
+      var migratedLegacy = false;
       if (chatJson != null && chatJson.isNotEmpty) {
         final decoded = jsonDecode(chatJson);
         if (decoded is List) {
-          _chatHistory.addAll(
+          _sessions.addAll(
             decoded
                 .whereType<Map<String, dynamic>>()
-                .map(ChatMessage.fromJson),
+                .map(ChatSession.fromJson),
           );
-          // 防御：持久化数据异常超限时截断到上限
-          if (_chatHistory.length > maxPersistedChatMessages) {
-            _chatHistory.removeRange(
-                0, _chatHistory.length - maxPersistedChatMessages);
+          // 防御：持久化数据异常超限时丢弃最旧的会话
+          if (_sessions.length > maxPersistedChatSessions) {
+            _sessions.removeRange(
+                0, _sessions.length - maxPersistedChatSessions);
+          }
+          for (final s in _sessions) {
+            if (s.messages.length > maxMessagesPerSession) {
+              s.messages.removeRange(
+                  0, s.messages.length - maxMessagesPerSession);
+            }
           }
         }
+      } else {
+        // ── 旧版扁平聊天数据（ai_chat_json）一次性迁移为单个会话 ──
+        migratedLegacy = _migrateLegacyChat(all['ai_chat_json']);
+      }
+      _sortSessions();
+      // 启动后默认定位到最近的会话（延续旧版"重启可见上次对话"行为）
+      if (_sessions.isNotEmpty && activeSession == null) {
+        _activeSessionId = _sessions.first.id;
+      }
+      if (migratedLegacy) {
+        // 迁移成功后清空旧 key，避免下次重复迁移
+        _settingsDao.setValue('ai_chat_json', '');
       }
     } catch (e) {
       debugPrint('Error loading AI assistant cache: $e');
@@ -253,46 +378,274 @@ class AiAssistantProvider with ChangeNotifier {
     }
   }
 
-  // ─── 聊天历史 ────────────────────────────────────────────────
+  // ─── 流式回放控制（D2 下沉的公开 API）────────────────────────
 
-  /// 清除聊天历史（内存 + 持久化同步清除）。
-  void clearChatHistory() {
-    _chatHistory.clear();
-    notifyListeners();
-    _clearPersistedChat();
+  /// 一轮流式输出开始：绑定目标会话、清空缓冲、重置节流基准
+  /// （确保首个 chunk 立即上屏）。
+  void beginChatStream(ChatSession session) {
+    _streamingSessionId = session.id;
+    _streamBuffer.clear();
+    _lastFlushAt = null;
+    _cancelFlushTimer();
   }
 
-  /// 在每轮问答落库后调用（正常结束或出错落库时），把聊天历史持久化。
+  /// SSE chunk 到达：写入缓冲并按节流策略合并刷新 UI。
+  void onStreamChunk(ChatSession session, String chunk) {
+    _streamBuffer.write(chunk);
+    _scheduleStreamFlush(session);
+  }
+
+  /// 流正常结束：取消未触发的 trailing 补刷并做最终 flush，
+  /// 把节流窗口内累积的剩余内容完整落进会话，随后解除会话绑定。
+  void finishChatStream(ChatSession session) {
+    _cancelFlushTimer();
+    _flushStreamingBuffer(session);
+    _streamingSessionId = null;
+  }
+
+  /// 流异常结束：取消补刷定时器（避免 timer 随后用无错误标记的内容
+  /// 覆盖错误提示），保留已收到的部分内容并追加错误标记；未收到任何
+  /// 内容时整条替换为错误提示。随后解除会话绑定。
+  void abortChatStream(ChatSession session, String errorMsg) {
+    _cancelFlushTimer();
+    if (session.messages.isNotEmpty) {
+      if (_streamBuffer.isNotEmpty) {
+        updateMessage(
+          session,
+          session.messages.length - 1,
+          ChatMessage(
+            role: 'assistant',
+            content: '${_streamBuffer.toString()}\n\n⚠️ $errorMsg',
+            timestamp: DateTime.now(),
+          ),
+        );
+      } else {
+        updateMessage(
+          session,
+          session.messages.length - 1,
+          ChatMessage(
+            role: 'assistant',
+            content: '${AppStrings.aiChatFailedPrefix}$errorMsg',
+            timestamp: DateTime.now(),
+          ),
+        );
+      }
+    }
+    _streamingSessionId = null;
+  }
+
+  /// 立即将流式缓冲刷新到 UI：更新流式目标会话的最后一条 AI 消息。
+  ///
+  /// 写入始终绑定发起流式时的 [session]；若该会话已被清空（消息列表
+  /// 为空），丢弃本次内容——用户主动清空优先于迟到的流数据。
+  void _flushStreamingBuffer(ChatSession session) {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _lastFlushAt = DateTime.now();
+    if (session.messages.isEmpty) return;
+    updateMessage(
+      session,
+      session.messages.length - 1,
+      ChatMessage(
+        role: 'assistant',
+        content: _streamBuffer.toString(),
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  /// 节流调度：距上次 UI 刷新 ≥[streamFlushInterval] 则立即刷新；
+  /// 否则只安排一次 trailing 补刷（已有 pending 时跳过，窗口到点会把
+  /// 当时 buffer 的全部累积内容一次性刷出）。
+  void _scheduleStreamFlush(ChatSession session) {
+    final now = DateTime.now();
+    final last = _lastFlushAt;
+    if (last == null || now.difference(last) >= streamFlushInterval) {
+      _flushStreamingBuffer(session);
+      return;
+    }
+    _flushTimer ??= Timer(
+      streamFlushInterval - now.difference(last),
+      () => _flushStreamingBuffer(session),
+    );
+  }
+
+  /// 取消未触发的 trailing 补刷定时器。
+  void _cancelFlushTimer() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+  }
+
+  // ─── 聊天会话操作（1.36.0）───────────────────────────────────
+
+  /// 按 updatedAt 降序排序（最新会话在前），updatedAt 相同时以
+  /// createdAt 兜底，保证快速连续创建的会话排序确定。
+  void _sortSessions() {
+    _sessions.sort((a, b) {
+      final byUpdate = b.updatedAt.compareTo(a.updatedAt);
+      if (byUpdate != 0) return byUpdate;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+  }
+
+  /// 由首条用户消息生成会话标题（压缩空白、最多 20 字符）。
+  String _deriveTitle(String firstUserMessage) {
+    final compact = firstUserMessage
+        .replaceAll('\n', ' ')
+        .trim();
+    if (compact.isEmpty) return '新对话';
+    return compact.length <= 20 ? compact : '${compact.substring(0, 20)}…';
+  }
+
+  String _newSessionId() =>
+      'chat_${DateTime.now().microsecondsSinceEpoch}_${_sessionSeq++}';
+
+  /// 会话 id 自增序号：与时间戳组合，保证快速连续创建时不重复。
+  int _sessionSeq = 0;
+
+  /// 「新建聊天」：结束当前会话（保留为历史），回到空状态。
+  ///
+  /// 当前会话的消息完整保留在历史列表中，不被覆盖；再次发消息时
+  /// 才会创建新的会话。当前无活跃会话时为空操作。
+  void startNewChat() {
+    if (_activeSessionId == null) return;
+    _activeSessionId = null;
+    notifyListeners();
+  }
+
+  /// 「清空消息」：清除当前会话的全部消息内容。
+  ///
+  /// 只移除当前活跃会话，其他历史会话不受影响；清空后回到空状态。
+  void clearActiveSession() {
+    final session = activeSession;
+    if (session == null) return;
+    // 先清内容再移除：流式输出持有该会话引用时，isEmpty 守卫可让
+    // 迟到的流内容被安全丢弃，不会写回已清空的会话。
+    session.messages.clear();
+    _sessions.remove(session);
+    _activeSessionId = null;
+    notifyListeners();
+    _persistSessions();
+  }
+
+  /// 打开一个历史会话（回看完整消息，可继续在该会话中追问）。
+  void openSession(String sessionId) {
+    final exists = _sessions.any((s) => s.id == sessionId);
+    if (!exists) return;
+    if (_activeSessionId == sessionId) return;
+    _activeSessionId = sessionId;
+    notifyListeners();
+  }
+
+  /// 向当前会话追加一条消息；无活跃会话时自动创建新会话
+  /// （标题取首条用户消息）。只在内存中生效，持久化由
+  /// [persistChatHistory] 在整轮问答结束时统一执行。
+  void appendMessage(ChatMessage msg) {
+    var session = activeSession;
+    if (session == null) {
+      session = ChatSession(
+        id: _newSessionId(),
+        title: msg.role == 'user' ? _deriveTitle(msg.content) : '新对话',
+        messages: [],
+        createdAt: msg.timestamp,
+        updatedAt: msg.timestamp,
+      );
+      _sessions.add(session);
+      _activeSessionId = session.id;
+    }
+    session.messages.add(msg);
+    // 单会话消息上限：丢弃最旧消息（与旧版全局 50 条上限策略一致）
+    if (session.messages.length > maxMessagesPerSession) {
+      session.messages.removeAt(0);
+    }
+    // 会话有新消息落定 → 以该消息时间戳更新活跃时间（确定性排序）
+    session.updatedAt = msg.timestamp;
+    _sortSessions();
+    notifyListeners();
+  }
+
+  /// 原地更新指定会话中的一条消息（流式输出 flush 用）。
+  ///
+  /// 索引越界（如会话已被清空）时静默忽略，保证流式写入不崩溃；
+  /// 不更新 updatedAt（回看历史不改变会话排序）。
+  void updateMessage(ChatSession session, int index, ChatMessage msg) {
+    if (index < 0 || index >= session.messages.length) return;
+    session.messages[index] = msg;
+    notifyListeners();
+  }
+
+  /// 在每轮问答落库后调用（正常结束或出错落库时），把会话数据持久化。
   ///
   /// 流式输出过程中【不】调用本方法——逐 chunk 写库会造成高频 IO；
   /// 只在整轮回答完成（含错误标记）时写入一次。
   /// fire-and-forget：持久化失败不影响 UI。
   void persistChatHistory() {
-    _persistChatHistory();
+    _persistSessions();
   }
 
-  /// 将聊天历史持久化到 SQLite（只保留最近 [maxPersistedChatMessages] 条）。
-  Future<void> _persistChatHistory() async {
+  /// 将会话数据持久化到 SQLite。
+  ///
+  /// 上限策略：最近 [maxPersistedChatSessions] 个会话，每个会话内
+  /// 最近 [maxMessagesPerSession] 条消息。
+  Future<void> _persistSessions() async {
     try {
-      if (_chatHistory.isEmpty) return;
-      final persisted = _chatHistory.length > maxPersistedChatMessages
-          ? _chatHistory.sublist(
-              _chatHistory.length - maxPersistedChatMessages)
-          : _chatHistory;
-      final jsonStr =
-          jsonEncode(persisted.map((m) => m.toJson()).toList());
-      await _settingsDao.setValue('ai_chat_json', jsonStr);
+      if (_sessions.isEmpty) {
+        await _settingsDao.setValue('ai_chat_sessions_json', '');
+        return;
+      }
+      final sessionsSnapshot = _sessions.length > maxPersistedChatSessions
+          ? _sessions.sublist(0, maxPersistedChatSessions)
+          : _sessions;
+      final jsonStr = jsonEncode(
+        sessionsSnapshot.map((s) => s.toJson()).toList(),
+      );
+      await _settingsDao.setValue('ai_chat_sessions_json', jsonStr);
     } catch (e) {
-      debugPrint('Error persisting chat history: $e');
+      debugPrint('Error persisting chat sessions: $e');
     }
   }
 
-  /// 清除 SQLite 中持久化的聊天历史。
-  Future<void> _clearPersistedChat() async {
+  /// 尝试把旧版扁平聊天数据（`ai_chat_json`）迁移为一个会话。
+  ///
+  /// 返回是否发生了迁移；解析失败返回 false（旧数据原样保留）。
+  bool _migrateLegacyChat(String? legacyJson) {
+    if (legacyJson == null || legacyJson.isEmpty) return false;
     try {
-      await _settingsDao.setValue('ai_chat_json', '');
+      final decoded = jsonDecode(legacyJson);
+      if (decoded is! List) return false;
+      final messages = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(ChatMessage.fromJson)
+          .toList();
+      if (messages.isEmpty) return false;
+      if (messages.length > maxMessagesPerSession) {
+        messages.removeRange(0, messages.length - maxMessagesPerSession);
+      }
+      final firstUser = messages.firstWhere(
+        (m) => m.role == 'user',
+        orElse: () => messages.first,
+      );
+      final session = ChatSession(
+        id: _newSessionId(),
+        title: _deriveTitle(firstUser.content),
+        messages: messages,
+        createdAt: messages.first.timestamp,
+        updatedAt: messages.last.timestamp,
+      );
+      _sessions.add(session);
+      _activeSessionId = session.id;
+      _persistSessions();
+      return true;
     } catch (e) {
-      debugPrint('Error clearing persisted chat history: $e');
+      debugPrint('Error migrating legacy chat: $e');
+      return false;
     }
+  }
+
+  @override
+  void dispose() {
+    // 取消流式 trailing 补刷定时器，避免 dispose 后回调访问已释放状态
+    _cancelFlushTimer();
+    super.dispose();
   }
 }

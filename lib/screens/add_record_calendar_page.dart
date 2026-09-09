@@ -6,6 +6,7 @@ import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
 import '../utils/date_utils.dart';
+import '../widgets/calendar/calendar_core.dart';
 
 // ─── Full Page Infinite Scrolling Calendar ──────────────────────
 
@@ -174,16 +175,18 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
       final firstDay = DateTime(year, month, 1);
       final y = firstDay.year;
       final m = firstDay.month;
-      final daysInMonth = DateTime(y, m + 1, 0).day;
-      final prevDays = firstDay.weekday - 1;
-      final totalCells = ((prevDays + daysInMonth + 6) ~/ 7) * 7;
+      // D1：周首偏移/月天数/行数的月份几何计算下沉到共享核心
+      // （calendar_core），与首页日历共用同一份数学，避免双处漂移。
+      final daysInMonthCount = daysInMonth(firstDay);
+      final prevDays = leadingBlankDays(firstDay);
+      final rows = monthRowCount(firstDay);
       cache[i] = _MonthInfo(
         year: y,
         month: m,
-        daysInMonth: daysInMonth,
+        daysInMonth: daysInMonthCount,
         prevDays: prevDays,
-        totalCells: totalCells,
-        rows: totalCells ~/ 7,
+        totalCells: rows * 7,
+        rows: rows,
       );
     }
     return cache;
@@ -341,7 +344,19 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     );
   }
 
-  static const Widget _weekdayHeader = _WeekdayHeaderWidget();
+  /// 星期标题行（D1：共享核心替代本地 _WeekdayHeaderWidget，
+  /// 14px + onSurfaceTertiary + surfaceCard 底与旧实现视觉一致）。
+  Widget get _weekdayHeader => CalendarWeekdayHeader(
+        textStyle: TextStyle(
+          color: context.themeColors.onSurfaceTertiary,
+          fontSize: 14,
+        ),
+        backgroundColor: context.themeColors.surfaceCard,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingMd,
+          vertical: AppDimens.spacingSm,
+        ),
+      );
 
   static final BoxDecoration _existingDecoration = BoxDecoration(
     color: AppColors.brandPrimary.withValues(alpha: 0.15),
@@ -747,31 +762,4 @@ class _MonthInfo {
     required this.totalCells,
     required this.rows,
   });
-}
-
-/// Static weekday header — never rebuilds.
-class _WeekdayHeaderWidget extends StatelessWidget {
-  const _WeekdayHeaderWidget();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.spacingMd,
-        vertical: AppDimens.spacingSm,
-      ),
-      color: context.themeColors.surfaceCard,
-      child: Row(
-        children: [
-          Expanded(child: Center(child: Text('一', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('二', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('三', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('四', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('五', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('六', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-          Expanded(child: Center(child: Text('日', style: TextStyle(color: context.themeColors.onSurfaceTertiary, fontSize: 14)))),
-        ],
-      ),
-    );
-  }
 }

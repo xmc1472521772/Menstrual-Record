@@ -91,6 +91,31 @@ class WidgetService {
     }
   }
 
+  /// 快照推送入口（D3 职责拆分）：由 [PeriodProvider] 在数据变更后调用。
+  ///
+  /// 负责「默认值兜底（无统计时回退 28/5）+ Web 平台短路 + 异常吞并」，
+  /// 让 Provider 侧只剩一次委托调用，不再持有小组件推送细节。
+  Future<void> pushCycleSnapshot({
+    required List<PeriodRecord> records,
+    required CycleData? cycleData,
+    required int todayFlow,
+  }) async {
+    if (kIsWeb) return; // Web 平台无小组件
+    try {
+      final cycleLen = cycleData?.averageCycleLength.round() ?? 28;
+      final periodLen = cycleData?.averagePeriodLength.round() ?? 5;
+      await updateWidget(
+        records: records,
+        cycleData: cycleData,
+        userCycleLength: cycleLen,
+        userPeriodLength: periodLen,
+        todayFlow: todayFlow,
+      );
+    } catch (e) {
+      debugPrint('Widget update error: $e');
+    }
+  }
+
   /// 仅供测试：暴露小组件 JSON 构建纯逻辑，不经过 MethodChannel（T9）。
   ///
   /// 三态契约：

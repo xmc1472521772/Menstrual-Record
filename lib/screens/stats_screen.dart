@@ -12,6 +12,7 @@ import '../widgets/cycle_chart.dart';
 import '../widgets/health_score_trend_chart.dart';
 import '../widgets/period_length_chart.dart';
 import '../widgets/year_heatmap.dart';
+import '../widgets/common_widgets.dart';
 import 'ai_assistant_screen.dart';
 
 class StatsScreen extends StatefulWidget {
@@ -152,8 +153,8 @@ class _StatsScreenState extends State<StatsScreen>
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [
-              Color(0xFF6B5B95),
-              Color(0xFF8B7AB8),
+              AppColors.aiCardStart,
+              AppColors.aiCardEnd,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -181,7 +182,7 @@ class _StatsScreenState extends State<StatsScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'AI健康助手',
+                    AppStrings.aiAssistantCardTitle,
                     style: AppTheme.titleMedium.copyWith(
                       color: AppColors.white,
                       fontWeight: FontWeight.w700,
@@ -190,8 +191,8 @@ class _StatsScreenState extends State<StatsScreen>
                   const SizedBox(height: 2),
                   Text(
                     hasData
-                        ? '基于您的周期数据生成健康分析报告'
-                        : '记录数据后即可使用',
+                        ? AppStrings.aiAssistantCardSubtitle
+                        : AppStrings.aiAssistantCardNeedsData,
                     style: AppTheme.bodySmall.copyWith(
                       color: AppColors.white.withValues(alpha: 0.8),
                     ),
@@ -325,66 +326,27 @@ class _StatsScreenState extends State<StatsScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatCircle(
-                cycleData.averageCycleLength.toStringAsFixed(1),
-                AppStrings.avgCycleLabel,
-                AppStrings.days,
+              // E1 收敛：直接复用 common_widgets.StatCircle（与旧的
+              // 私有 _buildStatCircle 逐行等价：76px 圆 + 白字 + 20% 底）。
+              StatCircle(
+                value: cycleData.averageCycleLength.toStringAsFixed(1),
+                label: AppStrings.avgCycleLabel,
+                unit: AppStrings.days,
               ),
-              _buildStatCircle(
-                cycleData.averagePeriodLength.toStringAsFixed(1),
-                AppStrings.avgPeriodLabel,
-                AppStrings.days,
+              StatCircle(
+                value: cycleData.averagePeriodLength.toStringAsFixed(1),
+                label: AppStrings.avgPeriodLabel,
+                unit: AppStrings.days,
               ),
-              _buildStatCircle(
-                '${cycleData.totalCycles}',
-                AppStrings.recordCycles,
-                AppStrings.nDaysUnit,
+              StatCircle(
+                value: '${cycleData.totalCycles}',
+                label: AppStrings.recordCycles,
+                unit: AppStrings.nDaysUnit,
               ),
             ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatCircle(String value, String label, String unit) {
-    return Column(
-      children: [
-        Container(
-          width: 76,
-          height: 76,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.white.withValues(alpha: 0.2),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  value,
-                  style: AppTheme.headingLarge.copyWith(
-                    color: AppColors.white,
-                  ),
-                ),
-                Text(
-                  unit,
-                  style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppDimens.spacingSm),
-        Text(
-          label,
-          style: AppTheme.bodyMedium.copyWith(
-            color: AppColors.white.withValues(alpha: 0.9),
-          ),
-        ),
-      ],
     );
   }
 
@@ -485,8 +447,9 @@ class _StatsScreenState extends State<StatsScreen>
                   isSelected
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color:
-                      isSelected ? AppColors.brandPrimary : AppColors.grey,
+                  color: isSelected
+                      ? AppColors.brandPrimary
+                      : context.themeColors.onSurfaceTertiary,
                   size: 20,
                 ),
                 const SizedBox(width: AppDimens.spacingSm),
@@ -582,7 +545,7 @@ class _StatsScreenState extends State<StatsScreen>
                       const SizedBox(height: AppDimens.spacingXs),
                       if (windowStart != null && windowEnd != null)
                         Text(
-                          '预测窗口：${DateFormat('MM月dd日').format(windowStart)} ~ ${DateFormat('MM月dd日').format(windowEnd)}',
+                          '${AppStrings.predictionWindowPrefix}${DateFormat('MM月dd日').format(windowStart)} ~ ${DateFormat('MM月dd日').format(windowEnd)}',
                           style: AppTheme.bodySmall.copyWith(
                             color: context.themeColors.onSurfaceSecondary,
                           ),
@@ -603,10 +566,12 @@ class _StatsScreenState extends State<StatsScreen>
                         ),
                         child: Text(
                           daysUntil > 0
-                              ? '还有 $daysUntil 天'
+                              ? AppStrings.daysLeft
+                                  .replaceAll('{}', '$daysUntil')
                               : daysUntil == 0
-                                  ? '今天'
-                                  : '已过 ${-daysUntil} 天',
+                                  ? AppStrings.today_
+                                  : AppStrings.daysPassed
+                                      .replaceAll('{}', '${-daysUntil}'),
                           style: AppTheme.labelMedium.copyWith(
                             color: daysUntil >= 0
                                 ? AppColors.success
@@ -670,7 +635,9 @@ class _StatsScreenState extends State<StatsScreen>
                 ),
                 const Spacer(),
                 Text(
-                  AppStrings.recordsCount.replaceAll('{}', '${periods.length}'),
+                  // C2 口径统一：统计页历史按「周期」计数（仅已完成），
+                  // 与记录页「共 N 条记录」（含进行中）区分开。
+                  AppStrings.cyclesCount.replaceAll('{}', '${periods.length}'),
                   style: AppTheme.bodySmall.copyWith(
                     color: context.themeColors.onSurfaceTertiary,
                   ),
@@ -811,7 +778,7 @@ class _StatsScreenState extends State<StatsScreen>
               ),
               if (period.endDate != null)
                 Text(
-                  '至 ${DateFormat('yyyy年MM月dd日').format(period.endDate!)}',
+                  '${AppStrings.to} ${DateFormat('yyyy年MM月dd日').format(period.endDate!)}',
                   style: AppTheme.bodySmall.copyWith(
                     color: context.themeColors.onSurfaceSecondary,
                   ),
@@ -829,7 +796,8 @@ class _StatsScreenState extends State<StatsScreen>
               ),
               if (period.cycleLength != null)
                 Text(
-                  '周期 ${period.cycleLength} 天',
+                  AppStrings.cycleLengthN
+                      .replaceAll('{}', '${period.cycleLength}'),
                   style: AppTheme.bodySmall.copyWith(
                     color: context.themeColors.onSurfaceSecondary,
                   ),
