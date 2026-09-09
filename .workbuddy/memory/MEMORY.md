@@ -21,7 +21,7 @@
 - **State 方法禁用 context 参数遮蔽**：State 的辅助方法（如 `_handleStartPeriod`）不接收 `BuildContext context` 参数——参数名遮蔽 State.context 后 `mounted` 守卫失效，触发 use_build_context_synchronously
 - **小组件同步机制**（三代演进后的现状）：原生 `WidgetActionReceiver` 直接写 SQLite → `WidgetDataStore.setDataDirty(true)` → MethodChannel `dataChanged` 通知（前台即时）；App 恢复前台时 `checkDataDirty()` 兜底（后台时 MethodChannel 可能丢失）；`loadRecords(forceRefresh: true)` 会刷新数据库连接
 - **Git 铁律**：① 绝不使用 `git stash`（2026-09-08 曾因 stash 被中断导致对象库损坏）；② **定期推 origin 备份**（本次靠用户昨晚的推送才救回 104 个提交，当天未推送的 11 个提交对象丢失）；③ 多组独立改动拆分本地 commit
-- **Git 现状**：main = `8051eb4`（1.34.0+109，2026-09-08 晚，已推 origin 同步，ls-remote 确认）
+- **Git 现状**：main = `c92eda3`（1.37.0+116，2026-09-09 午，已推 origin 同步，ls-remote 确认）。⚠️ 教训：1.35~1.37 三个版本的工作曾长期滞留工作区未 commit（HEAD 一度停在 8051eb4），与数据丢失事故同型风险——**每完成一个版本验证必须立即 commit**，多版本叠加后无法按版本拆分可构建的独立 commit
 - **1.33.5 架构变化**：AI 报告缓存/聊天历史已迁出 PeriodProvider → `AiAssistantProvider`（settings key：ai_report_json / ai_chat_json 上限 50 条）；自动备份 → `BackupService` 单例（30s trailing 去抖，commitMutation 只 schedule）；编辑弹窗在 `widgets/period_edit_dialog.dart`、AI 报告卡片在 `widgets/report_cards.dart`
 - **1.33.5 依赖与构建链**：flutter_markdown_plus 1.0.12 / file_picker 12.2.0（pickFile，取消返回 null）/ share_plus 13.3.0（SharePlus.instance.share）/ flutter_local_notifications 22.3.0（全命名参数，uiLocalNotificationDateInterpretation 已删）/ timezone 0.11.1 / flutter_lints 6；**settings.gradle Kotlin 2.2.20 + AGP 8.9.1**（share_plus 13 metadata + androidx.core 1.18 硬性要求，回退旧版无法出包）
 - **诊断教训**：判断远程状态必须用 `git ls-remote` 直查，不能依赖本地 refs/remotes（refs 损坏/陈旧时会误判）；事发时 origin/main 曾短暂显示为陈旧的 21b3aaf，导致误报"历史全丢"
