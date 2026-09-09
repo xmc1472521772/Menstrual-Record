@@ -143,7 +143,8 @@ class _YearHeatmapState extends State<YearHeatmap> {
           onPressed: _year > 2020 ? () => _changeYear(-1) : null,
           icon: const Icon(Icons.chevron_left_rounded),
           iconSize: 20,
-          color: AppColors.inkSecondary,
+          // P0-5：改用主题语义色（原 inkSecondary 在深色卡上仅 2.80:1）。
+          color: context.themeColors.onSurfaceSecondary,
           visualDensity: VisualDensity.compact,
           constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
         ),
@@ -157,7 +158,8 @@ class _YearHeatmapState extends State<YearHeatmap> {
           onPressed: canGoNext ? () => _changeYear(1) : null,
           icon: const Icon(Icons.chevron_right_rounded),
           iconSize: 20,
-          color: AppColors.inkSecondary,
+          // P0-5：改用主题语义色（原 inkSecondary 在深色卡上仅 2.80:1）。
+          color: context.themeColors.onSurfaceSecondary,
           visualDensity: VisualDensity.compact,
           constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
         ),
@@ -378,7 +380,7 @@ class _YearHeatmapState extends State<YearHeatmap> {
     return Text(
       label,
       style: TextStyle(
-        fontSize: 9,
+        fontSize: AppTheme.micro.fontSize,
         color: color,
       ),
     );
@@ -588,7 +590,7 @@ class _YearHeatmapState extends State<YearHeatmap> {
         Text(
           '经量：',
           style: TextStyle(
-            fontSize: 10,
+            fontSize: AppTheme.caption.fontSize,
             color: themeColors.onSurfaceTertiary,
           ),
         ),
@@ -605,7 +607,7 @@ class _YearHeatmapState extends State<YearHeatmap> {
           Text(
             legendLabels[i],
             style: TextStyle(
-              fontSize: 10,
+              fontSize: AppTheme.caption.fontSize,
               color: themeColors.onSurfaceTertiary,
             ),
           ),
@@ -644,7 +646,7 @@ class _MonthLabelPainter extends CustomPainter {
       textPainter.text = TextSpan(
         text: label,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: AppTheme.caption.fontSize,
           color: textColor,
           fontFamily: AppTheme.fontFamily,
         ),

@@ -10,6 +10,7 @@ import '../constants/app_theme.dart';
 import '../utils/period_validation.dart';
 import 'add_record_calendar_page.dart';
 import '../widgets/period_edit_dialog.dart';
+import '../widgets/common_widgets.dart';
 
 /// 多选日历默认延展天数（X）的取值规则：
 /// 1) 已完成（已结束）的经期记录达到 3 条及以上（"足够多"，与
@@ -189,7 +190,8 @@ class _RecordScreenState extends State<RecordScreen> {
               ),
             ),
             SizedBox(
-              height: 36,
+              // P2-5：结束按钮统一 controlHeightSm(36)。
+              height: AppDimens.controlHeightSm,
               child: OutlinedButton(
                 onPressed: () async {
                   await provider.endPeriod(DateTime.now());
@@ -273,39 +275,22 @@ class _RecordScreenState extends State<RecordScreen> {
   /// 添加卡片只依赖本地状态（_startDate / _endDate），不需要监听 provider。
   /// 仅在回调里通过 [context.read] 取 provider，避免其在数据变化时随 Consumer 重建。
   Widget _buildAddCard() {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingLg),
-      decoration: BoxDecoration(
-        color: context.themeColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-        border: Border.all(color: AppColors.hairline),
+    // P1-1：卡片容器统一走 SectionCard。
+    return SectionCard(
+      title: AppStrings.addPeriodRecord,
+      titleTrailing: TextButton.icon(
+        onPressed: () =>
+            _showAddRecordDialog(context.read<PeriodProvider>()),
+        icon: const Icon(Icons.calendar_month_rounded, size: 16),
+        label: const Text(AppStrings.multiSelectCalendar),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.brandPrimary,
+          textStyle: AppTheme.labelMedium,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  AppStrings.addPeriodRecord,
-                  style: AppTheme.titleLarge.copyWith(
-                    color: context.themeColors.onSurface,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () =>
-                    _showAddRecordDialog(context.read<PeriodProvider>()),
-                icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                label: const Text(AppStrings.multiSelectCalendar),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.brandPrimary,
-                  textStyle: AppTheme.labelMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingSm),
           _buildDateRow(
             label: AppStrings.startDate,
             date: _startDate,
@@ -322,7 +307,8 @@ class _RecordScreenState extends State<RecordScreen> {
           const SizedBox(height: AppDimens.spacingLg),
           SizedBox(
             width: double.infinity,
-            height: 52,
+            // P2-5：主操作按钮统一 controlHeightLg(52)。
+            height: AppDimens.controlHeightLg,
             child: ElevatedButton(
               onPressed: _endDate == null
                   ? null
@@ -446,7 +432,12 @@ class _RecordScreenState extends State<RecordScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error),
+          // P0-7：显式指定纯白文字 —— 深色主题下 SnackBar 继承的浅米色
+          // 文字（#EDE7DE）在红底上仅 3.89:1，纯白为 5.40:1。
+          content: Text(
+            error,
+            style: AppTheme.bodyMedium.copyWith(color: AppColors.white),
+          ),
           backgroundColor: AppColors.error,
         ),
       );
@@ -478,7 +469,12 @@ class _RecordScreenState extends State<RecordScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error),
+          // P0-7：显式指定纯白文字 —— 深色主题下 SnackBar 继承的浅米色
+          // 文字（#EDE7DE）在红底上仅 3.89:1，纯白为 5.40:1。
+          content: Text(
+            error,
+            style: AppTheme.bodyMedium.copyWith(color: AppColors.white),
+          ),
           backgroundColor: AppColors.error,
         ),
       );
@@ -494,7 +490,11 @@ class _RecordScreenState extends State<RecordScreen> {
       setState(() => _lengthWarningConfirmed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$warning ${AppStrings.lengthWarningConfirm}'),
+          // P0-7：白字在警告黄 #D9A441 上仅 2.25:1，改用近黑字 6.67:1。
+          content: Text(
+            '$warning ${AppStrings.lengthWarningConfirm}',
+            style: AppTheme.bodyMedium.copyWith(color: AppColors.ink),
+          ),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -508,7 +508,11 @@ class _RecordScreenState extends State<RecordScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(success ? AppStrings.recordSaved : AppStrings.saveFailed),
+        // P0-7：两种底色（4.79 / 5.40）均配纯白，不继承主题文字色。
+        content: Text(
+          success ? AppStrings.recordSaved : AppStrings.saveFailed,
+          style: AppTheme.bodyMedium.copyWith(color: AppColors.white),
+        ),
         backgroundColor: success ? AppColors.brandPrimary : AppColors.error,
       ),
     );
@@ -569,6 +573,8 @@ class _RecordScreenState extends State<RecordScreen> {
           success
               ? AppStrings.savedNRecords.replaceAll('{}', '${ranges.length}')
               : AppStrings.saveFailed2,
+          // P0-7：两种底色（6.04 / 5.40）均配纯白。
+          style: AppTheme.bodyMedium.copyWith(color: AppColors.white),
         ),
         backgroundColor: success ? AppColors.success : AppColors.error,
       ),
@@ -579,60 +585,29 @@ class _RecordScreenState extends State<RecordScreen> {
   Widget _buildHistoryCard(PeriodProvider provider) {
     final records = provider.records;
 
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.spacingLg),
-      decoration: BoxDecoration(
-        color: context.themeColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-        border: Border.all(color: AppColors.hairline),
-      ),
+    // P1-1：卡片容器统一走 SectionCard（内部已是 surfaceCard + 主题描边）。
+    return SectionCard(
+      title: AppStrings.historyRecords,
+      titleTrailing: records.isEmpty
+          ? null
+          : Text(
+              AppStrings.recordsCount.replaceAll('{}', '${records.length}'),
+              // P0-4：计数属承载信息，走 secondary。
+              style: AppTheme.bodySmall.copyWith(
+                color: context.themeColors.onSurfaceSecondary,
+              ),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  AppStrings.historyRecords,
-                  style: AppTheme.titleLarge.copyWith(
-                    color: context.themeColors.onSurface,
-                  ),
-                ),
-              ),
-              if (records.isNotEmpty)
-                Text(
-                  AppStrings.recordsCount
-                      .replaceAll('{}', '${records.length}'),
-                  style: AppTheme.bodySmall.copyWith(
-                    color: context.themeColors.onSurfaceTertiary,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: AppDimens.spacingSm),
-          if (records.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: AppDimens.spacing2xl,
-              ),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.history_rounded,
-                      size: 36,
-                      color: context.themeColors.onSurfaceTertiary,
-                    ),
-                    const SizedBox(height: AppDimens.spacingSm),
-                    Text(
-                      AppStrings.noRecords,
-                      style: AppTheme.bodySmall.copyWith(
-                        color: context.themeColors.onSurfaceTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          if (provider.isLoading && records.isEmpty)
+            // P2-6：加载中的短暂窗口用骨架占位，避免白屏直跳。
+            const SkeletonList()
+          else if (records.isEmpty)
+            // P1-2：历史空状态统一走公共 EmptyState。
+            const EmptyState(
+              icon: Icons.history_rounded,
+              message: AppStrings.noRecords,
             )
           else
             // 不使用 ListView.separated + shrinkWrap（shrinkWrap 会测量全部子项，
@@ -691,7 +666,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   textScaler: TextScaler.noScaling,
                   style: TextStyle(
                     color: context.themeColors.onSurfaceSecondary,
-                    fontSize: 10,
+                    fontSize: AppTheme.caption.fontSize,
                     height: 1.1,
                   ),
                 ),
@@ -702,7 +677,7 @@ class _RecordScreenState extends State<RecordScreen> {
                     color: isOngoing
                         ? AppColors.brandPrimary
                         : context.themeColors.onSurface,
-                    fontSize: 16,
+                    fontSize: AppTheme.bodyLarge.fontSize,
                     fontWeight: FontWeight.w600,
                     height: 1.15,
                   ),
@@ -755,7 +730,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 AppStrings.ongoing,
                 style: AppTheme.labelMedium.copyWith(
                   color: AppColors.brandPrimary,
-                  fontSize: 11,
+                  fontSize: AppTheme.overline.fontSize,
                 ),
               ),
             ),
@@ -793,13 +768,14 @@ class _RecordScreenState extends State<RecordScreen> {
                 value: 'delete',
                 child: Row(
                   children: [
-                    const Icon(Icons.delete_outline_rounded,
-                        color: AppColors.error, size: 18),
+                    // P0-6：改用主题语义色 destructive（深色下 6.61:1）。
+                    Icon(Icons.delete_outline_rounded,
+                        color: context.themeColors.destructive, size: 18),
                     const SizedBox(width: AppDimens.spacingSm),
                     Text(
                       AppStrings.deleteRecordLabel,
                       style: AppTheme.bodyMedium.copyWith(
-                        color: AppColors.error,
+                        color: context.themeColors.destructive,
                       ),
                     ),
                   ],
@@ -833,7 +809,11 @@ class _RecordScreenState extends State<RecordScreen> {
             },
             child: Text(
               AppStrings.delete,
-              style: AppTheme.labelLarge.copyWith(color: AppColors.error),
+              style: AppTheme.labelLarge.copyWith(
+                // P0-6：深色下 destructive 提亮为 #E8908C，
+                // 原硬编码 error 仅 2.92:1。
+                color: context.themeColors.destructive,
+              ),
             ),
           ),
         ],

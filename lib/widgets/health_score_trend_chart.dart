@@ -72,7 +72,7 @@ class HealthScoreTrendChart extends StatelessWidget {
                 Text(
                   '$latest',
                   style: TextStyle(
-                    fontSize: 36,
+                    fontSize: AppTheme.displayXl.fontSize,
                     fontWeight: FontWeight.w700,
                     color: context.themeColors.onSurface,
                     height: 1.0,
@@ -82,7 +82,7 @@ class HealthScoreTrendChart extends StatelessWidget {
                 Text(
                   '分',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTheme.bodyMedium.fontSize,
                     color: context.themeColors.onSurfaceSecondary,
                   ),
                 ),
@@ -97,7 +97,7 @@ class HealthScoreTrendChart extends StatelessWidget {
                 Text(
                   '${diff >= 0 ? '+' : ''}$diff',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTheme.bodyMedium.fontSize,
                     fontWeight: FontWeight.w600,
                     color: diffColor,
                   ),
@@ -116,7 +116,7 @@ class HealthScoreTrendChart extends StatelessWidget {
                   child: Text(
                     '平均 $avg 分',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTheme.bodySmall.fontSize,
                       color: context.themeColors.onSurfaceSecondary,
                       fontWeight: FontWeight.w500,
                     ),
@@ -151,14 +151,14 @@ class HealthScoreTrendChart extends StatelessWidget {
                   Text(
                     formatChartDate(history.first.generatedAt),
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTheme.overline.fontSize,
                       color: context.themeColors.onSurfaceTertiary,
                     ),
                   ),
                   Text(
                     formatChartDate(history.last.generatedAt),
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTheme.overline.fontSize,
                       color: context.themeColors.onSurfaceTertiary,
                     ),
                   ),

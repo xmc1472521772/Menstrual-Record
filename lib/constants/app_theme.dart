@@ -49,37 +49,6 @@ class AppTheme {
         ),
       ),
 
-      // NavigationBar — floating pill, terracotta fill on the active item
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppThemeColors.light.surfaceCard,
-        surfaceTintColor: AppColors.transparent,
-        elevation: AppDimens.elevationNone,
-        height: 62,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: AppColors.brandPrimary,
-        indicatorShape: const StadiumBorder(),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppColors.white, size: 22);
-          }
-          return const IconThemeData(color: AppColors.inkTertiary, size: 22);
-        }),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brandPrimary,
-            );
-          }
-          return const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: AppColors.inkTertiary,
-          );
-        }),
-      ),
-
       // Card — hairline border instead of a shadow, per the new language
       cardTheme: CardThemeData(
         color: AppThemeColors.light.surfaceCard,
@@ -401,10 +370,12 @@ class AppTheme {
           horizontal: AppDimens.spacingLg,
           vertical: AppDimens.spacingMd,
         ),
+        // P0-5：深色 hint 不再复用浅色固定值 inkTertiary（#A39A90），
+        // 改用深色三级语义色（= AppThemeColors.dark.onSurfaceTertiary）。
         hintStyle: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: AppColors.inkTertiary,
+          color: Color(0xFF948B82),
         ),
       ),
 
@@ -540,5 +511,47 @@ class AppTheme {
     fontSize: 12,
     fontWeight: FontWeight.w400,
     height: 1.3,
+  );
+
+  /// 辅助说明（10px）。仅限 placeholder / 计数标注等弱信息。
+  static const TextStyle caption = TextStyle(
+    fontSize: 10,
+    fontWeight: FontWeight.w500,
+    height: 1.4,
+  );
+
+  /// 上标小字（11px）。标签、导航微标。
+  static const TextStyle overline = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    height: 1.4,
+  );
+
+  /// 脚注（13px）。介于 bodySmall 与 bodyMedium 之间的次级正文。
+  static const TextStyle footnote = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+  );
+
+  /// 微标（9px）。仅限图表坐标轴 / 热力图月份等极弱辅助标注。
+  static const TextStyle micro = TextStyle(
+    fontSize: 9,
+    fontWeight: FontWeight.w400,
+    height: 1.2,
+  );
+
+  /// 超大展示数字（36px）。图表中心重价值（周期天数 / 经期天数等）。
+  static const TextStyle displayXl = TextStyle(
+    fontSize: 36,
+    fontWeight: FontWeight.w700,
+    height: 1.1,
+  );
+
+  /// 特大展示数字（56px）。AI 报告首屏健康总分等核心指标。
+  static const TextStyle display2xl = TextStyle(
+    fontSize: 56,
+    fontWeight: FontWeight.w700,
+    height: 1.1,
   );
 }

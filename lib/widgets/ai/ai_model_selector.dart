@@ -87,7 +87,7 @@ class AiModelSelector extends StatelessWidget {
                   style: AppTheme.labelMedium.copyWith(
                     color: AppColors.brandPrimary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
+                    fontSize: AppTheme.bodySmall.fontSize,
                   ),
                 );
               },

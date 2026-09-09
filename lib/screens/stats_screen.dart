@@ -71,6 +71,12 @@ class _StatsScreenState extends State<StatsScreen>
             child) {
           final cycleData = periodProvider.cycleData;
 
+          // P2-6：首屏 / 恢复备份等加载窗口用骨架占位，加载完成后再判空态。
+          if (periodProvider.isLoading &&
+              (cycleData == null || cycleData.totalCycles == 0)) {
+            return const SkeletonList();
+          }
+
           if (cycleData == null || cycleData.totalCycles == 0) {
             return _buildEmptyState(context);
           }
@@ -193,8 +199,10 @@ class _StatsScreenState extends State<StatsScreen>
                     hasData
                         ? AppStrings.aiAssistantCardSubtitle
                         : AppStrings.aiAssistantCardNeedsData,
+                    // P0-2：AI 卡加深后（P0-3）副标题仍需 100% 白，
+                    // 0.8 白在紫底上仅 3.01:1。
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppColors.white.withValues(alpha: 0.8),
+                      color: AppColors.white,
                     ),
                   ),
                 ],
@@ -202,7 +210,7 @@ class _StatsScreenState extends State<StatsScreen>
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.white.withValues(alpha: 0.7),
+              color: AppColors.white,
               size: 24,
             ),
           ],
@@ -266,40 +274,12 @@ class _StatsScreenState extends State<StatsScreen>
 
   // ─── Empty state ────────────────────────────────────────────────
 
+  // P1-2：空状态复用公共组件，删除本页的等价私有实现。
   Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppColors.brandSoft,
-              borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-            ),
-            child: const Icon(
-              Icons.bar_chart,
-              size: 40,
-              color: AppColors.brandPrimary,
-            ),
-          ),
-          const SizedBox(height: AppDimens.spacingXl),
-          Text(
-            AppStrings.noStatsData,
-            style: AppTheme.headingSmall.copyWith(
-              color: context.themeColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: AppDimens.spacingSm),
-          Text(
-            AppStrings.recordToViewStatsData,
-            style: AppTheme.bodyMedium.copyWith(
-              color: context.themeColors.onSurfaceTertiary,
-            ),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.bar_chart,
+      message: AppStrings.noStatsData,
+      subtitle: AppStrings.recordToViewStatsData,
     );
   }
 
@@ -309,8 +289,9 @@ class _StatsScreenState extends State<StatsScreen>
     return Container(
       padding: const EdgeInsets.all(AppDimens.spacingXl),
       decoration: BoxDecoration(
+        // P0-1：与首页状态卡统一为「深→中」渐变（末端白字 4.79:1）。
         gradient: const LinearGradient(
-          colors: [AppColors.brandPrimary, AppColors.brandLight],
+          colors: [AppColors.heroGradientStart, AppColors.heroGradientEnd],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -357,57 +338,52 @@ class _StatsScreenState extends State<StatsScreen>
     SettingsProvider settingsProvider,
     PeriodProvider periodProvider,
   ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimens.spacingLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              AppStrings.predictionAlgorithm,
-              style: AppTheme.titleLarge.copyWith(
-                color: context.themeColors.onSurface,
-              ),
-            ),
-            const SizedBox(height: AppDimens.spacingMd),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _buildAlgorithmOption(
-                      context,
-                      'simple',
-                      AppStrings.simpleAverage,
-                      AppStrings.basedOnAllHistory,
-                      settingsProvider,
-                      periodProvider,
-                    ),
+    // P1-1：卡片容器统一走 SectionCard（surfaceCard + divider 描边 +
+    // radiusLg），与全应用唯一一套卡片语言对齐。
+    return SectionCard(
+      title: AppStrings.predictionAlgorithm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _buildAlgorithmOption(
+                    context,
+                    'simple',
+                    AppStrings.simpleAverage,
+                    AppStrings.basedOnAllHistory,
+                    settingsProvider,
+                    periodProvider,
                   ),
-                  const SizedBox(width: AppDimens.spacingMd),
-                  Expanded(
-                    child: _buildAlgorithmOption(
-                      context,
-                      'adaptive',
-                      AppStrings.weightedAverage,
-                      AppStrings.weightedMoreAccurate,
-                      settingsProvider,
-                      periodProvider,
-                    ),
+                ),
+                const SizedBox(width: AppDimens.spacingMd),
+                Expanded(
+                  child: _buildAlgorithmOption(
+                    context,
+                    'adaptive',
+                    AppStrings.weightedAverage,
+                    AppStrings.weightedMoreAccurate,
+                    settingsProvider,
+                    periodProvider,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: AppDimens.spacingSm),
-            Text(
-              AppStrings.weightedDescription,
-              style: AppTheme.bodySmall.copyWith(
-                color: context.themeColors.onSurfaceTertiary,
-                height: 1.4,
-              ),
+          ),
+          const SizedBox(height: AppDimens.spacingSm),
+          Text(
+            AppStrings.weightedDescription,
+            // P0-4：承载信息的说明文字走 secondary（白卡 5.64:1），
+            // tertiary 仅留给 placeholder / disabled。
+            style: AppTheme.bodySmall.copyWith(
+              color: context.themeColors.onSurfaceSecondary,
+              height: 1.4,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -494,41 +470,29 @@ class _StatsScreenState extends State<StatsScreen>
       PredictionMode.simple => AppStrings.predictionModeSimple,
     };
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimens.spacingLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  AppStrings.predictedNextPeriod,
-                  style: AppTheme.titleLarge.copyWith(
-                    color: context.themeColors.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.spacingSm,
-                    vertical: AppDimens.spacingXs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandSoft,
-                    borderRadius:
-                        BorderRadius.circular(AppDimens.radiusFull),
-                  ),
-                  child: Text(
-                    modeLabel,
-                    style: AppTheme.labelMedium.copyWith(
-                      color: AppColors.brandDeep,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppDimens.spacingMd),
+    // P1-1：同算法卡，统一走 SectionCard；徽章走 titleTrailing。
+    return SectionCard(
+      title: AppStrings.predictedNextPeriod,
+      titleTrailing: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.spacingSm,
+          vertical: AppDimens.spacingXs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.brandSoft,
+          borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+        ),
+        child: Text(
+          modeLabel,
+          style: AppTheme.labelMedium.copyWith(
+            color: AppColors.brandDeep,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: AppDimens.spacingXs),
             if (predictedDate != null && daysUntil != null) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -596,16 +560,16 @@ class _StatsScreenState extends State<StatsScreen>
                   ),
                 ],
               ),
-            ] else ...[
-              Text(
-                AppStrings.needMoreDataToPredict,
-                style: AppTheme.bodyMedium.copyWith(
-                  color: context.themeColors.onSurfaceTertiary,
-                ),
+          ] else ...[
+            Text(
+              AppStrings.needMoreDataToPredict,
+              // P0-4：说明文字走 secondary。
+              style: AppTheme.bodyMedium.copyWith(
+                color: context.themeColors.onSurfaceSecondary,
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -619,32 +583,20 @@ class _StatsScreenState extends State<StatsScreen>
         periods.take(_displayCount.clamp(0, periods.length)).toList();
     final hasMore = _displayCount < periods.length;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimens.spacingLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  AppStrings.historyRecords,
-                  style: AppTheme.titleLarge.copyWith(
-                    color: context.themeColors.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  // C2 口径统一：统计页历史按「周期」计数（仅已完成），
-                  // 与记录页「共 N 条记录」（含进行中）区分开。
-                  AppStrings.cyclesCount.replaceAll('{}', '${periods.length}'),
-                  style: AppTheme.bodySmall.copyWith(
-                    color: context.themeColors.onSurfaceTertiary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppDimens.spacingMd),
+    return SectionCard(
+      title: AppStrings.historyRecords,
+      titleTrailing: Text(
+        // C2 口径统一：统计页历史按「周期」计数（仅已完成），
+        // 与记录页「共 N 条记录」（含进行中）区分开。
+        // P0-4：计数属承载信息，走 secondary 而非 tertiary。
+        AppStrings.cyclesCount.replaceAll('{}', '${periods.length}'),
+        style: AppTheme.bodySmall.copyWith(
+          color: context.themeColors.onSurfaceSecondary,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             if (periods.isEmpty)
               Container(
                 width: double.infinity,
@@ -682,7 +634,6 @@ class _StatsScreenState extends State<StatsScreen>
             ],
           ],
         ),
-      ),
     );
   }
 

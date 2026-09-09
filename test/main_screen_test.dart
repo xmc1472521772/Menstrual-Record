@@ -83,8 +83,8 @@ void main() {
   testWidgets('D4：首页通知按钮经注入回调跳转到设置页', (tester) async {
     await pumpMainScreen(tester);
 
-    // 首页 AppBar 的通知按钮（tooltip = 经期提醒）
-    await tester.tap(find.byTooltip(AppStrings.notificationTitle));
+    // 首页 AppBar 的通知按钮（tooltip = 打开提醒设置）
+    await tester.tap(find.byTooltip(AppStrings.notificationTooltip));
     await tester.pumpAndSettle();
 
     // 设置页置顶（当前 tab），其周期参数区块正常渲染

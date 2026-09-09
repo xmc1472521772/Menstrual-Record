@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
+import '../constants/app_theme.dart';
+import '../constants/app_motion.dart';
 import 'home_screen.dart';
 import 'record_screen.dart';
 import 'stats_screen.dart';
@@ -134,7 +136,7 @@ class _GlassNavBar extends StatelessWidget {
                 children: [
                   // ─── 滑块指示器（AnimatedPositioned 精确定位）───
                   AnimatedPositioned(
-                    duration: const Duration(milliseconds: 280),
+                    duration: AppMotion.slow,
                     curve: Curves.easeOutCubic,
                     left: sliderLeft,
                     top: 10,
@@ -208,7 +210,7 @@ class _NavItemView extends StatelessWidget {
     final inactiveColor = context.themeColors.onSurfaceTertiary;
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
+      duration: AppMotion.base,
       child: selected
           ? Column(
               key: const ValueKey('active'),
@@ -218,8 +220,8 @@ class _NavItemView extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   item.label,
-                  style: const TextStyle(
-                    fontSize: 10,
+                  style: TextStyle(
+                    fontSize: AppTheme.caption.fontSize,
                     fontWeight: FontWeight.w600,
                     color: activeColor,
                   ),
@@ -235,7 +237,7 @@ class _NavItemView extends StatelessWidget {
                 Text(
                   item.label,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: AppTheme.caption.fontSize,
                     fontWeight: FontWeight.w500,
                     color: inactiveColor,
                   ),

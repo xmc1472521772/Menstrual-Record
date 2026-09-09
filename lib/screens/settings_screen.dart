@@ -9,6 +9,7 @@ import '../providers/settings_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../widgets/common_widgets.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -83,14 +84,33 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  /// 分区标题。
+  ///
+  /// P1-7：原实现为 18px/600 + 品牌红，比卡片内标题（16px/600）更大更亮，
+  /// 造成"分组名压过内容"的层级倒置。改为 14px/600 + 次级文字色，
+  /// 并用左侧 3px 品牌色竖条保留分组标识感（不靠字号抢视觉）。
   Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppDimens.spacingMd),
-      child: Text(
-        title,
-        style: AppTheme.headingSmall.copyWith(
-          color: AppColors.brandPrimary,
-        ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          const SizedBox(width: AppDimens.spacingSm),
+          Text(
+            title,
+            style: AppTheme.labelLarge.copyWith(
+              color: context.themeColors.onSurfaceSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -163,67 +183,66 @@ class SettingsScreen extends StatelessWidget {
     required int max,
     required ValueChanged<double> onChanged,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppDimens.spacingLg,
-          AppDimens.spacingLg,
-          AppDimens.spacingLg,
-          AppDimens.spacingMd,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppColors.brandSoft,
-                    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-                  ),
-                  child: Icon(icon, color: AppColors.brandPrimary, size: 16),
+    // P1-1：卡片容器统一走 SectionCard。
+    return SectionCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingLg,
+        AppDimens.spacingMd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: AppColors.brandSoft,
+                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
                 ),
-                const SizedBox(width: AppDimens.spacingSm),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: AppTheme.titleMedium.copyWith(
-                      color: context.themeColors.onSurface,
-                    ),
-                  ),
-                ),
-                Text(
-                  '$value 天',
+                child: Icon(icon, color: AppColors.brandPrimary, size: 16),
+              ),
+              const SizedBox(width: AppDimens.spacingSm),
+              Expanded(
+                child: Text(
+                  title,
                   style: AppTheme.titleMedium.copyWith(
-                    color: AppColors.brandPrimary,
-                    fontWeight: FontWeight.w600,
+                    color: context.themeColors.onSurface,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: AppDimens.spacingSm),
-            Slider(
-              value: value.toDouble(),
-              min: min.toDouble(),
-              max: max.toDouble(),
-              divisions: max - min,
-              label: '$value 天',
-              activeColor: AppColors.brandPrimary,
-              // 走主题语义色：浅色下等价于旧 tile 固定值，
-              // 深色下避免浅米色轨道突兀地盖在深色卡片上。
-              inactiveColor: context.themeColors.surfaceTile,
-              onChanged: onChanged,
-            ),
-          ],
-        ),
+              ),
+              Text(
+                '$value 天',
+                style: AppTheme.titleMedium.copyWith(
+                  color: AppColors.brandPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppDimens.spacingSm),
+          Slider(
+            value: value.toDouble(),
+            min: min.toDouble(),
+            max: max.toDouble(),
+            divisions: max - min,
+            label: '$value 天',
+            activeColor: AppColors.brandPrimary,
+            // 走主题语义色：浅色下等价于旧 tile 固定值，
+            // 深色下避免浅米色轨道突兀地盖在深色卡片上。
+            inactiveColor: context.themeColors.surfaceTile,
+            onChanged: onChanged,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildReminderDaysSetting(
-      BuildContext context, SettingsProvider provider, PeriodProvider periodProvider) {
+  Widget _buildReminderDaysSetting(BuildContext context,
+      SettingsProvider provider, PeriodProvider periodProvider) {
     return _buildSliderSetting(
       context: context,
       title: AppStrings.reminderDays,
@@ -242,57 +261,61 @@ class SettingsScreen extends StatelessWidget {
   Widget _buildReminderHourSetting(BuildContext context,
       SettingsProvider provider, PeriodProvider periodProvider) {
     final hour = provider.reminderHour;
-    final timeStr =
-        '${hour.toString().padLeft(2, '0')}:00';
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.spacingLg,
-          vertical: AppDimens.spacingSm,
-        ),
-        leading: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: AppColors.brandSoft,
-            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+    final timeStr = '${hour.toString().padLeft(2, '0')}:00';
+    // P1-1：ListTile 自带内边距，卡片 padding 传 0 避免双重留白。
+    return SectionCard(
+      padding: EdgeInsets.zero,
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppDimens.spacingLg,
+            vertical: AppDimens.spacingSm,
           ),
-          child: const Icon(
-            Icons.access_time_rounded,
-            color: AppColors.brandPrimary,
-            size: 16,
-          ),
-        ),
-        title: Text(
-          AppStrings.reminderTime,
-          style: AppTheme.titleMedium.copyWith(
-            color: context.themeColors.onSurface,
-          ),
-        ),
-        subtitle: Text(
-          timeStr,
-          style: AppTheme.bodyMedium.copyWith(
-            color: context.themeColors.onSurfaceSecondary,
-          ),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppDimens.spacingMd,
-            vertical: AppDimens.spacingXs,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.brandSoft,
-            borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-          ),
-          child: Text(
-            timeStr,
-            style: AppTheme.titleMedium.copyWith(
+          leading: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.brandSoft,
+              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+            ),
+            child: const Icon(
+              Icons.access_time_rounded,
               color: AppColors.brandPrimary,
-              fontWeight: FontWeight.w600,
+              size: 16,
             ),
           ),
+          title: Text(
+            AppStrings.reminderTime,
+            style: AppTheme.titleMedium.copyWith(
+              color: context.themeColors.onSurface,
+            ),
+          ),
+          subtitle: Text(
+            timeStr,
+            style: AppTheme.bodyMedium.copyWith(
+              color: context.themeColors.onSurfaceSecondary,
+            ),
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppDimens.spacingMd,
+              vertical: AppDimens.spacingXs,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.brandSoft,
+              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+            ),
+            child: Text(
+              timeStr,
+              style: AppTheme.titleMedium.copyWith(
+                color: AppColors.brandPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          onTap: () => _pickReminderTime(context, provider, periodProvider),
         ),
-        onTap: () => _pickReminderTime(context, provider, periodProvider),
       ),
     );
   }
@@ -339,12 +362,13 @@ class SettingsScreen extends StatelessWidget {
                 color: themeColors.onSurfaceSecondary,
               ),
               cancelButtonStyle: ButtonStyle(
-                foregroundColor: WidgetStateProperty.all(
-                    themeColors.onSurfaceSecondary),
+                foregroundColor:
+                    WidgetStateProperty.all(themeColors.onSurfaceSecondary),
                 textStyle: WidgetStateProperty.all(AppTheme.labelLarge),
               ),
               confirmButtonStyle: ButtonStyle(
-                foregroundColor: WidgetStateProperty.all(AppColors.brandPrimary),
+                foregroundColor:
+                    WidgetStateProperty.all(AppColors.brandPrimary),
                 textStyle: WidgetStateProperty.all(
                     AppTheme.labelLarge.copyWith(fontWeight: FontWeight.w600)),
               ),
@@ -428,9 +452,9 @@ class SettingsScreen extends StatelessWidget {
         icon: const Icon(Icons.upload, size: 20),
         label: const Text(AppStrings.exportData),
         style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(
-            vertical: AppDimens.spacingLg,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingXl),
+          // P2-5：主操作按钮统一高度（52dp），与记录页主按钮一致。
+          fixedSize: Size.fromHeight(AppDimens.controlHeightLg),
         ),
       ),
     );
@@ -444,9 +468,9 @@ class SettingsScreen extends StatelessWidget {
         icon: const Icon(Icons.download, size: 20),
         label: const Text(AppStrings.importData),
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(
-            vertical: AppDimens.spacingLg,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingXl),
+          // P2-5：次操作按钮统一高度（52dp），与主操作按钮一致。
+          fixedSize: Size.fromHeight(AppDimens.controlHeightLg),
         ),
       ),
     );
@@ -461,9 +485,9 @@ class SettingsScreen extends StatelessWidget {
         icon: const Icon(Icons.history, size: 20),
         label: const Text(AppStrings.restoreBackup),
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(
-            vertical: AppDimens.spacingLg,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingXl),
+          // P2-5：次操作按钮统一高度（52dp），与主操作按钮一致。
+          fixedSize: Size.fromHeight(AppDimens.controlHeightLg),
         ),
       ),
     );
@@ -552,8 +576,8 @@ class SettingsScreen extends StatelessWidget {
         if (context.mounted) {
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             SnackBar(
-              content:
-                  Text(success ? AppStrings.importSuccess : AppStrings.importError),
+              content: Text(
+                  success ? AppStrings.importSuccess : AppStrings.importError),
             ),
           );
         }
@@ -610,8 +634,7 @@ class SettingsScreen extends StatelessWidget {
                 height: 32,
                 decoration: BoxDecoration(
                   color: AppColors.brandSoft,
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.radiusSm),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
                 ),
                 child: const Icon(
                   Icons.history_rounded,
@@ -642,8 +665,7 @@ class SettingsScreen extends StatelessWidget {
                 final isLatest = index == 0;
                 // 解析文件名中的日期时间
                 // 格式: auto_backup_20260907_143052.json
-                final rawName =
-                    file.path.split(RegExp(r'[/\\]')).last;
+                final rawName = file.path.split(RegExp(r'[/\\]')).last;
                 final dateStr = rawName
                     .replaceAll('auto_backup_', '')
                     .replaceAll('.json', '');
@@ -680,12 +702,11 @@ class SettingsScreen extends StatelessWidget {
                       color: isLatest
                           ? AppColors.brandSoft.withValues(alpha: 0.5)
                           : Colors.transparent,
-                      borderRadius:
-                          BorderRadius.circular(AppDimens.radiusSm),
+                      borderRadius: BorderRadius.circular(AppDimens.radiusSm),
                       border: isLatest
                           ? Border.all(
-                              color: AppColors.brandPrimary
-                                  .withValues(alpha: 0.2),
+                              color:
+                                  AppColors.brandPrimary.withValues(alpha: 0.2),
                             )
                           : null,
                     ),
@@ -725,7 +746,8 @@ class SettingsScreen extends StatelessWidget {
                                       color: isLatest
                                           ? AppColors.brandPrimary
                                               .withValues(alpha: 0.8)
-                                          : context.themeColors.onSurfaceSecondary,
+                                          : context
+                                              .themeColors.onSurfaceSecondary,
                                     ),
                                   ),
                                   const Spacer(),
@@ -737,17 +759,12 @@ class SettingsScreen extends StatelessWidget {
                                       ),
                                       decoration: BoxDecoration(
                                         color: AppColors.brandPrimary,
-                                        borderRadius:
-                                            BorderRadius.circular(
-                                                AppDimens.radiusFull),
+                                        borderRadius: BorderRadius.circular(
+                                            AppDimens.radiusFull),
                                       ),
                                       child: const Text(
                                         AppStrings.latestBadge,
-                                        style: TextStyle(
-                                          color: AppColors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                        style: AppTheme.caption,
                                       ),
                                     ),
                                 ],
@@ -773,8 +790,7 @@ class SettingsScreen extends StatelessWidget {
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               style: TextButton.styleFrom(
-                foregroundColor:
-                    context.themeColors.onSurfaceSecondary,
+                foregroundColor: context.themeColors.onSurfaceSecondary,
                 textStyle: AppTheme.labelLarge,
               ),
               child: const Text(AppStrings.cancel),
@@ -791,8 +807,8 @@ class SettingsScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-            content:
-                Text(success ? AppStrings.backupRestored : AppStrings.restoreFailed),
+            content: Text(
+                success ? AppStrings.backupRestored : AppStrings.restoreFailed),
           ),
         );
       }
@@ -800,8 +816,7 @@ class SettingsScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-              content:
-                  Text(AppStrings.restoreFailed.replaceAll('{}', '$e'))),
+              content: Text(AppStrings.restoreFailed.replaceAll('{}', '$e'))),
         );
       }
     }

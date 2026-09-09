@@ -7,8 +7,10 @@ import '../models/cycle_data.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../constants/app_motion.dart';
 import '../utils/date_utils.dart';
 import '../widgets/calendar/calendar_core.dart';
+import '../widgets/common_widgets.dart';
 
 class HomeScreen extends StatefulWidget {
   /// 跳转到设置页的回调（D4 解耦）：由 MainScreen 以构造参数注入，
@@ -240,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 icon: const Icon(Icons.notifications_none_rounded, size: 22),
                 color: context.themeColors.onSurface,
-                tooltip: AppStrings.notificationTitle,
+                tooltip: AppStrings.notificationTooltip,
               ),
               const SizedBox(width: AppDimens.spacingSm),
             ],
@@ -258,11 +260,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   backgroundColor: AppColors.brandPrimary,
                   foregroundColor: AppColors.white,
                   elevation: AppDimens.elevationLow,
-                  child: const Text(
+                  child: Text(
                     AppStrings.todayButton,
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 14,
+                      fontSize: AppTheme.bodyMedium.fontSize,
                     ),
                   ),
                 ),
@@ -284,20 +286,22 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline_rounded,
-                  size: 48, color: AppColors.error),
+              // P0-6：改用主题语义色 destructive（深色下 6.61:1，
+              // 原硬编码 AppColors.error 在深色卡上仅 2.92:1）。
+              Icon(Icons.error_outline_rounded,
+                  size: 48, color: context.themeColors.destructive),
               const SizedBox(height: AppDimens.spacingMd),
               Text(
                 provider.lastError!,
                 textAlign: TextAlign.center,
                 style: AppTheme.bodyMedium.copyWith(
-                  color: AppColors.error,
+                  color: context.themeColors.destructive,
                 ),
               ),
               const SizedBox(height: AppDimens.spacingLg),
               ElevatedButton(
                 onPressed: () => provider.loadRecords(),
-                child: const Text(AppStrings.retry),
+                child: Text(AppStrings.retry),
               ),
             ],
           ),
@@ -371,8 +375,9 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(AppDimens.spacingXl),
       decoration: BoxDecoration(
+        // P0-1：渐变由「中→浅」改为「深→中」，末端白字 3.21 → 4.79:1。
         gradient: const LinearGradient(
-          colors: [AppColors.brandPrimary, AppColors.brandLight],
+          colors: [AppColors.heroGradientStart, AppColors.heroGradientEnd],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -449,16 +454,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // P0-2：渐变底上的文字/图标一律 100% 白，
+                            // 层级由字号与字重承担（0.7 白仅 2.34:1）。
                             Icon(
                               Icons.expand_more_rounded,
                               size: 14,
-                              color: AppColors.white.withValues(alpha: 0.7),
+                              color: AppColors.white,
                             ),
                             const SizedBox(width: AppDimens.spacingXs),
                             Text(
                               AppStrings.heroStatsExpand,
                               style: AppTheme.labelMedium.copyWith(
-                                color: AppColors.white.withValues(alpha: 0.7),
+                                color: AppColors.white,
                               ),
                             ),
                           ],
@@ -497,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Icon(
                               Icons.expand_less_rounded,
                               size: 16,
-                              color: AppColors.white.withValues(alpha: 0.7),
+                              color: AppColors.white,
                             ),
                           ],
                         ),
@@ -542,8 +549,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Text(
               AppStrings.todayFlow,
+              // P0-2：0.8 白在渐变末端仅 2.62:1，收敛为 100% 白。
               style: AppTheme.labelMedium.copyWith(
-                color: AppColors.white.withValues(alpha: 0.8),
+                color: AppColors.white,
               ),
             ),
           ),
@@ -585,13 +593,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text(
                         label,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: AppTheme.footnote.fontSize,
+                          // P0-2：未选中态改由容器底色（0.08 vs 0.28 白）
+                          // 与字重区分，文字统一 100% 白保证可读性。
                           fontWeight: isSelected
                               ? FontWeight.w700
                               : FontWeight.w500,
-                          color: isSelected
-                              ? AppColors.white
-                              : AppColors.white.withValues(alpha: 0.7),
+                          color: AppColors.white,
                         ),
                       ),
                     ),
@@ -610,8 +618,10 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           label,
+          // P0-2：均值标签原为 0.75 白（2.48:1），改 100% 白；
+          // 与下方数值的层级由 12px/400 对 16px/600 的字号字重承担。
           style: AppTheme.bodySmall.copyWith(
-            color: AppColors.white.withValues(alpha: 0.75),
+            color: AppColors.white,
           ),
         ),
         const SizedBox(height: AppDimens.spacingXs - 2),
@@ -682,9 +692,13 @@ class _HomeScreenState extends State<HomeScreen> {
         // 同天静默合并：显示 SnackBar 提示
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(AppStrings.mergeSilentDone),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              // P0-7：陶土红底配纯白 4.79:1，不继承深色主题的浅米色文字。
+              content: Text(
+                AppStrings.mergeSilentDone,
+                style: AppTheme.bodyMedium.copyWith(color: AppColors.white),
+              ),
+              duration: const Duration(seconds: 2),
               backgroundColor: AppColors.brandPrimary,
             ),
           );
@@ -737,11 +751,11 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(AppStrings.mergeAction),
+            child: Text(AppStrings.mergeAction),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(AppStrings.newPeriodAction),
+            child: Text(AppStrings.newPeriodAction),
           ),
         ],
       ),
@@ -878,7 +892,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     iconSize: 26,
                   ),
                   AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 280),
+                    duration: AppMotion.slow,
                     transitionBuilder: (child, animation) {
                       return FadeTransition(
                         opacity: animation,
@@ -912,7 +926,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // onSurfaceTertiary，与旧实现视觉一致），替代本地 Row 实现。
             const Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: AppDimens.spacingMd,
+                horizontal: AppDimens.spacingSm,
               ),
               child: CalendarWeekdayHeader(),
             ),
@@ -942,7 +956,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 总高度 = 6 × 单格高度。
                 final cellWidth =
                     (constraints.maxWidth - AppDimens.spacingMd * 2) / 7;
-                final gridHeight = cellWidth * 6;
+                // P2-1：按当前月份的真实行数动态计算网格高度，
+                // 4~5 行月份不再浪费底部 1~2 行空白（原固定 6 行）。
+                final gridHeight = cellWidth * monthRowCount(_focusedDay);
                 return SizedBox(
                   height: gridHeight,
                   child: ScrollConfiguration(
@@ -967,6 +983,18 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(height: 1),
             const SizedBox(height: AppDimens.spacingMd),
             _buildLegend(),
+            const SizedBox(height: AppDimens.spacingXs),
+            // P2-4：隐藏手势（长按记录经量）可发现性提示。
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingMd),
+              child: Text(
+                AppStrings.calendarLongPressHint,
+                textAlign: TextAlign.center,
+                style: AppTheme.caption.copyWith(
+                  color: context.themeColors.onSurfaceTertiary,
+                ),
+              ),
+            ),
             const SizedBox(height: AppDimens.spacingMd),
           ],
         ),
@@ -1059,10 +1087,8 @@ class _HomeScreenState extends State<HomeScreen> {
       alignment: Alignment.center,
       child: Text(
         '${day.day}',
-        style: TextStyle(
+        style: AppTheme.footnote.copyWith(
           color: palette.onSurfaceTertiary.withValues(alpha: 0.4),
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
         ),
       ),
     );
@@ -1188,7 +1214,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (matchedRecord.mood != null)
                         Text('${AppStrings.mood}：${matchedRecord.mood}',
                             style: TextStyle(
-                                fontSize: 16, color: themeColors.onSurface)),
+                                fontSize: AppTheme.bodyLarge.fontSize,
+                                color: themeColors.onSurface)),
                       if (matchedRecord.symptoms != null)
                         Text('${AppStrings.symptoms}：${matchedRecord.symptoms}',
                             style: AppTheme.bodySmall
@@ -1268,7 +1295,7 @@ class _HomeScreenState extends State<HomeScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text(AppStrings.confirm),
+                child: Text(AppStrings.confirm),
               ),
             ],
           );
@@ -1282,6 +1309,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
+  /// 日历日格（P2-3 多通道状态编码）。
+  ///
+  /// 在颜色基础上叠加形状通道，使红绿色盲用户在灰度下也能区分日类型：
+  /// - 经期 period：实心陶土红填充 + 白字
+  /// - 预测 predicted：**虚线环**（区别于今天的实线环）
+  /// - 排卵 ovulation：底部中心**圆点**（无填充）
+  /// - 易孕 fertile：浅绿填充 + 右上**小三角**
+  /// - 安全 safe：取消填充（留白即安全，图例注明"无标记"）
   Widget _buildDayCell(
     DateTime day,
     String dayType,
@@ -1293,9 +1328,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final isPast = DateTime(day.year, day.month, day.day).isBefore(todayStart);
 
     Color? fill;
-    Color? ring;
     Color textColor;
     FontWeight fontWeight = FontWeight.w500;
+
+    // P2-3：形状通道标记
+    bool dashedRing = false; // 预测：虚线环
+    bool ovulationDot = false; // 排卵：底部圆点
+    bool fertileTriangle = false; // 易孕：右上小三角
 
     switch (dayType) {
       case 'period':
@@ -1304,19 +1343,20 @@ class _HomeScreenState extends State<HomeScreen> {
         fontWeight = FontWeight.w600;
         break;
       case 'predicted':
-        ring = AppColors.brandPrimary;
+        dashedRing = true;
         textColor = AppColors.brandPrimary;
         break;
       case 'ovulation':
-        fill = AppColors.ovulationDay;
-        textColor = AppColors.ink;
+        ovulationDot = true;
+        textColor = palette.onSurface;
         break;
       case 'fertile':
         fill = AppColors.fertileBg;
+        fertileTriangle = true;
         textColor = AppColors.fertileDay;
         break;
       case 'safe':
-        fill = AppColors.safeDay.withValues(alpha: 0.55);
+        // P2-3：安全期取消填充，留白即安全。
         textColor = palette.onSurfaceSecondary;
         break;
       default:
@@ -1326,29 +1366,67 @@ class _HomeScreenState extends State<HomeScreen> {
         fontWeight = isToday ? FontWeight.w700 : FontWeight.w400;
     }
 
-    final cell = Container(
-      margin: _kDayCellMargin,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        border: ring != null ? Border.all(color: ring, width: 1.2) : null,
-      ),
+    final cell = Stack(
       alignment: Alignment.center,
-      child: Text(
-        '${day.day}',
-        style: TextStyle(
-          color: textColor,
-          fontSize: 13,
-          fontWeight: fontWeight,
+      children: [
+        Container(
+          margin: _kDayCellMargin,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          ),
+          child: Center(
+            child: Text(
+              '${day.day}',
+              // P1-4：收敛为 footnote token（13px）。
+              style: AppTheme.footnote.copyWith(
+                color: textColor,
+                fontWeight: fontWeight,
+              ),
+            ),
+          ),
         ),
-      ),
+        if (dashedRing)
+          Positioned.fill(
+            child: Padding(
+              padding: _kDayCellMargin,
+              child: CustomPaint(
+                painter: _DashedRingPainter(
+                  color: AppColors.brandPrimary,
+                  strokeWidth: 1.4,
+                ),
+              ),
+            ),
+          ),
+        if (ovulationDot)
+          Positioned(
+            bottom: _kDayCellMargin.bottom + 3,
+            child: Container(
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(
+                color: AppColors.ovulationDay,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        if (fertileTriangle)
+          Positioned(
+            top: _kDayCellMargin.top + 2,
+            right: _kDayCellMargin.right + 2,
+            child: CustomPaint(
+              size: const Size(7, 6),
+              painter: _TrianglePainter(color: AppColors.fertileDay),
+            ),
+          ),
+      ],
     );
 
     if (isToday || isSelected) {
       return Container(
         margin: _kDaySelectedMargin,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
           border: Border.all(
             color: AppColors.brandPrimary,
             width: isSelected ? 2 : 1.4,
@@ -1362,9 +1440,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─── Legend ───────────────────────────────────────────────────────
+  // P1-2：复用公共 LegendItem 组件（消除重复实现），色块 size=8 与旧实现一致。
   Widget _buildLegend() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingMd),
+      padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingSm),
       // B2 防溢出：用可换行的 Wrap 替代不换行的 Row——360dp 以下
       // 小屏或系统字体放大到 1.3 倍时，5 个图例项可能超宽导致
       // RenderFlex overflow。Wrap 在超宽时自动折到第二行居中。
@@ -1372,47 +1451,16 @@ class _HomeScreenState extends State<HomeScreen> {
         alignment: WrapAlignment.center,
         runSpacing: AppDimens.spacingXs,
         children: [
-          _buildLegendItem(color: AppColors.brandPrimary, label: AppStrings.legendPeriod),
-          _buildLegendItem(
+          LegendItem(color: AppColors.brandPrimary, label: AppStrings.legendPeriod, size: 8),
+          LegendItem(
             color: AppColors.transparent,
             ring: AppColors.brandPrimary,
             label: AppStrings.legendPredicted,
+            size: 8,
           ),
-          _buildLegendItem(color: AppColors.ovulationDay, label: AppStrings.legendOvulation),
-          _buildLegendItem(color: AppColors.fertileBg, label: AppStrings.legendFertile),
-          _buildLegendItem(color: AppColors.safeDay, label: AppStrings.legendSafe),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLegendItem({
-    required Color color,
-    required String label,
-    Color? ring,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppDimens.spacingXs),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: color,
-              border: ring != null ? Border.all(color: ring, width: 1.2) : null,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: AppDimens.spacingXs),
-          Text(
-            label,
-            style: AppTheme.bodySmall.copyWith(
-              color: context.themeColors.onSurfaceSecondary,
-              fontSize: 11,
-            ),
-          ),
+          LegendItem(color: AppColors.ovulationDay, label: AppStrings.legendOvulation, size: 8),
+          LegendItem(color: AppColors.fertileBg, label: AppStrings.legendFertile, size: 8),
+          LegendItem(color: AppColors.safeDay, label: AppStrings.legendSafe, size: 8),
         ],
       ),
     );
@@ -1433,6 +1481,67 @@ class _DayCellPalette {
   final Color onSurface;
   final Color onSurfaceSecondary;
   final Color onSurfaceTertiary;
+}
+
+/// P2-3：预测经期虚线环（区别于今天的实线环）。
+class _DashedRingPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+
+  const _DashedRingPainter({required this.color, required this.strokeWidth});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(
+      strokeWidth / 2,
+      strokeWidth / 2,
+      size.width - strokeWidth,
+      size.height - strokeWidth,
+    );
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(AppDimens.radiusMd)),
+      );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    const dash = 4.0;
+    const gap = 3.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRingPainter old) =>
+      old.color != color || old.strokeWidth != strokeWidth;
+}
+
+/// P2-3：易孕期右上小三角标记。
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+
+  const _TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrianglePainter old) => old.color != color;
 }
 
 /// 安卓原生风格的 ScrollBehavior —— 用于日历 PageView。

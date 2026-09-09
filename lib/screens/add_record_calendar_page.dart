@@ -5,6 +5,7 @@ import '../providers/period_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../constants/app_motion.dart';
 import '../utils/date_utils.dart';
 import '../widgets/calendar/calendar_core.dart';
 
@@ -129,7 +130,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
         0.0,
         _scrollController.position.maxScrollExtent,
       ),
-      duration: const Duration(milliseconds: 300),
+      duration: AppMotion.page,
       curve: Curves.easeOutCubic,
     );
   }
@@ -304,11 +305,11 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
                 borderRadius: BorderRadius.circular(AppDimens.radiusSm),
               ),
             ),
-            child: const Text(
+            child: Text(
               '今',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: AppTheme.bodyMedium.fontSize,
               ),
             ),
           ),
@@ -349,7 +350,7 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
   Widget get _weekdayHeader => CalendarWeekdayHeader(
         textStyle: TextStyle(
           color: context.themeColors.onSurfaceTertiary,
-          fontSize: 14,
+          fontSize: AppTheme.bodyMedium.fontSize,
         ),
         backgroundColor: context.themeColors.surfaceCard,
         padding: const EdgeInsets.symmetric(
@@ -387,53 +388,53 @@ class _AddRecordCalendarPageState extends State<AddRecordCalendarPage> {
     borderRadius: BorderRadius.circular(AppDimens.radiusSm),
   );
   static const EdgeInsets _cellMargin = EdgeInsets.all(3);
-  static const TextStyle _existingTodayStyle = TextStyle(
+  static final TextStyle _existingTodayStyle = TextStyle(
     color: AppColors.brandPrimary,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
   static final TextStyle _existingStyle = TextStyle(
     color: AppColors.brandPrimary.withValues(alpha: 0.4),
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
   // 选中实底色上的「今天」必须用白字：此前沿用陶土红文字，与实色背景同色，
   // 导致今天的日期数字被完全盖住不可见。
-  static const TextStyle _selectedTodayStyle = TextStyle(
+  static final TextStyle _selectedTodayStyle = TextStyle(
     color: AppColors.white,
     fontWeight: FontWeight.w600,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
-  static const TextStyle _selectedStyle = TextStyle(
+  static final TextStyle _selectedStyle = TextStyle(
     color: AppColors.white,
     fontWeight: FontWeight.w600,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
-  static const TextStyle _selectedFutureStyle = TextStyle(
+  static final TextStyle _selectedFutureStyle = TextStyle(
     color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
-  static const TextStyle _selectedFutureTodayStyle = TextStyle(
+  static final TextStyle _selectedFutureTodayStyle = TextStyle(
     color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
-  static const TextStyle _todayStyle = TextStyle(
+  static final TextStyle _todayStyle = TextStyle(
     color: AppColors.brandPrimary,
     fontWeight: FontWeight.w600,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
   TextStyle _pastStyle(BuildContext context) => TextStyle(
     color: context.themeColors.onSurface,
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
   TextStyle _futureStyle(BuildContext context) => TextStyle(
     color: context.themeColors.onSurfaceTertiary.withValues(alpha: 0.4),
-    fontSize: 13,
+    fontSize: AppTheme.footnote.fontSize,
   );
   TextStyle _monthTitleStyle(BuildContext context) => TextStyle(
     color: context.themeColors.onSurface,
     fontWeight: FontWeight.w600,
-    fontSize: 16,
+    fontSize: AppTheme.bodyLarge.fontSize,
   );
 
   Widget _buildMonthList() {

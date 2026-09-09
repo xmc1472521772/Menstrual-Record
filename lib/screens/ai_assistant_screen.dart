@@ -7,6 +7,8 @@ import '../providers/ai_assistant_provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../constants/app_motion.dart';
+import '../widgets/common_widgets.dart';
 import '../widgets/ai/ai_chat_bubble.dart';
 import '../widgets/ai/ai_model_selector.dart';
 import '../widgets/ai/ai_report_view.dart';
@@ -274,7 +276,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
       if (_chatScrollController.hasClients) {
         _chatScrollController.animateTo(
           _chatScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: AppMotion.page,
           curve: Curves.easeOut,
         );
       }
@@ -435,7 +437,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
     return GestureDetector(
       onTap: () => setState(() => _currentTab = index),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: AppMotion.base,
         padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingSm),
         decoration: BoxDecoration(
           color: selected ? AppColors.brandPrimary : Colors.transparent,
@@ -455,7 +457,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppTheme.footnote.fontSize,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected
                     ? AppColors.white
@@ -497,43 +499,11 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimens.spacing3xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: AppColors.brandSoft,
-                borderRadius: BorderRadius.circular(AppDimens.radius2xl),
-              ),
-              child: const Icon(
-                Icons.psychology_outlined,
-                size: 44,
-                color: AppColors.brandPrimary,
-              ),
-            ),
-            const SizedBox(height: AppDimens.spacingXl),
-            Text(
-              AppStrings.aiNoDataTitle,
-              style: AppTheme.headingSmall.copyWith(
-                color: context.themeColors.onSurface,
-              ),
-            ),
-            const SizedBox(height: AppDimens.spacingSm),
-            Text(
-              AppStrings.aiNoDataSubtitle,
-              textAlign: TextAlign.center,
-              style: AppTheme.bodyMedium.copyWith(
-                color: context.themeColors.onSurfaceTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
+    // P1-2：空状态统一走公共 EmptyState。
+    return const EmptyState(
+      icon: Icons.psychology_outlined,
+      message: AppStrings.aiNoDataTitle,
+      subtitle: AppStrings.aiNoDataSubtitle,
     );
   }
 
@@ -783,7 +753,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
           child: Text(
             AppStrings.aiChatDisclaimer,
             style: AppTheme.bodySmall.copyWith(
-              fontSize: 11,
+              fontSize: AppTheme.overline.fontSize,
               color: themeColors.onSurfaceTertiary,
             ),
           ),
@@ -793,42 +763,11 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
   }
 
   Widget _buildChatEmptyState(AppThemeColors themeColors) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimens.spacing3xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.brandSoft,
-                borderRadius: BorderRadius.circular(AppDimens.radius2xl),
-              ),
-              child: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                size: 32,
-                color: AppColors.brandPrimary,
-              ),
-            ),
-            const SizedBox(height: AppDimens.spacingLg),
-            Text(
-              AppStrings.aiChatTitle,
-              style: AppTheme.titleLarge.copyWith(
-                color: themeColors.onSurface,
-              ),
-            ),
-            const SizedBox(height: AppDimens.spacingXs),
-            Text(
-              AppStrings.aiChatEmptySubtitle,
-              style: AppTheme.bodySmall.copyWith(
-                color: themeColors.onSurfaceTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
+    // P1-2：空状态统一走公共 EmptyState（内部按主题取色，themeColors 仅保留签名兼容）。
+    return const EmptyState(
+      icon: Icons.chat_bubble_outline_rounded,
+      message: AppStrings.aiChatTitle,
+      subtitle: AppStrings.aiChatEmptySubtitle,
     );
   }
 
@@ -853,7 +792,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen>
           textAlign: TextAlign.center,
           style: AppTheme.bodySmall.copyWith(
             color: AppColors.brandPrimary,
-            fontSize: 12,
+            fontSize: AppTheme.bodySmall.fontSize,
           ),
         ),
       ),

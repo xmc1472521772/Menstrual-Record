@@ -85,6 +85,7 @@ Standard `package:flutter_lints/flutter.yaml` via `analysis_options.yaml`. No cu
 ## Known Traps
 
 - **Dark-mode contrast rule**: `AppColors.ink / inkSecondary / inkTertiary / canvas / tile / hairline` are **light-theme fixed values**. Never use them on theme-dependent surfaces (AppBar, `themeColors.surfaceCard/surfaceTile`, Card theme). Use `context.themeColors.onSurface*` / `divider` instead. Fixed light surfaces (`AppColors.brandSurface`, `brandSoft`) may keep them.
+- **陶土红底白字对比度铁律**（UI 评审实测，WCAG 2.1）：在 `#B4564F` 底上**只有 100% 白达 AA 4.5:1（4.79）**，95%/92%/90% 白均不足。渐变一律改「深→中」（`heroGradient #8E3F3A→#B4564F`、`aiCard #5B4C82→#6B5B95`）。**渐变卡上的层级禁止用 `white.withValues(alpha: 0.7~0.9)` 承载文字**，必须用字号/字重/留白/分隔线表达。**承载信息的次级说明一律 `onSurfaceSecondary`（白卡 5.64 / tile 4.78），`onSurfaceTertiary`（浅 #7A7269=4.73）仅限 placeholder/disabled/弱化图标**。警告类 SnackBar 禁用白字，改近黑字 `#2A2622`（6.67）或浅卡 + 琥珀图标 + 深色字；深色 `destructive` 用 `#E8908C`（6.61，替代硬编码 `AppColors.error`）。
 - **`table_calendar`** has been removed from dependencies. The custom calendar is the only calendar implementation (two UIs share `widgets/calendar/calendar_core.dart`).
 - **Static text styles in `record_screen.dart`** are now instance methods that take `BuildContext` (e.g., `_pastStyle(context)`) to support theme-aware colors. They cannot be `const`.
 - **Provider 生命周期回调**：`app.dart` 的 `_MyAppState` 在 `initState` 创建 Provider 并以 `.value` 注入；回调里禁止 `context.read`（context 在 MultiProvider 之上）。

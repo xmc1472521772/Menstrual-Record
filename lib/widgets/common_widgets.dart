@@ -11,13 +11,19 @@ import '../constants/app_theme.dart';
 /// black 5% 阴影。浅色下 hairline 等价旧观感，深色下描边随主题切换。
 class SectionCard extends StatelessWidget {
   final String? title;
+
+  /// 标题行右侧的附加控件（计数、徽章、操作按钮等）。
+  final Widget? titleTrailing;
   final Widget child;
+
+  /// 卡片内边距（默认 spacingLg）。承载 ListTile 等自带内边距的内容时传 0。
   final EdgeInsets? padding;
   final EdgeInsets? margin;
 
   const SectionCard({
     super.key,
     this.title,
+    this.titleTrailing,
     required this.child,
     this.padding,
     this.margin,
@@ -36,12 +42,20 @@ class SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (title != null) ...[
-            Text(
-              title!,
-              style: AppTheme.titleLarge.copyWith(
-                color: context.themeColors.onSurface,
-              ),
+          if (title != null || titleTrailing != null) ...[
+            Row(
+              children: [
+                if (title != null)
+                  Expanded(
+                    child: Text(
+                      title!,
+                      style: AppTheme.titleLarge.copyWith(
+                        color: context.themeColors.onSurface,
+                      ),
+                    ),
+                  ),
+                if (titleTrailing != null) titleTrailing!,
+              ],
             ),
             const SizedBox(height: AppDimens.spacingMd),
           ],
@@ -72,7 +86,8 @@ class StatCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vColor = valueColor ?? AppColors.white;
-    final lColor = labelColor ?? AppColors.white.withValues(alpha: 0.9);
+    // P0-2：标签原为 0.9 白（渐变末端 2.91:1），收敛为 100% 白。
+    final lColor = labelColor ?? AppColors.white;
 
     return Column(
       children: [
@@ -93,8 +108,10 @@ class StatCircle extends StatelessWidget {
                 ),
                 Text(
                   unit,
+                  // P0-2：单位原为 0.7 白（2.34:1），改 100% 白；
+                  // 与数值的层级由 12px 对 24px 的字号承担。
                   style: AppTheme.bodySmall.copyWith(
-                    color: vColor.withValues(alpha: 0.7),
+                    color: vColor,
                   ),
                 ),
               ],
@@ -156,8 +173,10 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: AppDimens.spacingSm),
             Text(
               subtitle!,
+              // P0-4：副标题承载引导信息，走 secondary（tertiary 在
+              // 画布底色上仅 4.26:1，余量不足）。
               style: AppTheme.bodyMedium.copyWith(
-                color: context.themeColors.onSurfaceTertiary,
+                color: context.themeColors.onSurfaceSecondary,
               ),
             ),
           ],
@@ -167,18 +186,56 @@ class EmptyState extends StatelessWidget {
   }
 }
 
+/// 数据加载中的占位骨架（圆角浅色条），避免首屏 / 导入大数据时白屏直跳。
+///
+/// 仅作占位，不做呼吸动画——加载通常在 app 启动时已完成，骨架主要覆盖
+/// 「恢复备份」等触发 [PeriodProvider.loadRecords] 的短暂窗口。
+class SkeletonList extends StatelessWidget {
+  final int rows;
+  const SkeletonList({super.key, this.rows = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(
+        rows,
+        (i) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingMd),
+          child: Container(
+            height: 56,
+            decoration: BoxDecoration(
+              color: context.themeColors.surfaceTile,
+              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A legend item used in the home screen's legend section.
 class LegendItem extends StatelessWidget {
   final Color color;
   final String label;
-  final String description;
+
+  /// 说明文字，可省略（首页日历图例只有标签）。
+  final String? description;
+
+  /// 描边色：用于「预测经期」这类只有环、无填充的图例项。
+  final Color? ring;
+
+  /// 色块尺寸（默认 16，首页日历图例用 8）。
+  final double size;
   final bool isDashed;
 
   const LegendItem({
     super.key,
     required this.color,
     required this.label,
-    required this.description,
+    this.description,
+    this.ring,
+    this.size = 16,
     this.isDashed = false,
   });
 
@@ -187,34 +244,39 @@ class LegendItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppDimens.spacingXs),
       child: Row(
+        mainAxisSize: description == null ? MainAxisSize.min : MainAxisSize.max,
         children: [
           Container(
-            width: 16,
-            height: 16,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
               color: isDashed ? AppColors.transparent : color,
-              border: isDashed
-                  ? Border.all(color: AppColors.brandLight, width: 1.5)
-                  : null,
+              border: ring != null
+                  ? Border.all(color: ring!, width: 1.2)
+                  : (isDashed
+                      ? Border.all(color: AppColors.brandLight, width: 1.5)
+                      : null),
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: AppDimens.spacingMd),
+          const SizedBox(width: AppDimens.spacingXs),
           Text(
             label,
-            style: AppTheme.labelLarge.copyWith(
-              color: context.themeColors.onSurface,
+            style: AppTheme.bodySmall.copyWith(
+              color: context.themeColors.onSurfaceSecondary,
             ),
           ),
-          const SizedBox(width: AppDimens.spacingSm),
-          Expanded(
-            child: Text(
-              description,
-              style: AppTheme.bodySmall.copyWith(
-                color: context.themeColors.onSurfaceSecondary,
+          if (description != null) ...[
+            const SizedBox(width: AppDimens.spacingSm),
+            Expanded(
+              child: Text(
+                description!,
+                style: AppTheme.bodySmall.copyWith(
+                  color: context.themeColors.onSurfaceSecondary,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

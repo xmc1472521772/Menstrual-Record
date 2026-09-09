@@ -46,9 +46,20 @@ class AppColors {
   static const Color flowHeavy = Color(0xFF8E3F3A);  // 多：深酒红
 
   // ─── AI 功能卡（统计页 AI 助手入口渐变，A3 收敛进色板）────────────
-  // 深浅主题共用暖紫渐变：与陶土红形成功能区分色，深色下提亮一档。
-  static const Color aiCardStart = Color(0xFF6B5B95);
-  static const Color aiCardEnd = Color(0xFF8B7AB8);
+  // 深浅主题共用暖紫渐变：与陶土红形成功能区分色。
+  // P0-3：整组加深一档 —— 原 #6B5B95→#8B7AB8 的末端白字仅 3.77:1，
+  // 加深后两端分别为 7.50:1 / 5.91:1，均达 AA 正文标准。
+  static const Color aiCardStart = Color(0xFF5B4C82);
+  static const Color aiCardEnd = Color(0xFF6B5B95);
+
+  // ─── 渐变卡（首页状态卡 / 统计概览卡）─────────────────────────────
+  // P0-1：渐变方向由「中→浅」改为「深→中」。
+  // 原 brandPrimary→brandLight 的末端白字仅 3.21:1，且叠加半透明白后
+  // 低至 2.34:1；改深→中后两端为 7.19:1 / 4.79:1，全段达标。
+  // ⚠️ 铁律：本渐变上的文字一律 100% 白，禁止 white.withValues(alpha<1)，
+  // 层级用字号/字重/分隔线表达（#B4564F 上 95% 白恰好 4.50，余量不足）。
+  static const Color heroGradientStart = Color(0xFF8E3F3A); // brandDeep
+  static const Color heroGradientEnd = Color(0xFFB4564F); // brandPrimary
 
   // ─── Commonly Used ───────────────────────────────────────────────
   static const Color white = Colors.white;
@@ -154,7 +165,7 @@ class AppDimens {
   static const double elevationHigh = 4;
 
   // ─── 布局尺寸 Tokens（C3 收敛：互相咬合的魔法数统一归口）──────────
-  /// 玻璃底部导航栏高度（main_screen 的 _GlassNavBar 与主题 NavigationBarTheme 保持一致）。
+  /// 玻璃底部导航栏高度（main_screen 的 _GlassNavBar 唯一真源；主题不配置 NavigationBar）。
   static const double navBarHeight = 64.0;
 
   /// 页面滚动内容底部预留空间：需容纳悬浮导航栏（[navBarHeight]）+
@@ -166,6 +177,19 @@ class AppDimens {
 
   /// 「回到今天」FAB 相对屏幕底部的抬升量（导航栏高度 + 间隙）。
   static const double fabLift = 80.0;
+
+  // ─── 控件高度三档（P2-5）─────────────────────────────────────
+  /// 小号控件（紧凑行内按钮、芯片）。
+  static const double controlHeightSm = 36.0;
+
+  /// 中号控件（次操作按钮、标准触摸目标）。
+  static const double controlHeightMd = 44.0;
+
+  /// 大号控件（主操作按钮，全站统一）。
+  static const double controlHeightLg = 52.0;
+
+  /// 最小触摸目标（Material 建议 ≥ 44dp，P2-2）。
+  static const double minTouchTarget = 44.0;
 }
 
 /// Theme-dependent semantic colors registered as a [ThemeExtension].
@@ -182,6 +206,12 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   final Color divider;
   final Color background;
 
+  /// 危险/破坏性操作语义色（删除、清空等）。
+  ///
+  /// P0-6：原先全项目硬编码 `AppColors.error`（#B4463F），该值在深色卡片
+  /// 上仅 2.92:1 不可读。深色下改用提亮一档的 #E8908C（6.61:1）。
+  final Color destructive;
+
   const AppThemeColors._({
     required this.surface,
     required this.surfaceCard,
@@ -191,28 +221,35 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     required this.onSurfaceTertiary,
     required this.divider,
     required this.background,
+    required this.destructive,
   });
 
+  /// P0-4：onSurfaceTertiary 由 #A39A90 改为 #7A7269（白卡 2.77 → 4.73:1）。
+  /// ⚠️ 语义边界：本档仅限 placeholder / disabled / 弱化图标；
+  /// 承载信息的次级说明一律用 [onSurfaceSecondary]（白卡 5.64 / tile 4.78）。
   static const light = AppThemeColors._(
     surface: Color(0xFFFBF9F5),
     surfaceCard: Color(0xFFFFFFFF),
     surfaceTile: Color(0xFFF1EDE4),
     onSurface: Color(0xFF2A2622),
     onSurfaceSecondary: Color(0xFF6E665E),
-    onSurfaceTertiary: Color(0xFFA39A90),
+    onSurfaceTertiary: Color(0xFF7A7269),
     divider: Color(0xFFE8E2D8),
     background: Color(0xFFF7F4EE),
+    destructive: Color(0xFFB4463F),
   );
 
+  /// P0-4：深色三级文本 #827A72 在深色卡上仅 3.74:1，改为 #948B82（4.71:1）。
   static const dark = AppThemeColors._(
     surface: Color(0xFF1C1917),
     surfaceCard: Color(0xFF262220),
     surfaceTile: Color(0xFF2F2A27),
     onSurface: Color(0xFFEDE7DE),
     onSurfaceSecondary: Color(0xFFB4A99E),
-    onSurfaceTertiary: Color(0xFF827A72),
+    onSurfaceTertiary: Color(0xFF948B82),
     divider: Color(0xFF342F2B),
     background: Color(0xFF141211),
+    destructive: Color(0xFFE8908C),
   );
 
   @override
@@ -225,6 +262,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     Color? onSurfaceTertiary,
     Color? divider,
     Color? background,
+    Color? destructive,
   }) {
     return AppThemeColors._(
       surface: surface ?? this.surface,
@@ -235,6 +273,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       onSurfaceTertiary: onSurfaceTertiary ?? this.onSurfaceTertiary,
       divider: divider ?? this.divider,
       background: background ?? this.background,
+      destructive: destructive ?? this.destructive,
     );
   }
 
@@ -252,6 +291,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
           Color.lerp(onSurfaceTertiary, other.onSurfaceTertiary, t)!,
       divider: Color.lerp(divider, other.divider, t)!,
       background: Color.lerp(background, other.background, t)!,
+      destructive: Color.lerp(destructive, other.destructive, t)!,
     );
   }
 }

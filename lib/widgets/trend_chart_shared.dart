@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../constants/app_theme.dart';
 
 /// Formats a DateTime as `yyyy.MM.dd`.
 String formatChartDate(DateTime d) =>
@@ -72,7 +73,7 @@ class ChartRangeChips extends StatelessWidget {
             child: Text(
               range.label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: AppTheme.overline.fontSize,
                 fontWeight: FontWeight.w500,
                 color: isSelected
                     ? AppColors.white

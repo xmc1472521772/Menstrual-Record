@@ -45,6 +45,7 @@ class AppStrings {
   static const String overwriteImport = '覆盖导入';
 
   static const String notificationTitle = '经期提醒';
+  static const String notificationTooltip = '打开提醒设置';
   static const String notificationBody = '预计即将到来，请做好准备';
 
   // ─── Home screen ─────────────────────────────────────────────────
@@ -279,4 +280,6 @@ class AppStrings {
   // ─── 首页状态卡（C1 紧凑开关）────────────────────────────────────
   static const String heroStatsToggle = '切换均值显示';
   static const String heroStatsExpand = '展开均值显示';
+  // P2-4：日历隐藏手势（长按记录经量）可发现性提示。
+  static const String calendarLongPressHint = '长按日期可记录当日经量';
 }

@@ -121,64 +121,67 @@ class AiSessionTile extends StatelessWidget {
           width: 1,
         ),
       ),
-      child: ListTile(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-        ),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: const BoxDecoration(
-            color: AppColors.brandSoft,
-            shape: BoxShape.circle,
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimens.radiusLg),
           ),
-          child: const Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: 20,
-            color: AppColors.brandPrimary,
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              color: AppColors.brandSoft,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 20,
+              color: AppColors.brandPrimary,
+            ),
           ),
-        ),
-        title: Text(
-          session.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTheme.bodyMedium.copyWith(
-            color: themeColors.onSurface,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+          title: Text(
+            session.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.bodyMedium.copyWith(
+              color: themeColors.onSurface,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
-        ),
-        subtitle: Text(
-          '${formatAiSessionTime(session.updatedAt)} · '
-          '${AppStrings.aiChatMessageCount(session.messages.length)}',
-          style: AppTheme.bodySmall.copyWith(
-            fontSize: 12,
-            color: themeColors.onSurfaceTertiary,
+          subtitle: Text(
+            '${formatAiSessionTime(session.updatedAt)} · '
+            '${AppStrings.aiChatMessageCount(session.messages.length)}',
+            style: AppTheme.bodySmall.copyWith(
+              fontSize: AppTheme.bodySmall.fontSize,
+              color: themeColors.onSurfaceTertiary,
+            ),
           ),
-        ),
-        trailing: isActive
-            ? Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.spacingSm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppDimens.radiusFull),
-                ),
-                child: Text(
-                  AppStrings.aiChatCurrentTag,
-                  style: AppTheme.labelMedium.copyWith(
-                    fontSize: 11,
-                    color: AppColors.brandPrimary,
-                    fontWeight: FontWeight.w600,
+          trailing: isActive
+              ? Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.spacingSm,
+                    vertical: 2,
                   ),
-                ),
-              )
-            : null,
-        onTap: () {
-          context.read<AiAssistantProvider>().openSession(session.id);
-          Navigator.pop(context);
-        },
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppDimens.radiusFull),
+                  ),
+                  child: Text(
+                    AppStrings.aiChatCurrentTag,
+                    style: AppTheme.labelMedium.copyWith(
+                      fontSize: AppTheme.overline.fontSize,
+                      color: AppColors.brandPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              : null,
+          onTap: () {
+            context.read<AiAssistantProvider>().openSession(session.id);
+            Navigator.pop(context);
+          },
+        ),
       ),
     );
   }

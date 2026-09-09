@@ -130,8 +130,8 @@ class ReportCards {
             children: [
               Text(
                 '$score',
-                style: const TextStyle(
-                  fontSize: 56,
+                style: TextStyle(
+                  fontSize: AppTheme.display2xl.fontSize,
                   fontWeight: FontWeight.w700,
                   color: AppColors.white,
                   height: 1.0,
@@ -479,7 +479,7 @@ class ReportCards {
                       '${AppStrings.aiEvidence}：${item.evidence}',
                       style: AppTheme.bodySmall.copyWith(
                         color: themeColors.onSurfaceTertiary,
-                        fontSize: 11,
+                        fontSize: AppTheme.overline.fontSize,
                       ),
                     ),
                   ),
@@ -671,10 +671,10 @@ class ReportCards {
                           borderRadius:
                               BorderRadius.circular(AppDimens.radiusFull),
                         ),
-                        child: const Text(
+                        child: Text(
                           '⚠️ ${AppStrings.aiYouMatched}',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: AppTheme.caption.fontSize,
                             fontWeight: FontWeight.w600,
                             color: AppColors.white,
                           ),

@@ -170,7 +170,7 @@ void showPeriodEditDialog(
                 Text(
                   AppStrings.editRecordHint,
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppColors.inkSecondary,
+                    color: ctx.themeColors.onSurfaceSecondary,
                   ),
                 ),
                 const SizedBox(height: AppDimens.spacingLg),
@@ -215,7 +215,7 @@ void showPeriodEditDialog(
                         Text(
                           AppStrings.startDate,
                           style: AppTheme.bodyMedium.copyWith(
-                            color: AppColors.inkSecondary,
+                            color: ctx.themeColors.onSurfaceSecondary,
                           ),
                         ),
                         const Spacer(),
@@ -226,10 +226,11 @@ void showPeriodEditDialog(
                           ),
                         ),
                         const SizedBox(width: AppDimens.spacingSm),
-                        const Icon(
+                        // P0-5：改用主题语义色，深色下不再复用浅色固定值。
+                        Icon(
                           Icons.chevron_right_rounded,
                           size: 18,
-                          color: AppColors.inkTertiary,
+                          color: ctx.themeColors.onSurfaceTertiary,
                         ),
                       ],
                     ),
@@ -271,7 +272,7 @@ void showPeriodEditDialog(
                         Text(
                           AppStrings.endDate,
                           style: AppTheme.bodyMedium.copyWith(
-                            color: AppColors.inkSecondary,
+                            color: ctx.themeColors.onSurfaceSecondary,
                           ),
                         ),
                         const Spacer(),
@@ -283,15 +284,16 @@ void showPeriodEditDialog(
                                   : AppStrings.selectDate),
                           style: AppTheme.titleMedium.copyWith(
                             color: isOngoing || editEnd == null
-                                ? AppColors.inkTertiary
+                                ? ctx.themeColors.onSurfaceTertiary
                                 : ctx.themeColors.onSurface,
                           ),
                         ),
                         const SizedBox(width: AppDimens.spacingSm),
-                        const Icon(
+                        // P0-5：改用主题语义色，深色下不再复用浅色固定值。
+                        Icon(
                           Icons.chevron_right_rounded,
                           size: 18,
-                          color: AppColors.inkTertiary,
+                          color: ctx.themeColors.onSurfaceTertiary,
                         ),
                       ],
                     ),
@@ -313,7 +315,7 @@ void showPeriodEditDialog(
                       icon: const Icon(Icons.clear_rounded, size: 16),
                       label: const Text(AppStrings.clearEndDate),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.inkSecondary,
+                        foregroundColor: ctx.themeColors.onSurfaceSecondary,
                         textStyle: AppTheme.labelMedium,
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppDimens.spacingSm,
@@ -348,7 +350,7 @@ void showPeriodEditDialog(
                 Text(
                   AppStrings.mood,
                   style: AppTheme.bodyMedium.copyWith(
-                    color: AppColors.inkSecondary,
+                    color: ctx.themeColors.onSurfaceSecondary,
                   ),
                 ),
                 const SizedBox(height: AppDimens.spacingSm),
@@ -378,7 +380,7 @@ void showPeriodEditDialog(
                               : null,
                         ),
                         alignment: Alignment.center,
-                        child: Text(mood, style: const TextStyle(fontSize: 20)),
+                        child: Text(mood, style: TextStyle(fontSize: AppTheme.headingMedium.fontSize)),
                       ),
                     );
                   }).toList(),
@@ -388,7 +390,7 @@ void showPeriodEditDialog(
                 Text(
                   AppStrings.symptoms,
                   style: AppTheme.bodyMedium.copyWith(
-                    color: AppColors.inkSecondary,
+                    color: ctx.themeColors.onSurfaceSecondary,
                   ),
                 ),
                 const SizedBox(height: AppDimens.spacingSm),
@@ -443,7 +445,7 @@ void showPeriodEditDialog(
                 Text(
                   AppStrings.notes,
                   style: AppTheme.bodyMedium.copyWith(
-                    color: AppColors.inkSecondary,
+                    color: ctx.themeColors.onSurfaceSecondary,
                   ),
                 ),
                 const SizedBox(height: AppDimens.spacingSm),
@@ -453,7 +455,7 @@ void showPeriodEditDialog(
                   decoration: InputDecoration(
                     hintText: AppStrings.notesHint,
                     hintStyle: AppTheme.bodySmall.copyWith(
-                      color: AppColors.inkTertiary,
+                      color: ctx.themeColors.onSurfaceTertiary,
                     ),
                     filled: true,
                     fillColor: ctx.themeColors.surfaceTile,
@@ -651,12 +653,12 @@ Widget buildPeriodDatePickerTheme(BuildContext context, Widget? child) {
         ),
         weekdayStyle: TextStyle(
           color: themeColors.onSurfaceTertiary,
-          fontSize: 12,
+          fontSize: AppTheme.bodySmall.fontSize,
           fontWeight: FontWeight.w500,
         ),
         yearStyle: TextStyle(
           color: themeColors.onSurface,
-          fontSize: 14,
+          fontSize: AppTheme.bodyMedium.fontSize,
           fontWeight: FontWeight.w400,
         ),
         dayStyle: AppTheme.bodyMedium.copyWith(

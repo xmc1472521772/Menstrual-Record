@@ -28,5 +28,12 @@
 - **测试沙箱绕过**：`env 'PROGRAMFILES(X86)=C:/Program Files (x86)'`（export 不接受括号名）+ 清代理 + PATH 前置 `C:/Users/xmc/.workbuddy/binaries/python/versions/3.13.12/DLLs`
 - 测试 mock 类 `implements DatabaseProvider` 时必须实现全部成员（含 `refreshConnection`），新增接口成员要同步改 mock
 
+## UI 设计约定（2026-09-09 评审产出，报告见根目录 `UI设计评审与优化方案-2026-09-09.md`）
+- **渐变白字对比度铁律**：陶土红 #B4564F 底上**只有 100% 白达 AA 4.5:1（4.79）**（95% 恰 4.50，92%/90% 均不足）。故渐变卡上的层级必须用字号/字重/分隔线表达，**禁止用 `white.withValues(alpha: 0.7~0.9)` 承载文字**。渐变一律改「深→中」：hero `#8E3F3A→#B4564F`（7.19/4.79）、AI 卡 `#5B4C82→#6B5B95`（7.50/5.91）
+- **文本色语义边界**：`onSurfaceTertiary`（浅 #A39A90 仅 2.77，拟改 #7A7269=4.73）**仅限 placeholder/disabled/弱化图标**，承载信息的次级说明一律 `onSurfaceSecondary`（白卡 5.64 / tile 4.78）；深色 tertiary 拟改 #948B82（4.71），深色 destructive 拟改 #E8908C（6.61，替代硬编码 AppColors.error）
+- 警告类 SnackBar 禁用白字（白/黄 2.25），改近黑字 #2A2622（6.67）或反向浅卡样式
+- **深色缺陷遗留点**（1.37.0 全量修复后仍存在）：`record_screen:281/587` 描边仍用 `AppColors.hairline`、`period_edit_dialog` 11 处 ink*、`year_heatmap:146/160`、`app_theme:407` hintStyle
+- 其它待办：65 处硬编码 fontSize（10/11/13 三个字号 token 里没有）、4 套卡片实现、SectionCard/EmptyState/LegendItem 三组件零使用、navigationBarTheme 死代码（62 vs 自绘 64）、动效 6 种时长待收 `AppMotion`、日历固定 6 行浪费 47~94px、格子 42.3/经量快选 33 低于 44 触摸目标、日类型仅靠颜色编码（安全期 #E2DDD2 白卡 1.35）
+
 ## 存量问题（未修，非阻塞）
 - ~~2 条 analyze info~~ 已随本次修复清零（L16 落地），当前 analyze 0 issue

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_theme.dart';
+import '../constants/app_motion.dart';
 import 'main_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -53,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
-            transitionDuration: const Duration(milliseconds: 300),
+            transitionDuration: AppMotion.page,
           ),
         );
       }
@@ -105,7 +106,7 @@ class _SplashScreenState extends State<SplashScreen>
                   AppStrings.appName,
                   style: AppTheme.headingLarge.copyWith(
                     color: AppColors.white,
-                    fontSize: 32,
+                    fontSize: AppTheme.statValue.fontSize,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -117,7 +118,7 @@ class _SplashScreenState extends State<SplashScreen>
                   AppStrings.splashSubtitle,
                   style: AppTheme.bodyMedium.copyWith(
                     color: AppColors.white90,
-                    fontSize: 14,
+                    fontSize: AppTheme.bodyMedium.fontSize,
                   ),
                 ),
               ),

@@ -134,7 +134,7 @@ class _CycleChartState extends State<CycleChart> {
         Text(
           '$latest',
           style: TextStyle(
-            fontSize: 36,
+            fontSize: AppTheme.displayXl.fontSize,
             fontWeight: FontWeight.w700,
             color: context.themeColors.onSurface,
             height: 1.0,
@@ -144,7 +144,7 @@ class _CycleChartState extends State<CycleChart> {
         Text(
           '天',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: AppTheme.bodyMedium.fontSize,
             color: context.themeColors.onSurfaceSecondary,
           ),
         ),
@@ -155,7 +155,7 @@ class _CycleChartState extends State<CycleChart> {
           Text(
             '${diff >= 0 ? '+' : ''}$diff',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: AppTheme.bodyMedium.fontSize,
               fontWeight: FontWeight.w600,
               color: diffColor,
             ),
@@ -175,7 +175,7 @@ class _CycleChartState extends State<CycleChart> {
           child: Text(
             '平均 $avg 天',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: AppTheme.bodySmall.fontSize,
               color: context.themeColors.onSurfaceSecondary,
               fontWeight: FontWeight.w500,
             ),
@@ -272,14 +272,14 @@ class _CycleChartState extends State<CycleChart> {
               Text(
                 formatChartDate(data.first.startDate),
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTheme.overline.fontSize,
                   color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
               Text(
                 formatChartDate(data.last.startDate),
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTheme.overline.fontSize,
                   color: context.themeColors.onSurfaceTertiary,
                 ),
               ),
@@ -615,7 +615,7 @@ class _FundChartPainter extends CustomPainter {
         text: dateStr,
         style: TextStyle(
           color: tooltipSubColor,
-          fontSize: 10,
+          fontSize: AppTheme.caption.fontSize,
           fontFamily: AppTheme.fontFamily,
         ),
       ),
@@ -627,7 +627,7 @@ class _FundChartPainter extends CustomPainter {
         text: cycleStr,
         style: TextStyle(
           color: tooltipTextColor,
-          fontSize: 13,
+          fontSize: AppTheme.footnote.fontSize,
           fontWeight: FontWeight.w700,
           fontFamily: AppTheme.fontFamily,
         ),
